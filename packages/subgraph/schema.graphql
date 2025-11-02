@@ -1,0 +1,35 @@
+type GasSettlement @entity {
+  id: ID!
+  user: Bytes!
+  tokenStable: Bytes!
+  costStable: BigInt!
+  refundStable: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  txHash: Bytes!
+}
+
+type RouteExecution @entity {
+  id: ID!
+  intentId: Bytes!
+  amountOut: BigInt!
+  dstChainId: BigInt!
+  timestamp: BigInt!
+}
+
+type FillRecord @entity {
+  id: ID!
+  intentId: Bytes!
+  relayer: Bytes!
+  costNative: BigInt!
+  latencyMs: BigInt!
+  timestamp: BigInt!
+}
+
+type FeeDistribution @entity {
+  id: ID!
+  lpAmount: BigInt!
+  relayerAmount: BigInt!
+  treasuryAmount: BigInt!
+  timestamp: BigInt!
+}

@@ -1,0 +1,25 @@
+specVersion: 0.0.5
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: ZeroTollPaymaster
+    network: polygon-amoy
+    source:
+      address: "0x0000000000000000000000000000000000000000"
+      abi: ZeroTollPaymaster
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - GasSettlement
+        - Fee
+      abis:
+        - name: ZeroTollPaymaster
+          file: ../contracts/artifacts/contracts/ZeroTollPaymaster.sol/ZeroTollPaymaster.json
+      eventHandlers:
+        - event: GasSettled(indexed address,address,uint256,uint256)
+          handler: handleGasSettled
+      file: ./src/mapping.ts

@@ -1,0 +1,39 @@
+{
+  "chainId": 11155111,
+  "network": "sepolia",
+  "assets": {
+    "USDC": {
+      "address": "TBD_DEPLOY",
+      "decimals": 6,
+      "hasPermit2": true,
+      "hasEIP2612": true,
+      "isFeeOnTransfer": false,
+      "isRebasing": false,
+      "oracleSource": "chainlink",
+      "minLiquidityUSD": 50000,
+      "allowedFeeModes": ["NATIVE", "INPUT", "OUTPUT", "STABLE"]
+    },
+    "WBTC": {
+      "address": "TBD_DEPLOY",
+      "decimals": 8,
+      "hasPermit2": true,
+      "hasEIP2612": true,
+      "isFeeOnTransfer": false,
+      "isRebasing": false,
+      "oracleSource": "chainlink",
+      "minLiquidityUSD": 50000,
+      "allowedFeeModes": ["INPUT", "OUTPUT"]
+    },
+    "WAVAX": {
+      "address": "TBD_DEPLOY",
+      "decimals": 18,
+      "hasPermit2": true,
+      "hasEIP2612": true,
+      "isFeeOnTransfer": false,
+      "isRebasing": false,
+      "oracleSource": "twap",
+      "minLiquidityUSD": 30000,
+      "allowedFeeModes": ["INPUT", "OUTPUT"]
+    }
+  }
+}

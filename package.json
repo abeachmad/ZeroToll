@@ -1,0 +1,6 @@
+{
+	"devDependencies": {
+		"@graphprotocol/graph-cli": "^0.98.1",
+		"@types/node": "^20.19.24"
+	}
+}
