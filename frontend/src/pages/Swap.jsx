@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowDownUp, Loader2, CheckCircle, Info } from 'lucide-react';
+import { ArrowLeft, ArrowDownUp, Loader2, CheckCircle, Info, HelpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import FeeModeExplainer from '../components/FeeModeExplainer';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -43,6 +44,7 @@ const Swap = () => {
   const [loading, setLoading] = useState(false);
   const [quote, setQuote] = useState(null);
   const [txHash, setTxHash] = useState(null);
+  const [showExplainer, setShowExplainer] = useState(false);
 
   const availableFeeModes = feeModes.filter(mode => 
     tokenIn.feeModes.includes(mode.id)
@@ -169,7 +171,7 @@ const Swap = () => {
       <div className="max-w-2xl mx-auto px-6 py-12">
         <div className="glass-strong p-8 rounded-3xl">
           <h1 className="text-3xl font-bold mb-2 text-zt-paper">Gasless Cross-Chain Swap</h1>
-          <p className="text-zt-paper/60 mb-8">Pay fees in ANY token you're swapping.</p>
+          <p className="text-zt-paper/60 mb-8">Pay fees in any token you're swapping—input, output, stable, or native.</p>
 
           {/* From Section */}
           <div className="mb-6">
@@ -253,46 +255,95 @@ const Swap = () => {
 
           {/* Gas Payment Mode Selector */}
           <div className="mb-6">
-            <label className="block text-sm font-semibold text-zt-paper/70 mb-3">Gas Payment</label>
+            <label className="block text-sm font-semibold text-zt-paper/70 mb-3">
+              Gas Payment Mode
+              <span className="ml-2 text-xs text-zt-aqua cursor-help" title="Choose how to pay transaction fees">ⓘ</span>
+            </label>
             <div className="grid grid-cols-2 gap-3">
-              {availableFeeModes.map((mode) => (
-                <button
-                  key={mode.id}
-                  onClick={() => setFeeMode(mode.id)}
-                  className={`p-4 rounded-xl text-left transition-all ${
-                    feeMode === mode.id
-                      ? 'glass-strong border-2 border-zt-violet'
-                      : 'glass border border-white/5 hover:border-zt-aqua/30'
-                  }`}
-                  data-testid={`fee-mode-${mode.id.toLowerCase()}`}
-                >
-                  <div className="font-semibold text-zt-paper mb-1">{mode.label}</div>
-                  <div className="text-xs text-zt-paper/60">{mode.desc}</div>
-                </button>
-              ))}
+              {feeModes.map((mode) => {
+                const isAvailable = tokenIn.feeModes.includes(mode.id);
+                const isDisabled = !isAvailable;
+                return (
+                  <button
+                    key={mode.id}
+                    onClick={() => !isDisabled && setFeeMode(mode.id)}
+                    disabled={isDisabled}
+                    className={`p-4 rounded-xl text-left transition-all ${
+                      feeMode === mode.id
+                        ? 'glass-strong border-2 border-zt-violet'
+                        : isDisabled
+                        ? 'glass border border-white/5 opacity-40 cursor-not-allowed'
+                        : 'glass border border-white/5 hover:border-zt-aqua/30'
+                    }`}
+                    data-testid={`fee-mode-${mode.id.toLowerCase()}`}
+                    title={isDisabled ? `Not available for ${tokenIn.symbol} (no oracle/low liquidity)` : ''}
+                  >
+                    <div className="font-semibold text-zt-paper mb-1">
+                      {mode.label}
+                      {isDisabled && <span className="ml-2 text-xs text-red-400">⚠️</span>}
+                    </div>
+                    <div className="text-xs text-zt-paper/60">{mode.desc}</div>
+                  </button>
+                );
+              })}
             </div>
+            <div className="flex items-center justify-between mt-3">
+              <p className="text-xs text-zt-paper/50">
+                ℹ️ Some modes disabled for tokens without oracle or low liquidity
+              </p>
+              <button
+                onClick={() => setShowExplainer(!showExplainer)}
+                className="text-zt-aqua text-xs flex items-center gap-1 hover:text-zt-violet transition-colors"
+              >
+                <HelpCircle className="w-4 h-4" />
+                {showExplainer ? 'Hide' : 'How it works'}
+              </button>
+            </div>
+            {showExplainer && (
+              <div className="mt-4">
+                <FeeModeExplainer mode={feeMode} />
+              </div>
+            )}
           </div>
 
           {/* Fee Cap */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-2">
-              Max Fee ({feeMode === 'INPUT' ? tokenIn.symbol : feeMode === 'OUTPUT' ? tokenOut.symbol : 'USDC'})
+              Max Fee Cap (
+              {feeMode === 'INPUT' ? tokenIn.symbol : 
+               feeMode === 'OUTPUT' ? tokenOut.symbol : 
+               feeMode === 'STABLE' ? 'USDC' : 'POL/ETH'})
+              <span className="ml-2 text-xs text-zt-aqua cursor-help" title="Surplus auto-refunded on-chain">ⓘ</span>
             </label>
             <input
               type="number"
               value={feeCap}
               onChange={(e) => setFeeCap(e.target.value)}
+              placeholder="e.g. 3.0"
               className="w-full glass p-4 rounded-xl bg-transparent text-zt-paper outline-none"
               data-testid="fee-cap-input"
             />
+            <p className="text-xs text-zt-paper/50 mt-2">
+              ✅ Fee ≤ cap enforced on-chain. Unused amount refunded in fee token.
+            </p>
           </div>
 
-          {/* Info Banner */}
+          {/* Info Banners */}
           {feeMode === 'OUTPUT' && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
               <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
-                <strong className="text-zt-aqua">Output Mode:</strong> Fee will be skimmed from output tokens on destination before you receive net amount.
+                <strong className="text-zt-aqua">Output Mode:</strong> Fee skimmed from output tokens on destination before crediting net amount. 
+                FeeSink contract handles settlement.
+              </div>
+            </div>
+          )}
+          {feeMode === 'INPUT' && (
+            <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-violet/30">
+              <Info className="w-5 h-5 text-zt-violet flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-zt-paper/80">
+                <strong className="text-zt-violet">Input Mode:</strong> You'll sign Permit2 to lock fee from input token on source. 
+                Non-custodial, one-time approval.
               </div>
             </div>
           )}
@@ -307,7 +358,9 @@ const Swap = () => {
               <div className="flex justify-between">
                 <span className="text-zt-paper/70">Fee Token:</span>
                 <span className="text-zt-paper font-semibold">
-                  {feeMode === 'INPUT' ? tokenIn.symbol : feeMode === 'OUTPUT' ? tokenOut.symbol : 'USDC'}
+                  {feeMode === 'INPUT' ? tokenIn.symbol : 
+                   feeMode === 'OUTPUT' ? tokenOut.symbol : 
+                   feeMode === 'STABLE' ? 'USDC' : 'POL/ETH'}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -315,15 +368,24 @@ const Swap = () => {
                 <span className="text-zt-paper">{quote.estimatedFee || '~0.5'} ({quote.feeUSD || '$0.50'})</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-zt-paper/70">Oracle Source:</span>
-                <span className="text-zt-aqua text-xs">{quote.oracleSource || 'TWAP'}</span>
+                <span className="text-zt-paper/70">Oracle:</span>
+                <span className="text-zt-aqua text-xs">
+                  {quote.oracleSource || 'TWAP'} 
+                  {quote.priceAge && <span className="text-zt-paper/50 ml-1">(age {quote.priceAge}s)</span>}
+                  {quote.confidence && <span className="text-zt-paper/50 ml-1">(conf {quote.confidence}%)</span>}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-zt-paper/70">Quote Valid:</span>
                 <span className="text-zt-paper">60 seconds</span>
               </div>
+              {quote.includesPriceUpdate && (
+                <div className="pt-2 border-t border-white/10 text-xs text-zt-paper/60">
+                  ℹ️ Includes on-chain price update fee (Pyth)
+                </div>
+              )}
               <div className="pt-2 border-t border-white/10 text-xs text-zt-paper/60">
-                ℹ️ Any unused cap is refunded on-chain in the fee token
+                ✅ Fee ≤ cap. Surplus auto-refunded in fee token.
               </div>
             </div>
           )}
@@ -361,18 +423,46 @@ const Swap = () => {
         </div>
 
         {/* Info Cards */}
-        <div className="mt-8 grid grid-cols-3 gap-4 text-center">
-          <div className="glass p-4 rounded-xl">
-            <p className="text-zt-paper/70 text-sm mb-1">Fee Mode</p>
-            <p className="text-zt-aqua text-lg font-bold">{feeMode}</p>
+        <div className="mt-8 space-y-4">
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="glass p-4 rounded-xl">
+              <p className="text-zt-paper/70 text-sm mb-1">Current Mode</p>
+              <p className={`text-lg font-bold ${
+                feeMode === 'INPUT' ? 'text-zt-violet' :
+                feeMode === 'OUTPUT' ? 'text-zt-aqua' :
+                feeMode === 'STABLE' ? 'text-blue-400' :
+                'text-gray-400'
+              }`}>{feeMode}</p>
+            </div>
+            <div className="glass p-4 rounded-xl">
+              <p className="text-zt-paper/70 text-sm mb-1">Supported Tokens</p>
+              <p className="text-zt-aqua text-lg font-bold">{tokens.length}</p>
+            </div>
+            <div className="glass p-4 rounded-xl">
+              <p className="text-zt-paper/70 text-sm mb-1">Success Rate</p>
+              <p className="text-zt-aqua text-lg font-bold">99.8%</p>
+            </div>
           </div>
+          
           <div className="glass p-4 rounded-xl">
-            <p className="text-zt-paper/70 text-sm mb-1">Supported Tokens</p>
-            <p className="text-zt-aqua text-lg font-bold">{tokens.length}</p>
-          </div>
-          <div className="glass p-4 rounded-xl">
-            <p className="text-zt-paper/70 text-sm mb-1">Success Rate</p>
-            <p className="text-zt-aqua text-lg font-bold">99.8%</p>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-zt-paper/70">Network:</span>
+              <span className="text-zt-paper font-semibold">
+                {fromChain.name} → {toChain.name}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm mt-2">
+              <span className="text-zt-paper/70">Fee Token:</span>
+              <span className="text-zt-aqua font-semibold">
+                {feeMode === 'INPUT' ? tokenIn.symbol : 
+                 feeMode === 'OUTPUT' ? tokenOut.symbol : 
+                 feeMode === 'STABLE' ? 'USDC' : 'POL/ETH'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm mt-2">
+              <span className="text-zt-paper/70">Cap Enforcement:</span>
+              <span className="text-green-400 font-semibold">✓ On-chain</span>
+            </div>
           </div>
         </div>
       </div>

@@ -1,9 +1,12 @@
 type GasSettlement @entity {
   id: ID!
   user: Bytes!
-  tokenStable: Bytes!
-  costStable: BigInt!
-  refundStable: BigInt!
+  feeToken: Bytes!              # token used for fee payment
+  feeMode: String!              # NATIVE, INPUT, OUTPUT, STABLE
+  costInFeeToken: BigInt!       # actual cost in fee token units
+  refundInFeeToken: BigInt!     # refund amount in fee token units
+  oracleSource: String!         # Pyth, TWAP, Chainlink
+  priceAgeSec: Int              # oracle price age in seconds
   timestamp: BigInt!
   blockNumber: BigInt!
   txHash: Bytes!
@@ -12,8 +15,14 @@ type GasSettlement @entity {
 type RouteExecution @entity {
   id: ID!
   intentId: Bytes!
+  tokenIn: Bytes!
+  tokenOut: Bytes!
+  amountIn: BigInt!
   amountOut: BigInt!
+  netOut: BigInt!               # after fee deduction (if OUTPUT mode)
+  srcChainId: BigInt!
   dstChainId: BigInt!
+  feeMode: String!
   timestamp: BigInt!
 }
 
@@ -22,7 +31,11 @@ type FillRecord @entity {
   intentId: Bytes!
   relayer: Bytes!
   costNative: BigInt!
+  feeToken: Bytes!
+  feeAmount: BigInt!
+  refundAmount: BigInt!
   latencyMs: BigInt!
+  status: String!               # success, pending, failed
   timestamp: BigInt!
 }
 
@@ -31,5 +44,37 @@ type FeeDistribution @entity {
   lpAmount: BigInt!
   relayerAmount: BigInt!
   treasuryAmount: BigInt!
+  feeToken: Bytes!
   timestamp: BigInt!
+}
+
+type DailyMetrics @entity {
+  id: ID!                       # date string YYYY-MM-DD
+  totalSwaps: Int!
+  successfulSwaps: Int!
+  failedSwaps: Int!
+  totalVolumeUSD: BigDecimal!
+  totalFeesUSD: BigDecimal!
+  totalRefundsUSD: BigDecimal!
+  gasSavedUSD: BigDecimal!
+  uniqueUsers: Int!
+  avgFeeUSD: BigDecimal!
+  nativeModeCount: Int!
+  inputModeCount: Int!
+  outputModeCount: Int!
+  stableModeCount: Int!
+  date: BigInt!
+}
+
+type GlobalStats @entity {
+  id: ID!                       # singleton "global"
+  totalSwaps: BigInt!
+  successfulSwaps: BigInt!
+  totalVolumeUSD: BigDecimal!
+  totalFeesUSD: BigDecimal!
+  totalRefundsUSD: BigDecimal!
+  gasSavedUSD: BigDecimal!
+  uniqueUsers: BigInt!
+  supportedTokens: Int!
+  lastUpdated: BigInt!
 }
