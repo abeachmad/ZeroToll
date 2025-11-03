@@ -33,7 +33,7 @@ const Home = () => {
         <div className="max-w-7xl mx-auto">
           <div className="text-center max-w-4xl mx-auto">
             <div className="mb-8 inline-block">
-              <img src="/logo.svg" alt="ZeroToll" className="w-32 h-32 mx-auto" />
+              <img src="/logo.svg" alt="ZeroToll" className="w-48 h-48 mx-auto" />
             </div>
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
               <span className="text-zt-paper">Zero native gas.</span>
