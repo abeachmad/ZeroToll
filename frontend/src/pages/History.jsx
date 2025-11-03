@@ -42,13 +42,20 @@ const History = () => {
             data-testid="back-swap-btn"
           >
             <ArrowLeft className="w-5 h-5" />
-            <span className="text-lg font-semibold">Back to Swap</span>
+            <span className="text-lg font-semibold">Back</span>
           </button>
           <div className="flex items-center gap-3">
             <img src="/logo-mark.svg" alt="ZeroToll" className="w-8 h-8" />
             <span className="text-xl font-bold text-zt-paper">ZeroToll</span>
           </div>
-          <div className="w-32"></div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/market')}
+              className="text-zt-paper/70 hover:text-zt-aqua transition-colors hidden md:block"
+            >
+              Market
+            </button>
+          </div>
         </div>
       </header>
 

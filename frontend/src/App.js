@@ -2,29 +2,34 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import '@/App.css';
 import { Toaster } from 'sonner';
+import { Web3Provider } from '@/providers/Web3Provider';
 
 const Home = lazy(() => import('@/pages/Home'));
 const Swap = lazy(() => import('@/pages/Swap'));
 const History = lazy(() => import('@/pages/History'));
+const Market = lazy(() => import('@/pages/Market'));
 
 function App() {
   return (
-    <div className="App">
-      <BrowserRouter>
-        <Suspense fallback={
-          <div className="min-h-screen bg-zt-ink flex items-center justify-center">
-            <div className="text-zt-paper text-xl">Loading...</div>
-          </div>
-        }>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/swap" element={<Swap />} />
-            <Route path="/history" element={<History />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
-      <Toaster position="top-right" theme="dark" />
-    </div>
+    <Web3Provider>
+      <div className="App">
+        <BrowserRouter>
+          <Suspense fallback={
+            <div className="min-h-screen bg-zt-ink flex items-center justify-center">
+              <div className="text-zt-paper text-xl">Loading...</div>
+            </div>
+          }>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/swap" element={<Swap />} />
+              <Route path="/history" element={<History />} />
+              <Route path="/market" element={<Market />} />
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+        <Toaster position="top-right" theme="dark" />
+      </div>
+    </Web3Provider>
   );
 }
 

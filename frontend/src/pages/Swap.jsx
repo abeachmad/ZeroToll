@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowDownUp, Loader2, CheckCircle, Info, HelpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { useAccount } from 'wagmi';
 import FeeModeExplainer from '../components/FeeModeExplainer';
+import ConnectButton from '../components/ConnectButton';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -57,7 +59,19 @@ const Swap = () => {
     }
   }, [tokenIn]);
 
+  const { address, isConnected, chain } = useAccount();
+
   const handleGetQuote = async () => {
+    if (!isConnected) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+    
+    if (chain?.id !== 80002 && chain?.id !== 11155111) {
+      toast.error('Please switch to Polygon Amoy or Ethereum Sepolia');
+      return;
+    }
+
     const amount = parseFloat(amountIn);
     if (!amountIn || isNaN(amount) || amount <= 0 || amount > 1e12) {
       toast.error('Enter a valid amount');
@@ -73,7 +87,7 @@ const Swap = () => {
     setLoading(true);
     try {
       const intent = {
-        user: '0x1234567890123456789012345678901234567890',
+        user: address || '0x1234567890123456789012345678901234567890',
         tokenIn: tokenIn.symbol,
         amtIn: parseFloat(amountIn),
         tokenOut: tokenOut.symbol,
@@ -120,7 +134,7 @@ const Swap = () => {
     try {
       const intentId = `0x${Date.now().toString(16).padStart(64, '0')}`;
       const userOp = {
-        sender: '0x1234567890123456789012345678901234567890',
+        sender: address || '0x1234567890123456789012345678901234567890',
         nonce: Date.now(),
         feeMode,
         feeToken: feeMode === 'INPUT' ? tokenIn.symbol : tokenOut.symbol
@@ -158,13 +172,22 @@ const Swap = () => {
             <img src="/logo-mark.svg" alt="ZeroToll" className="w-8 h-8" />
             <span className="text-xl font-bold text-zt-paper">ZeroToll</span>
           </div>
-          <button
-            onClick={() => navigate('/history')}
-            className="text-zt-paper/70 hover:text-zt-aqua transition-colors"
-            data-testid="view-history-btn"
-          >
-            History
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/market')}
+              className="text-zt-paper/70 hover:text-zt-aqua transition-colors hidden md:block"
+            >
+              Market
+            </button>
+            <button
+              onClick={() => navigate('/history')}
+              className="text-zt-paper/70 hover:text-zt-aqua transition-colors hidden md:block"
+              data-testid="view-history-btn"
+            >
+              History
+            </button>
+            <ConnectButton />
+          </div>
         </div>
       </header>
 

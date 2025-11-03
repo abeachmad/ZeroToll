@@ -19,6 +19,12 @@ const Home = () => {
             <a href="#features" className="text-zt-paper/70 hover:text-zt-aqua transition-colors">Features</a>
             <a href="#how" className="text-zt-paper/70 hover:text-zt-aqua transition-colors">How It Works</a>
             <button
+              onClick={() => navigate('/market')}
+              className="text-zt-paper/70 hover:text-zt-aqua transition-colors"
+            >
+              Market
+            </button>
+            <button
               onClick={() => navigate('/swap')}
               className="btn-primary"
               data-testid="header-launch-btn"
