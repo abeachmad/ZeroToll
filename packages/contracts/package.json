@@ -5,6 +5,7 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy:amoy": "hardhat run scripts/deploy-amoy.js --network amoy",
+    "deploy:amoy:pyth": "hardhat run scripts/deploy-amoy-pyth.js --network amoy",
     "deploy:sepolia": "hardhat run scripts/deploy-sepolia.js --network sepolia"
   },
   "dependencies": {
