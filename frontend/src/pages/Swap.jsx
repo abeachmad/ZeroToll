@@ -1,29 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowDownUp, Loader2, CheckCircle, Info, HelpCircle } from 'lucide-react';
+import { ArrowLeft, ArrowDownUp, Loader2, CheckCircle, Info, HelpCircle, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 import { useAccount } from 'wagmi';
 import FeeModeExplainer from '../components/FeeModeExplainer';
 import ConnectButton from '../components/ConnectButton';
+import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
+import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 const chains = [
-  { id: 80002, name: 'Polygon Amoy', logo: '🔷' },
-  { id: 11155111, name: 'Ethereum Sepolia', logo: '⭐' }
-];
-
-const tokens = [
-  { symbol: 'USDC', name: 'USD Coin', logo: '💵', feeModes: ['NATIVE', 'INPUT', 'OUTPUT', 'STABLE'] },
-  { symbol: 'WBTC', name: 'Wrapped Bitcoin', logo: '₿', feeModes: ['INPUT', 'OUTPUT'] },
-  { symbol: 'WAVAX', name: 'Wrapped AVAX', logo: '🔺', feeModes: ['INPUT', 'OUTPUT'] },
-  { symbol: 'wDOGE', name: 'Wrapped DOGE', logo: '🐕', feeModes: ['INPUT', 'OUTPUT'] },
-  { symbol: 'WATOM', name: 'Wrapped ATOM', logo: '⚛️', feeModes: ['INPUT', 'OUTPUT'] },
-  { symbol: 'WPEPE', name: 'Wrapped PEPE', logo: '🐸', feeModes: ['INPUT', 'OUTPUT'] },
-  { symbol: 'WTON', name: 'Wrapped TON', logo: '💎', feeModes: ['INPUT', 'OUTPUT'] },
-  { symbol: 'WBNB', name: 'Wrapped BNB', logo: '🟡', feeModes: ['INPUT', 'OUTPUT'] }
+  { id: 80002, name: 'Polygon Amoy', logo: '🔷', tokens: amoyTokens.tokens },
+  { id: 11155111, name: 'Ethereum Sepolia', logo: '⭐', tokens: sepoliaTokens.tokens }
 ];
 
 const feeModes = [
@@ -35,10 +26,12 @@ const feeModes = [
 
 const Swap = () => {
   const navigate = useNavigate();
+  const { address, isConnected, chain } = useAccount();
+  
   const [fromChain, setFromChain] = useState(chains[0]);
   const [toChain, setToChain] = useState(chains[1]);
-  const [tokenIn, setTokenIn] = useState(tokens[0]);
-  const [tokenOut, setTokenOut] = useState(tokens[0]);
+  const [tokenIn, setTokenIn] = useState(fromChain.tokens[0]);
+  const [tokenOut, setTokenOut] = useState(toChain.tokens[0]);
   const [amountIn, setAmountIn] = useState('');
   const [amountOut, setAmountOut] = useState('');
   const [feeMode, setFeeMode] = useState('INPUT');
@@ -48,18 +41,22 @@ const Swap = () => {
   const [txHash, setTxHash] = useState(null);
   const [showExplainer, setShowExplainer] = useState(false);
 
-  const availableFeeModes = feeModes.filter(mode => 
-    tokenIn.feeModes.includes(mode.id)
-  );
+  useEffect(() => {
+    setTokenIn(fromChain.tokens[0]);
+  }, [fromChain]);
 
   useEffect(() => {
-    // Auto-select first available fee mode when token changes
+    setTokenOut(toChain.tokens[0]);
+  }, [toChain]);
+
+  useEffect(() => {
     if (!tokenIn.feeModes.includes(feeMode)) {
       setFeeMode(tokenIn.feeModes[0]);
     }
-  }, [tokenIn]);
+  }, [tokenIn, feeMode]);
 
-  const { address, isConnected, chain } = useAccount();
+  const isNativeOutput = tokenOut.isNative;
+  const wrappedOutputSymbol = isNativeOutput ? tokenOut.symbol.replace(/^(POL|ETH)$/, 'W$1') : null;
 
   const handleGetQuote = async () => {
     if (!isConnected) {
@@ -105,12 +102,12 @@ const Swap = () => {
         const quoteData = response.data;
         setQuote(quoteData);
         
-        // Calculate net output based on fee mode
-        let netOut = parseFloat(amountIn) * 0.995;
-        if (feeMode === 'OUTPUT') {
-          netOut -= parseFloat(feeCap);
+        // CRITICAL: Use backend's netOut for correct price conversion
+        if (quoteData.netOut !== undefined) {
+          setAmountOut(quoteData.netOut.toFixed(6));
+        } else {
+          setAmountOut((parseFloat(amountIn) * 0.995).toFixed(6));
         }
-        setAmountOut(netOut.toFixed(2));
         
         toast.success('Quote received!');
       } else {
@@ -130,27 +127,41 @@ const Swap = () => {
       return;
     }
 
+    if (!isConnected) {
+      toast.error('Please connect your wallet');
+      return;
+    }
+
     setLoading(true);
     try {
       const intentId = `0x${Date.now().toString(16).padStart(64, '0')}`;
+      const feeToken = feeMode === 'INPUT' ? tokenIn.symbol : 
+                       feeMode === 'OUTPUT' ? (isNativeOutput ? wrappedOutputSymbol : tokenOut.symbol) :
+                       feeMode === 'STABLE' ? 'USDC' : 'POL';
+      
       const userOp = {
-        sender: address || '0x1234567890123456789012345678901234567890',
+        sender: address,
         nonce: Date.now(),
         feeMode,
-        feeToken: feeMode === 'INPUT' ? tokenIn.symbol : tokenOut.symbol
+        feeToken
       };
 
       const response = await axios.post(`${API}/execute`, { intentId, userOp });
       
-      if (response.data.success) {
+      if (response.data && response.data.success) {
         setTxHash(response.data.txHash);
-        toast.success('Swap executed successfully!');
+        if (response.data.status === 'demo') {
+          toast.success('Demo swap executed! (No real transaction)');
+        } else {
+          toast.success(`Swap executed! Block: ${response.data.blockNumber || 'pending'}`);
+        }
       } else {
-        toast.error('Execution failed');
+        toast.error(response.data?.detail || response.data?.message || 'Execution failed');
       }
     } catch (error) {
       console.error('Execute error:', error);
-      toast.error('Failed to execute swap');
+      const errorMsg = error.response?.data?.detail || error.message || 'Failed to execute swap';
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -158,7 +169,7 @@ const Swap = () => {
 
   return (
     <div className="min-h-screen bg-zt-ink noise-overlay">
-      <header className="border-b border-white/10 backdrop-blur-sm bg-zt-ink/80">
+      <header className="border-b border-white/10 backdrop-blur-sm bg-zt-ink/80 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <button
             onClick={() => navigate('/')}
@@ -194,7 +205,7 @@ const Swap = () => {
       <div className="max-w-2xl mx-auto px-6 py-12">
         <div className="glass-strong p-8 rounded-3xl">
           <h1 className="text-3xl font-bold mb-2 text-zt-paper">Gasless Cross-Chain Swap</h1>
-          <p className="text-zt-paper/60 mb-8">Pay fees in any token you're swapping—input, output, stable, or native.</p>
+          <p className="text-zt-paper/60 mb-8">Pay fees in any token you swap—use input, skim from output (even native via wrapped), or stick to native gas. Fee capped on-chain, unused refunded.</p>
 
           {/* From Section */}
           <div className="mb-6">
@@ -204,21 +215,21 @@ const Swap = () => {
                 <select
                   value={fromChain.id}
                   onChange={(e) => setFromChain(chains.find(c => c.id === parseInt(e.target.value)))}
-                  className="bg-transparent text-zt-paper font-semibold outline-none cursor-pointer"
+                  className="bg-white/5 text-zt-paper font-semibold outline-none cursor-pointer px-3 py-1.5 rounded-lg border border-white/10 hover:border-zt-aqua/30 transition-colors"
                   data-testid="from-chain-select"
                 >
                   {chains.map(chain => (
-                    <option key={chain.id} value={chain.id}>{chain.logo} {chain.name}</option>
+                    <option key={chain.id} value={chain.id} className="bg-zt-ink text-zt-paper">{chain.logo} {chain.name}</option>
                   ))}
                 </select>
                 <select
                   value={tokenIn.symbol}
-                  onChange={(e) => setTokenIn(tokens.find(t => t.symbol === e.target.value))}
-                  className="bg-transparent text-zt-paper font-semibold outline-none cursor-pointer"
+                  onChange={(e) => setTokenIn(fromChain.tokens.find(t => t.symbol === e.target.value))}
+                  className="bg-white/5 text-zt-paper font-semibold outline-none cursor-pointer px-3 py-1.5 rounded-lg border border-white/10 hover:border-zt-aqua/30 transition-colors"
                   data-testid="token-in-select"
                 >
-                  {tokens.map(token => (
-                    <option key={token.symbol} value={token.symbol}>{token.logo} {token.symbol}</option>
+                  {fromChain.tokens.map(token => (
+                    <option key={token.symbol} value={token.symbol} className="bg-zt-ink text-zt-paper">{token.logo} {token.symbol}</option>
                   ))}
                 </select>
               </div>
@@ -234,9 +245,23 @@ const Swap = () => {
           </div>
 
           <div className="flex justify-center my-4">
-            <div className="w-12 h-12 rounded-full bg-zt-violet flex items-center justify-center">
+            <button
+              onClick={() => {
+                // Swap chains and tokens
+                const tempChain = fromChain;
+                const tempToken = tokenIn;
+                setFromChain(toChain);
+                setToChain(tempChain);
+                setTokenIn(tokenOut);
+                setTokenOut(tempToken);
+                setAmountOut('');
+                setQuote(null);
+              }}
+              className="w-12 h-12 rounded-full bg-zt-violet hover:bg-zt-violet/80 flex items-center justify-center transition-all hover:rotate-180 cursor-pointer"
+              title="Swap tokens"
+            >
               <ArrowDownUp className="w-6 h-6 text-white" />
-            </div>
+            </button>
           </div>
 
           {/* To Section */}
@@ -247,21 +272,21 @@ const Swap = () => {
                 <select
                   value={toChain.id}
                   onChange={(e) => setToChain(chains.find(c => c.id === parseInt(e.target.value)))}
-                  className="bg-transparent text-zt-paper font-semibold outline-none cursor-pointer"
+                  className="bg-white/5 text-zt-paper font-semibold outline-none cursor-pointer px-3 py-1.5 rounded-lg border border-white/10 hover:border-zt-aqua/30 transition-colors"
                   data-testid="to-chain-select"
                 >
                   {chains.map(chain => (
-                    <option key={chain.id} value={chain.id}>{chain.logo} {chain.name}</option>
+                    <option key={chain.id} value={chain.id} className="bg-zt-ink text-zt-paper">{chain.logo} {chain.name}</option>
                   ))}
                 </select>
                 <select
                   value={tokenOut.symbol}
-                  onChange={(e) => setTokenOut(tokens.find(t => t.symbol === e.target.value))}
-                  className="bg-transparent text-zt-paper font-semibold outline-none cursor-pointer"
+                  onChange={(e) => setTokenOut(toChain.tokens.find(t => t.symbol === e.target.value))}
+                  className="bg-white/5 text-zt-paper font-semibold outline-none cursor-pointer px-3 py-1.5 rounded-lg border border-white/10 hover:border-zt-aqua/30 transition-colors"
                   data-testid="token-out-select"
                 >
-                  {tokens.map(token => (
-                    <option key={token.symbol} value={token.symbol}>{token.logo} {token.symbol}</option>
+                  {toChain.tokens.map(token => (
+                    <option key={token.symbol} value={token.symbol} className="bg-zt-ink text-zt-paper">{token.logo} {token.symbol}</option>
                   ))}
                 </select>
               </div>
@@ -274,6 +299,12 @@ const Swap = () => {
                 data-testid="amount-out-display"
               />
             </div>
+            {isNativeOutput && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-zt-aqua">
+                <Zap className="w-3 h-3" />
+                <span>Will unwrap to {tokenOut.symbol} on completion</span>
+              </div>
+            )}
           </div>
 
           {/* Gas Payment Mode Selector */}
@@ -334,7 +365,7 @@ const Swap = () => {
             <label className="block text-sm font-semibold text-zt-paper/70 mb-2">
               Max Fee Cap (
               {feeMode === 'INPUT' ? tokenIn.symbol : 
-               feeMode === 'OUTPUT' ? tokenOut.symbol : 
+               feeMode === 'OUTPUT' ? (isNativeOutput ? wrappedOutputSymbol : tokenOut.symbol) : 
                feeMode === 'STABLE' ? 'USDC' : 'POL/ETH'})
               <span className="ml-2 text-xs text-zt-aqua cursor-help" title="Surplus auto-refunded on-chain">ⓘ</span>
             </label>
@@ -352,12 +383,19 @@ const Swap = () => {
           </div>
 
           {/* Info Banners */}
-          {feeMode === 'OUTPUT' && (
+          {feeMode === 'OUTPUT' && isNativeOutput && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
               <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
-                <strong className="text-zt-aqua">Output Mode:</strong> Fee skimmed from output tokens on destination before crediting net amount. 
-                FeeSink contract handles settlement.
+                <strong className="text-zt-aqua">Output-fee + Unwrap:</strong> Fee skimmed from wrapped output ({wrappedOutputSymbol}) before unwrapping to native {tokenOut.symbol}.
+              </div>
+            </div>
+          )}
+          {feeMode === 'OUTPUT' && !isNativeOutput && (
+            <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
+              <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-zt-paper/80">
+                <strong className="text-zt-aqua">Output Mode:</strong> Fee skimmed from output tokens on destination before crediting net amount.
               </div>
             </div>
           )}
@@ -365,8 +403,7 @@ const Swap = () => {
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-violet/30">
               <Info className="w-5 h-5 text-zt-violet flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
-                <strong className="text-zt-violet">Input Mode:</strong> You'll sign Permit2 to lock fee from input token on source. 
-                Non-custodial, one-time approval.
+                <strong className="text-zt-violet">Input Mode:</strong> You'll sign Permit2 to lock fee from input token on source. Non-custodial, one-time approval.
               </div>
             </div>
           )}
@@ -382,7 +419,7 @@ const Swap = () => {
                 <span className="text-zt-paper/70">Fee Token:</span>
                 <span className="text-zt-paper font-semibold">
                   {feeMode === 'INPUT' ? tokenIn.symbol : 
-                   feeMode === 'OUTPUT' ? tokenOut.symbol : 
+                   feeMode === 'OUTPUT' ? (isNativeOutput ? wrappedOutputSymbol : tokenOut.symbol) : 
                    feeMode === 'STABLE' ? 'USDC' : 'POL/ETH'}
                 </span>
               </div>
@@ -393,14 +430,14 @@ const Swap = () => {
               <div className="flex justify-between">
                 <span className="text-zt-paper/70">Oracle:</span>
                 <span className="text-zt-aqua text-xs">
-                  {quote.oracleSource || 'TWAP'} 
+                  {quote.oracleSource || 'Pyth'} 
                   {quote.priceAge && <span className="text-zt-paper/50 ml-1">(age {quote.priceAge}s)</span>}
                   {quote.confidence && <span className="text-zt-paper/50 ml-1">(conf {quote.confidence}%)</span>}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-zt-paper/70">Quote Valid:</span>
-                <span className="text-zt-paper">60 seconds</span>
+                <span className="text-zt-paper/70">Net Receives:</span>
+                <span className="text-zt-aqua font-semibold">{amountOut} {tokenOut.symbol}</span>
               </div>
               {quote.includesPriceUpdate && (
                 <div className="pt-2 border-t border-white/10 text-xs text-zt-paper/60">
@@ -417,9 +454,32 @@ const Swap = () => {
           {txHash && (
             <div className="mb-6 glass p-4 rounded-xl flex items-center gap-3 border border-green-500/30">
               <CheckCircle className="w-6 h-6 text-green-400 flex-shrink-0" />
-              <div>
+              <div className="flex-1">
                 <p className="text-zt-paper font-semibold">Swap Submitted!</p>
-                <p className="text-zt-paper/70 text-sm font-mono">{txHash.slice(0, 20)}...</p>
+                <p className="text-zt-paper/70 text-sm font-mono mb-2">{txHash.slice(0, 20)}...</p>
+                {txHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
+                  <div className="flex gap-2">
+                    <a 
+                      href={`https://sepolia.etherscan.io/tx/${txHash}`}
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-zt-aqua text-xs hover:text-zt-violet transition-colors"
+                    >
+                      View on Sepolia Explorer →
+                    </a>
+                    <a 
+                      href={`https://amoy.polygonscan.com/tx/${txHash}`}
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-zt-aqua text-xs hover:text-zt-violet transition-colors"
+                    >
+                      View on Amoy Explorer →
+                    </a>
+                  </div>
+                )}
+                {txHash === '0x0000000000000000000000000000000000000000000000000000000000000000' && (
+                  <p className="text-yellow-400 text-xs">⚠️ Demo mode - No real transaction sent</p>
+                )}
               </div>
             </div>
           )}
@@ -459,7 +519,7 @@ const Swap = () => {
             </div>
             <div className="glass p-4 rounded-xl">
               <p className="text-zt-paper/70 text-sm mb-1">Supported Tokens</p>
-              <p className="text-zt-aqua text-lg font-bold">{tokens.length}</p>
+              <p className="text-zt-aqua text-lg font-bold">{fromChain.tokens.length + toChain.tokens.length}</p>
             </div>
             <div className="glass p-4 rounded-xl">
               <p className="text-zt-paper/70 text-sm mb-1">Success Rate</p>
@@ -478,7 +538,7 @@ const Swap = () => {
               <span className="text-zt-paper/70">Fee Token:</span>
               <span className="text-zt-aqua font-semibold">
                 {feeMode === 'INPUT' ? tokenIn.symbol : 
-                 feeMode === 'OUTPUT' ? tokenOut.symbol : 
+                 feeMode === 'OUTPUT' ? (isNativeOutput ? wrappedOutputSymbol : tokenOut.symbol) : 
                  feeMode === 'STABLE' ? 'USDC' : 'POL/ETH'}
               </span>
             </div>

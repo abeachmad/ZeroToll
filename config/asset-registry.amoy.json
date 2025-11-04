@@ -2,6 +2,31 @@
   "chainId": 80002,
   "network": "amoy",
   "assets": {
+    "WPOL": {
+      "address": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+      "decimals": 18,
+      "hasPermit2": true,
+      "hasEIP2612": true,
+      "isFeeOnTransfer": false,
+      "isRebasing": false,
+      "oracleSource": "pyth",
+      "pythPriceId": "0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68153335374ec10722edd70472",
+      "minLiquidityUSD": 100000,
+      "allowedFeeModes": ["NATIVE", "INPUT", "OUTPUT"],
+      "nativeAlias": "POL"
+    },
+    "USDT": {
+      "address": "TBD_DEPLOY_USDT",
+      "decimals": 6,
+      "hasPermit2": true,
+      "hasEIP2612": true,
+      "isFeeOnTransfer": false,
+      "isRebasing": false,
+      "oracleSource": "pyth",
+      "pythPriceId": "0x2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b",
+      "minLiquidityUSD": 100000,
+      "allowedFeeModes": ["NATIVE", "INPUT", "OUTPUT", "STABLE"]
+    },
     "USDC": {
       "address": "TBD_DEPLOY",
       "decimals": 6,
@@ -9,7 +34,8 @@
       "hasEIP2612": true,
       "isFeeOnTransfer": false,
       "isRebasing": false,
-      "oracleSource": "chainlink",
+      "oracleSource": "pyth",
+      "pythPriceId": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a",
       "minLiquidityUSD": 50000,
       "allowedFeeModes": ["NATIVE", "INPUT", "OUTPUT", "STABLE"]
     },
@@ -20,7 +46,8 @@
       "hasEIP2612": true,
       "isFeeOnTransfer": false,
       "isRebasing": false,
-      "oracleSource": "chainlink",
+      "oracleSource": "pyth",
+      "pythPriceId": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
       "minLiquidityUSD": 50000,
       "allowedFeeModes": ["INPUT", "OUTPUT"]
     },
@@ -88,6 +115,18 @@
       "isRebasing": false,
       "oracleSource": "twap",
       "minLiquidityUSD": 30000,
+      "allowedFeeModes": ["INPUT", "OUTPUT"]
+    },
+    "LINK": {
+      "address": "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904",
+      "decimals": 18,
+      "hasPermit2": true,
+      "hasEIP2612": true,
+      "isFeeOnTransfer": false,
+      "isRebasing": false,
+      "oracleSource": "pyth",
+      "pythPriceId": "0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221",
+      "minLiquidityUSD": 50000,
       "allowedFeeModes": ["INPUT", "OUTPUT"]
     }
   }

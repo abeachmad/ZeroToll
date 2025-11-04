@@ -20,6 +20,14 @@ contract FeeSink is Ownable, ReentrancyGuard {
         uint256 netToUser
     );
     
+    event WrappedFeeDeducted(
+        bytes32 indexed intentId,
+        address indexed wrappedToken,
+        uint256 feeAmount,
+        uint256 vaultAmount,
+        uint256 treasuryAmount
+    );
+    
     constructor(address _vault, address _treasury) Ownable(msg.sender) {
         vault = _vault;
         treasury = _treasury;
@@ -54,6 +62,28 @@ contract FeeSink is Ownable, ReentrancyGuard {
         }
         
         emit FeeDeducted(intentId, user, token, feeAmount, netToUser);
+    }
+    
+    function deductWrappedAndForward(
+        bytes32 intentId,
+        address wrappedToken,
+        uint256 amountToDeduct
+    ) external onlyOwner nonReentrant returns (uint256 vaultAmount, uint256 treasuryAmount) {
+        require(amountToDeduct > 0, "Zero deduction");
+        
+        // Split fee from wrapped token
+        vaultAmount = (amountToDeduct * vaultFeeBps) / 10000;
+        treasuryAmount = amountToDeduct - vaultAmount;
+        
+        // Transfer wrapped tokens to vault and treasury
+        if (vaultAmount > 0) {
+            require(IERC20(wrappedToken).transferFrom(msg.sender, vault, vaultAmount), "Vault transfer failed");
+        }
+        if (treasuryAmount > 0) {
+            require(IERC20(wrappedToken).transferFrom(msg.sender, treasury, treasuryAmount), "Treasury transfer failed");
+        }
+        
+        emit WrappedFeeDeducted(intentId, wrappedToken, amountToDeduct, vaultAmount, treasuryAmount);
     }
     
     function setVault(address _vault) external onlyOwner {

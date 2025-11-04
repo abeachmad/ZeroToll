@@ -6,12 +6,29 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./libraries/IntentLib.sol";
 
+interface IWETH {
+    function deposit() external payable;
+    function withdraw(uint256) external;
+    function balanceOf(address) external view returns (uint256);
+}
+
 contract RouterHub is Ownable, ReentrancyGuard {
     mapping(address => bool) public whitelistedAdapter;
+    mapping(address => address) public nativeToWrapped; // NATIVE_MARKER => WETH/WPOL
+    address public constant NATIVE_MARKER = address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
     address public twapOracle;
+    address public feeSink;
     
-    event RouteExecuted(bytes32 indexed intentId, uint256 amountOut, uint256 dstChainId);
+    event RouteExecuted(
+        bytes32 indexed intentId,
+        uint256 amountOut,
+        uint256 dstChainId,
+        bool outIsNative,
+        uint256 outGrossWrapped,
+        uint256 outNetNative
+    );
     event AdapterWhitelisted(address indexed adapter, bool status);
+    event NativeWrappedSet(address indexed wrapped);
     
     constructor() Ownable(msg.sender) {}
     
@@ -23,34 +40,95 @@ contract RouterHub is Ownable, ReentrancyGuard {
         require(whitelistedAdapter[adapter], "Adapter not whitelisted");
         require(block.timestamp <= intent.deadline, "Intent expired");
         
+        address tokenIn = intent.tokenIn == NATIVE_MARKER ? nativeToWrapped[NATIVE_MARKER] : intent.tokenIn;
+        address tokenOut = intent.tokenOut == NATIVE_MARKER ? nativeToWrapped[NATIVE_MARKER] : intent.tokenOut;
+        
         // Pull tokens from sender
         require(
-            IERC20(intent.tokenIn).transferFrom(msg.sender, address(this), intent.amtIn),
+            IERC20(tokenIn).transferFrom(msg.sender, address(this), intent.amtIn),
             "Transfer failed"
         );
         
         // Approve adapter
-        IERC20(intent.tokenIn).approve(adapter, intent.amtIn);
+        IERC20(tokenIn).approve(adapter, intent.amtIn);
         
-        // Execute route via adapter with gas limit
+        // Execute route via adapter
         (bool success, bytes memory result) = adapter.call{gas: 500000}(routeData);
         require(success, "Adapter call failed");
         require(result.length > 0, "Empty result");
         
-        // Reset approval to 0 for security
-        IERC20(intent.tokenIn).approve(adapter, 0);
+        IERC20(tokenIn).approve(adapter, 0);
         
-        amountOut = abi.decode(result, (uint256));
-        require(amountOut >= intent.minOut, "Slippage exceeded");
-        require(amountOut > 0, "Invalid output amount");
+        uint256 grossOut = abi.decode(result, (uint256));
+        require(grossOut >= intent.minOut, "Slippage exceeded");
+        require(grossOut > 0, "Invalid output amount");
         
-        bytes32 intentId = IntentLib.hashIntent(intent);
-        emit RouteExecuted(intentId, amountOut, intent.dstChainId);
+        uint256 netOut = grossOut;
+        bool isNativeOut = intent.tokenOut == NATIVE_MARKER;
+        
+        // Handle output-fee mode with native unwrap
+        if (intent.feeMode == FeeAssetMode.TOKEN_OUTPUT_DEST && isNativeOut) {
+            // Skim fee from wrapped, then unwrap remainder
+            uint256 feeAmount = (grossOut * intent.feeCapToken) / 10000; // simplified
+            if (feeAmount > 0) {
+                IERC20(tokenOut).transfer(feeSink, feeAmount);
+            }
+            netOut = grossOut - feeAmount;
+            
+            // Unwrap to native
+            IWETH(tokenOut).withdraw(netOut);
+            payable(msg.sender).transfer(netOut);
+            
+            emit RouteExecuted(
+                IntentLib.hashIntent(intent),
+                grossOut,
+                intent.dstChainId,
+                true,
+                grossOut,
+                netOut
+            );
+        } else if (isNativeOut) {
+            // No fee deduction, just unwrap
+            IWETH(tokenOut).withdraw(grossOut);
+            payable(msg.sender).transfer(grossOut);
+            
+            emit RouteExecuted(
+                IntentLib.hashIntent(intent),
+                grossOut,
+                intent.dstChainId,
+                true,
+                grossOut,
+                grossOut
+            );
+        } else {
+            // Standard ERC20 output
+            IERC20(tokenOut).transfer(msg.sender, grossOut);
+            
+            emit RouteExecuted(
+                IntentLib.hashIntent(intent),
+                grossOut,
+                intent.dstChainId,
+                false,
+                0,
+                0
+            );
+        }
+        
+        amountOut = netOut;
     }
     
     function whitelistAdapter(address adapter, bool status) external onlyOwner {
         whitelistedAdapter[adapter] = status;
         emit AdapterWhitelisted(adapter, status);
+    }
+    
+    function setNativeWrapped(address wrapped) external onlyOwner {
+        nativeToWrapped[NATIVE_MARKER] = wrapped;
+        emit NativeWrappedSet(wrapped);
+    }
+    
+    function setFeeSink(address _feeSink) external onlyOwner {
+        feeSink = _feeSink;
     }
     
     function setTwapOracle(address _twapOracle) external onlyOwner {
@@ -60,4 +138,6 @@ contract RouterHub is Ownable, ReentrancyGuard {
     function rescueTokens(address token, uint256 amount) external onlyOwner {
         IERC20(token).transfer(owner(), amount);
     }
+    
+    receive() external payable {}
 }

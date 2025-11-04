@@ -1,51 +1,95 @@
 #!/bin/bash
 
-echo "🚀 Starting ZeroToll Development Environment"
-echo "============================================"
-echo ""
+echo "🚀 Starting ZeroToll Development Services"
+echo "=========================================="
 
-# Check if MongoDB is running
-if ! pgrep -x "mongod" > /dev/null; then
-    echo "⚠️  MongoDB not running. Starting MongoDB..."
-    sudo systemctl start mongod 2>/dev/null || mongod --fork --logpath /var/log/mongodb.log 2>/dev/null
-    sleep 2
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Function to cleanup on exit
+cleanup() {
+    echo -e "\n🛑 Stopping services..."
+    kill $BACKEND_PID $FRONTEND_PID 2>/dev/null
+    exit
+}
+
+trap cleanup SIGINT SIGTERM
+
+# Check and setup backend venv
+echo -e "${YELLOW}📦 Checking backend setup...${NC}"
+if [ ! -d "backend/venv" ]; then
+    echo "Creating Python virtual environment..."
+    cd backend
+    python3 -m venv venv
+    source venv/bin/activate
+    echo "Installing Python dependencies..."
+    pip install -r requirements.txt
+    cd ..
+    echo -e "${GREEN}✅ Backend setup complete${NC}"
+else
+    echo -e "${GREEN}✅ Backend venv exists${NC}"
 fi
 
-# Start Backend
-echo "📦 Starting Backend (FastAPI)..."
-cd /home/abeachmad/ZeroToll/backend
-source venv/bin/activate
-uvicorn server:app --host 0.0.0.0 --port 8000 --reload &
+# Check frontend dependencies
+echo -e "${YELLOW}📦 Checking frontend setup...${NC}"
+if [ ! -d "frontend/node_modules" ]; then
+    echo "Installing frontend dependencies..."
+    cd frontend
+    yarn install
+    cd ..
+    echo -e "${GREEN}✅ Frontend setup complete${NC}"
+else
+    echo -e "${GREEN}✅ Frontend dependencies exist${NC}"
+fi
+
+# Start backend
+echo ""
+echo -e "${YELLOW}📦 Starting Backend...${NC}"
+cd backend
+./venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
 BACKEND_PID=$!
-echo "   Backend PID: $BACKEND_PID"
-echo "   Backend URL: http://localhost:8000"
+echo -e "${GREEN}✅ Backend started (PID: $BACKEND_PID)${NC}"
+cd ..
 
 # Wait for backend to start
-sleep 3
+echo "Waiting for backend to initialize..."
+sleep 5
 
-# Start Frontend
+# Check if backend is running
+if ps -p $BACKEND_PID > /dev/null; then
+    echo -e "${GREEN}✅ Backend is running${NC}"
+else
+    echo -e "${RED}❌ Backend failed to start. Check backend.log${NC}"
+    tail -20 backend.log
+    exit 1
+fi
+
+# Start frontend
 echo ""
-echo "🎨 Starting Frontend (React)..."
-cd /home/abeachmad/ZeroToll/frontend
-BROWSER=none yarn start &
+echo -e "${YELLOW}📦 Starting Frontend...${NC}"
+cd frontend
+BROWSER=none yarn start > ../frontend.log 2>&1 &
 FRONTEND_PID=$!
-echo "   Frontend PID: $FRONTEND_PID"
-echo "   Frontend URL: http://localhost:3000"
+echo -e "${GREEN}✅ Frontend started (PID: $FRONTEND_PID)${NC}"
+cd ..
 
 echo ""
-echo "✅ Development servers started!"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}✅ Services Running!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "📝 Access the app:"
-echo "   Frontend: http://localhost:3000"
-echo "   Backend API: http://localhost:8000/api"
-echo "   API Docs: http://localhost:8000/docs"
+echo "Backend:  http://localhost:8000"
+echo "Frontend: http://localhost:3000"
 echo ""
-echo "🛑 To stop servers:"
-echo "   kill $BACKEND_PID $FRONTEND_PID"
-echo "   or press Ctrl+C"
+echo "Logs:"
+echo "  Backend:  tail -f backend.log"
+echo "  Frontend: tail -f frontend.log"
 echo ""
+echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-# Wait for user interrupt
-trap "echo ''; echo '🛑 Stopping servers...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit" INT
-
+# Wait for processes
 wait

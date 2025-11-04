@@ -21,6 +21,12 @@ module.exports = {
         ],
       };
 
+      // Ignore MetaMask SDK warnings
+      webpackConfig.ignoreWarnings = [
+        /Failed to parse source map/,
+        /Can't resolve '@react-native-async-storage\/async-storage'/,
+      ];
+
       return webpackConfig;
     },
   },

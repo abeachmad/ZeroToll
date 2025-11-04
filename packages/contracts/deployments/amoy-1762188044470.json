@@ -1,0 +1,9 @@
+{
+  "network": "amoy",
+  "chainId": 80002,
+  "routerHub": "0xc6Dd26D3eE0F58fAb15Dc87bEe3A66896B6D4127",
+  "feeSink": "0x1F679D174A9fBe4158EABcD24d4A63D6Bcf8f700",
+  "wrappedToken": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "timestamp": "2025-11-03T16:40:44.470Z"
+}

@@ -30,101 +30,66 @@ ZeroToll is a Polygon-native DeFi protocol that enables gasless cross-chain swap
 - Gasless swap interface with RainbowKit wallet support
 - Transaction history and analytics dashboard
 
-## Quick Start
+## 🚀 Quick Start
 
-### Prerequisites
-- Node.js 18+
-- pnpm
-- Python 3.9+
+**Status**: ✅ **READY FOR TESTING**
 
-### Installation
+Contracts are deployed and the application is running!
 
-```bash
-# Install contract dependencies
-cd packages/contracts
-yarn install
+### Deployed Contracts
 
-# Install relayer dependencies
-cd ../relayer
-yarn install
+**Polygon Amoy (ChainID: 80002)**
+- RouterHub: `0xc6Dd26D3eE0F58fAb15Dc87bEe3A66896B6D4127`
+- FeeSink: `0x1F679D174A9fBe4158EABcD24d4A63D6Bcf8f700`
+- Explorer: https://amoy.polygonscan.com/address/0xc6Dd26D3eE0F58fAb15Dc87bEe3A66896B6D4127
 
-# Install AI service dependencies
-cd ../ai
-yarn install
+**Ethereum Sepolia (ChainID: 11155111)**
+- RouterHub: `0x19091A6c655704c8fb55023635eE3298DcDf66FF`
+- FeeSink: `0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130`
+- Explorer: https://sepolia.etherscan.io/address/0x19091A6c655704c8fb55023635eE3298DcDf66FF
 
-# Install backend dependencies
-cd ../../backend
-pip install -r requirements.txt
-
-# Install frontend dependencies
-cd ../frontend
-yarn install
-```
-
-### Configuration
-
-1. Copy `.env.example` files:
-```bash
-cp packages/contracts/.env.example packages/contracts/.env
-```
-
-2. Update with your values:
-- RPC endpoints (provided: Amoy, Sepolia)
-- Private keys for deployer and relayer
-- Bundler URLs (public 4337 bundlers)
-
-### Deployment
+### Running the Application
 
 ```bash
-# Deploy to Polygon Amoy
-cd packages/contracts
-yarn deploy:amoy
+# Quick start (recommended)
+cd /home/abeachmad/ZeroToll
+bash start-dev.sh
 
-# Deploy to Ethereum Sepolia
-yarn deploy:sepolia
-```
+# Or manually:
+# Terminal 1: Backend
+cd backend
+./venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000 &
 
-Deployment addresses will be saved to `packages/contracts/deployments/`.
-
-### Running Services
-
-```bash
-# Start relayer service
-cd packages/relayer
+# Terminal 2: Frontend
+cd frontend
 yarn start
-
-# Start AI scoring service
-cd packages/ai
-yarn start
-
-# Start backend (from /app/backend)
-sudo supervisorctl restart backend
-
-# Start frontend (from /app/frontend)
-sudo supervisorctl restart frontend
 ```
 
-### Frontend Access
+### Access the App
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
 
-The app will be available at the configured frontend URL.
+### Test the Features
 
-## Testing
+1. **Connect Wallet**: Click "Connect Wallet" and select MetaMask
+2. **Get Testnet Tokens**:
+   - Polygon Amoy POL: https://faucet.polygon.technology/
+   - Ethereum Sepolia ETH: https://sepoliafaucet.com/
+3. **Test Price Calculation**:
+   - ETH → POL: 0.01 ETH = ~205 POL (real Pyth prices)
+   - LINK → POL: 30 LINK = ~3896 POL
+4. **Test Fee Modes**: NATIVE, INPUT, OUTPUT, STABLE
+5. **Test Native Unwrap**: Select POL or ETH as output
 
-### Contract Tests
-```bash
-cd packages/contracts
-yarn test
-```
+### Documentation
 
-### End-to-End Demo
+📚 **[DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md)** - Complete documentation index
 
-1. Open the frontend
-2. Connect wallet (no native gas needed)
-3. Select route: Amoy USDC → Sepolia USDC
-4. Set amount and fee cap
-5. Get quote from relayers
-6. Execute swap (paymaster sponsors gas)
-7. View transaction in history
+Quick links:
+- **[QUICK_START.md](QUICK_START.md)**: Setup and testing guide
+- **[TESTING_GUIDE.md](TESTING_GUIDE.md)**: Complete test checklist
+- **[STATUS.md](STATUS.md)**: Current deployment status
+- **[DEPLOYMENT_SUCCESS.md](DEPLOYMENT_SUCCESS.md)**: Contract addresses
 
 ## Brand Assets
 
@@ -163,4 +128,27 @@ MIT
 
 ---
 
-**Status**: Wave-2 testnet demo ready (Amoy ↔ Sepolia)
+---
+
+## Current Features
+
+### ✅ Working
+- Real-time price quotes from Pyth oracle
+- All 4 fee modes (NATIVE, INPUT, OUTPUT, STABLE)
+- Native token support (POL, ETH) with auto wrap/unwrap
+- Cross-chain routing (Amoy ↔ Sepolia)
+- 19 supported tokens across both chains
+- Wallet connection with proper z-index layering
+- Token swap button with animation
+- Responsive UI with glass effects
+
+### ⚠️ Demo Mode
+- Execute swap returns mock success (UI demo)
+- For real on-chain swaps: integrate with RouterHub contract
+- History page requires MongoDB or The Graph
+
+---
+
+**Status**: ✅ Wave-2 testnet demo ready (Amoy ↔ Sepolia)
+**Version**: 2.0.0
+**Last Updated**: 2024-11-03

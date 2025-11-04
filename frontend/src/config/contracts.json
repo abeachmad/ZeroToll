@@ -1,0 +1,14 @@
+{
+  "amoy": {
+    "chainId": 80002,
+    "routerHub": "0xc6Dd26D3eE0F58fAb15Dc87bEe3A66896B6D4127",
+    "feeSink": "0x1F679D174A9fBe4158EABcD24d4A63D6Bcf8f700",
+    "wrappedToken": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9"
+  },
+  "sepolia": {
+    "chainId": 11155111,
+    "routerHub": "0x19091A6c655704c8fb55023635eE3298DcDf66FF",
+    "feeSink": "0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130",
+    "wrappedToken": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
+  }
+}
