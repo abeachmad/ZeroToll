@@ -8,13 +8,17 @@ import FeeModeExplainer from '../components/FeeModeExplainer';
 import ConnectButton from '../components/ConnectButton';
 import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
 import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
+import arbitrumSepoliaTokens from '../config/tokenlists/zerotoll.tokens.arbitrum-sepolia.json';
+import optimismSepoliaTokens from '../config/tokenlists/zerotoll.tokens.optimism-sepolia.json';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 const chains = [
   { id: 80002, name: 'Polygon Amoy', logo: '🔷', tokens: amoyTokens.tokens },
-  { id: 11155111, name: 'Ethereum Sepolia', logo: '⭐', tokens: sepoliaTokens.tokens }
+  { id: 11155111, name: 'Ethereum Sepolia', logo: '⭐', tokens: sepoliaTokens.tokens },
+  { id: 421614, name: 'Arbitrum Sepolia', logo: '🔵', tokens: arbitrumSepoliaTokens.tokens },
+  { id: 11155420, name: 'Optimism Sepolia', logo: '🔴', tokens: optimismSepoliaTokens.tokens }
 ];
 
 const feeModes = [
@@ -64,8 +68,8 @@ const Swap = () => {
       return;
     }
     
-    if (chain?.id !== 80002 && chain?.id !== 11155111) {
-      toast.error('Please switch to Polygon Amoy or Ethereum Sepolia');
+    if (![80002, 11155111, 421614, 11155420].includes(chain?.id)) {
+      toast.error('Please switch to supported testnet');
       return;
     }
 
@@ -143,7 +147,16 @@ const Swap = () => {
         sender: address,
         nonce: Date.now(),
         feeMode,
-        feeToken
+        feeToken,
+        callData: {
+          tokenIn: tokenIn.symbol,
+          amtIn: parseFloat(amountIn),
+          tokenOut: tokenOut.symbol,
+          minOut: parseFloat(amountOut) * 0.95,
+          feeCap: parseFloat(feeCap),
+          srcChainId: fromChain.id,
+          dstChainId: toChain.id
+        }
       };
 
       const response = await axios.post(`${API}/execute`, { intentId, userOp });

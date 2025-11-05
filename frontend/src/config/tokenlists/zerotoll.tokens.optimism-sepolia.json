@@ -1,0 +1,25 @@
+{
+  "chainId": 11155420,
+  "network": "optimism-sepolia",
+  "tokens": [
+    {
+      "symbol": "ETH",
+      "name": "Ethereum",
+      "logo": "⭐",
+      "address": "NATIVE",
+      "wrappedAddress": "0x4200000000000000000000000000000000000006",
+      "decimals": 18,
+      "isNative": true,
+      "feeModes": ["NATIVE", "INPUT", "OUTPUT"]
+    },
+    {
+      "symbol": "LINK",
+      "name": "Chainlink",
+      "logo": "🔗",
+      "address": "0xE4aB69C077896252FAFBD49EFD26B5D171A32410",
+      "decimals": 18,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT"]
+    }
+  ]
+}

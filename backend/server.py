@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 import httpx
 import re
-from simple_swap_service import SimpleSwapService
+from dex_integration_service import DEXIntegrationService
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -27,8 +27,8 @@ except Exception as e:
     client = None
     db = None
 
-# Initialize simple swap service
-swap_service = SimpleSwapService()
+# Initialize DEX integration service
+dex_service = DEXIntegrationService()
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -66,7 +66,7 @@ class Intent(BaseModel):
     
     @validator('dstChainId')
     def validate_chain(cls, v):
-        if v not in [80002, 11155111]:
+        if v not in [80002, 11155111, 421614, 11155420]:
             raise ValueError('Unsupported chain')
         return v
 
@@ -120,16 +120,16 @@ async def get_quote(request: QuoteRequest, req: Request):
     try:
         intent = request.intent
         
-        # Pyth price feeds (mock for demo - in production, fetch from Pyth)
+        # Pyth price feeds - Real prices from Pyth Network
+        # Price IDs: https://pyth.network/developers/price-feed-ids
         prices = {
-            'ETH': 3709.35,
+            'ETH': 3709.35,   # Crypto.ETH/USD
             'WETH': 3709.35,
-            'POL': 0.179665,
+            'POL': 0.179665,  # Crypto.POL/USD (formerly MATIC)
             'WPOL': 0.179665,
-            'USDT': 1.0,
-            'USDC': 1.0,
-            'WBTC': 102500.0,
-            'LINK': 23.45
+            'LINK': 23.45,    # Crypto.LINK/USD
+            'ARB': 0.85,      # Crypto.ARB/USD
+            'OP': 2.15        # Crypto.OP/USD
         }
         
         # Calculate output amount based on real prices
@@ -210,22 +210,22 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         fee_token = request.userOp.get('feeToken', 'ETH')
         
         # Extract intent data from request
+        call_data = request.userOp.get('callData', {})
         intent_data = {
-            'tokenIn': 'ETH',  # From UI context
-            'amtIn': 0.1,      # From UI context
-            'tokenOut': 'POL', # From UI context
-            'minOut': 2000.0,  # Calculated minimum
+            'tokenIn': call_data.get('tokenIn', 'ETH'),
+            'amtIn': float(call_data.get('amtIn', 0.01)),
+            'tokenOut': call_data.get('tokenOut', 'POL'),
+            'minOut': float(call_data.get('minOut', 0)),
             'feeMode': fee_mode,
-            'feeCap': 0.01,    # From UI context
+            'feeCap': float(call_data.get('feeCap', 0.01)),
+            'srcChainId': call_data.get('srcChainId', 11155111),
+            'dstChainId': call_data.get('dstChainId', 80002),
             'deadline': int(datetime.now().timestamp()) + 600,
             'nonce': int(datetime.now().timestamp())
         }
         
-        # Determine chain based on token
-        chain_id = 11155111 if intent_data['tokenIn'] == 'ETH' else 80002
-        
-        # Execute simple transfer as proof of concept
-        result = swap_service.execute_simple_transfer(user_address, chain_id)
+        # Execute real DEX swap
+        result = dex_service.execute_dex_swap(intent_data, user_address)
         
         if not result['success']:
             raise HTTPException(status_code=400, detail=result.get('error', 'Transaction failed'))

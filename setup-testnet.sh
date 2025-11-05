@@ -29,18 +29,25 @@ fi
 # Start backend
 echo "🔧 Starting backend..."
 pkill -f "uvicorn server:app" 2>/dev/null
+sleep 1
 cd backend
-nohup venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
+nohup /home/abeachmad/ZeroToll/backend/venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
+BACKEND_PID=$!
 cd ..
-sleep 3
+sleep 5
 
 # Check backend status
-if curl -s http://localhost:8000/api/ > /dev/null; then
-    echo "✅ Backend is running on http://localhost:8000"
-else
-    echo "❌ Backend failed to start"
-    exit 1
-fi
+for i in {1..10}; do
+    if curl -s http://localhost:8000/api/ > /dev/null 2>&1; then
+        echo "✅ Backend is running on http://localhost:8000"
+        break
+    fi
+    if [ $i -eq 10 ]; then
+        echo "❌ Backend failed to start - check backend.log"
+        exit 1
+    fi
+    sleep 1
+done
 
 # Start frontend
 echo "🎨 Starting frontend..."
@@ -62,12 +69,18 @@ echo "   • Backend:  http://localhost:8000"
 echo "   • Frontend: http://localhost:3000 (starting...)"
 echo "   • MongoDB:  localhost:27017"
 echo ""
-echo "🔗 Deployed Contracts:"
-echo "   • Polygon Amoy:    0xc6Dd26D3eE0F58fAb15Dc87bEe3A66896B6D4127"
-echo "   • Ethereum Sepolia: 0x19091A6c655704c8fb55023635eE3298DcDf66FF"
+echo "🔗 Supported Networks:"
+echo "   • Polygon Amoy (80002)"
+echo "   • Ethereum Sepolia (11155111)"
+echo "   • Arbitrum Sepolia (421614)"
+echo "   • Optimism Sepolia (11155420)"
 echo ""
-echo "⚠️  Currently in DEMO MODE (no real transactions)"
-echo "   To enable real transactions, set RELAYER_PRIVATE_KEY in backend/.env"
+if grep -q "RELAYER_PRIVATE_KEY=0x" backend/.env 2>/dev/null; then
+    echo "✅ REAL TRANSACTION MODE ENABLED"
+    echo "   Relayer: 0xf304eeD846d82a91d688d1bC1A4fA692051d1D7A"
+else
+    echo "⚠️  DEMO MODE - Set RELAYER_PRIVATE_KEY in backend/.env for real transactions"
+fi
 echo ""
 echo "📝 Logs:"
 echo "   • Backend:  tail -f backend.log"
@@ -77,7 +90,8 @@ echo ""
 echo "🧪 Test the app:"
 echo "   1. Open http://localhost:3000"
 echo "   2. Connect MetaMask wallet"
-echo "   3. Switch to Polygon Amoy or Ethereum Sepolia"
-echo "   4. Try a swap (ETH → POL or vice versa)"
-echo "   5. Check transaction history"
+echo "   3. Switch to any supported testnet"
+echo "   4. Get testnet tokens from faucets"
+echo "   5. Try a swap (ETH, POL, LINK, ARB, or OP)"
+echo "   6. Verify transaction on block explorer"
 echo ""
