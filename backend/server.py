@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 import httpx
 import re
-from dex_integration_service import DEXIntegrationService
+from dex_swap_service import DEXSwapService
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -27,8 +27,8 @@ except Exception as e:
     client = None
     db = None
 
-# Initialize DEX integration service
-dex_service = DEXIntegrationService()
+# Initialize DEX swap service
+dex_service = DEXSwapService()
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -225,7 +225,7 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         }
         
         # Execute real DEX swap
-        result = dex_service.execute_dex_swap(intent_data, user_address)
+        result = dex_service.execute_swap(intent_data, user_address)
         
         if not result['success']:
             raise HTTPException(status_code=400, detail=result.get('error', 'Transaction failed'))
