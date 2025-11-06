@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowDownUp, Loader2, CheckCircle, Info, HelpCircle, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchNetwork } from 'wagmi';
 import { parseUnits, maxUint256 } from 'viem';
 import FeeModeExplainer from '../components/FeeModeExplainer';
 import ConnectButton from '../components/ConnectButton';
@@ -76,12 +76,16 @@ const Swap = () => {
   const [needsApproval, setNeedsApproval] = useState(false);
   const [approvalPending, setApprovalPending] = useState(false);
   
+  // Network mismatch state
+  const [showNetworkWarning, setShowNetworkWarning] = useState(false);
+  
   // Get RouterHub address for current chain
   const routerHubAddress = ROUTER_HUB_ADDRESSES[fromChain?.id];
   
   // Wagmi hooks for approval
   const { writeContract: approveToken, data: approveHash } = useWriteContract();
   const { isSuccess: approveSuccess } = useWaitForTransactionReceipt({ hash: approveHash });
+  const { switchNetwork } = useSwitchNetwork();
   
   // Check allowance
   const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
@@ -106,6 +110,51 @@ const Swap = () => {
     }
   }, [tokenIn, feeMode]);
   
+  // AUTO-SWITCH NETWORK when chain mismatch detected
+  useEffect(() => {
+    if (!isConnected || !chain || !fromChain) {
+      setShowNetworkWarning(false);
+      return;
+    }
+    
+    // Check if wallet network matches selected source chain
+    if (chain.id !== fromChain.id) {
+      setShowNetworkWarning(true);
+      
+      // Auto-trigger network switch
+      const autoSwitch = async () => {
+        try {
+          toast.info(`🔁 Switching to ${fromChain.name}... Please approve in MetaMask`);
+          
+          if (switchNetwork) {
+            await switchNetwork({ chainId: fromChain.id });
+          } else if (window.ethereum) {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: `0x${fromChain.id.toString(16)}` }]
+            });
+          }
+          
+          toast.success(`✅ Network switched to ${fromChain.name}!`);
+          setShowNetworkWarning(false);
+        } catch (err) {
+          console.error('Auto network switch failed:', err);
+          if (err.code === 4001) {
+            toast.error('❌ Network switch rejected. Please switch manually in MetaMask.');
+          } else {
+            toast.error('⚠️ Failed to switch network. Please switch manually in MetaMask.');
+          }
+        }
+      };
+      
+      // Trigger auto-switch after short delay
+      const timer = setTimeout(autoSwitch, 500);
+      return () => clearTimeout(timer);
+    } else {
+      setShowNetworkWarning(false);
+    }
+  }, [chain, fromChain, isConnected, switchNetwork]);
+  
   // Check if approval is needed when amount or allowance changes
   useEffect(() => {
     if (!amountIn || !currentAllowance || tokenIn?.isNative) {
@@ -116,7 +165,25 @@ const Swap = () => {
     try {
       const decimals = tokenIn.decimals || 6;
       const amountWei = parseUnits(amountIn, decimals);
-      setNeedsApproval(currentAllowance < amountWei);
+      // Normalize allowance to BigInt for reliable comparison
+      const toBigInt = (v) => {
+        try {
+          if (v == null) return 0n;
+          if (typeof v === 'bigint') return v;
+          if (typeof v === 'string') return v.startsWith('0x') ? BigInt(v) : BigInt(v);
+          if (typeof v === 'number') return BigInt(v);
+          if (v._hex) return BigInt(v._hex);
+          if (v.toString) return BigInt(v.toString());
+        } catch (e) {
+          return 0n;
+        }
+        return 0n;
+      };
+
+      const allowanceBig = toBigInt(currentAllowance);
+      const amountBig = toBigInt(amountWei);
+
+      setNeedsApproval(allowanceBig < amountBig);
     } catch (e) {
       setNeedsApproval(false);
     }
@@ -202,6 +269,26 @@ const Swap = () => {
     
     setApprovalPending(true);
     try {
+      // Ensure wallet is on the same network as the selected source chain
+      if (chain?.id !== fromChain.id) {
+        toast.info('🔁 Switching wallet network to match selection...');
+        try {
+          if (switchNetwork) {
+            await switchNetwork({ chainId: fromChain.id });
+          } else if (window.ethereum) {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: `0x${fromChain.id.toString(16)}` }]
+            });
+          }
+          toast.success('✅ Network switched — please approve the transaction in MetaMask');
+        } catch (swErr) {
+          console.error('Network switch failed:', swErr);
+          toast.error('Failed to switch network. Please switch network in MetaMask and retry.');
+          setApprovalPending(false);
+          return;
+        }
+      }
       const decimals = tokenIn.decimals || 6;
       const amountWei = parseUnits(amountIn, decimals);
       
@@ -237,6 +324,35 @@ const Swap = () => {
       return;
     }
     
+    // Ensure wallet network matches the selected source chain
+    if (chain?.id !== fromChain.id) {
+      toast.info('🔁 Switching wallet network to match selected chain...');
+      try {
+        if (switchNetwork) {
+          await switchNetwork({ chainId: fromChain.id });
+        } else if (window.ethereum) {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: `0x${fromChain.id.toString(16)}` }]
+          });
+        }
+        toast.success('✅ Network switched — continue to execute');
+      } catch (swErr) {
+        console.error('Network switch failed:', swErr);
+        toast.error('Failed to switch network. Please switch network in MetaMask and retry.');
+        return;
+      }
+    }
+
+    // Re-check allowance immediately before executing
+    if (!tokenIn.isNative) {
+      try {
+        await refetchAllowance();
+      } catch (e) {
+        console.warn('Failed to refetch allowance', e);
+      }
+    }
+
     // CRITICAL: Check approval before executing swap
     if (needsApproval && !tokenIn.isNative) {
       toast.error('⚠️ Please approve token spending first');
@@ -328,6 +444,18 @@ const Swap = () => {
         <div className="glass-strong p-8 rounded-3xl">
           <h1 className="text-3xl font-bold mb-2 text-zt-paper">Gasless Cross-Chain Swap</h1>
           <p className="text-zt-paper/60 mb-8">Pay fees in any token you swap—use input, skim from output (even native via wrapped), or stick to native gas. Fee capped on-chain, unused refunded.</p>
+
+          {/* Network Mismatch Warning Banner */}
+          {showNetworkWarning && isConnected && (
+            <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-yellow-500/50 bg-yellow-500/10">
+              <Info className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5 animate-pulse" />
+              <div className="flex-1 text-sm text-zt-paper/90">
+                <strong className="text-yellow-400">Wrong Network!</strong> Your wallet is on <strong>{chain?.name || 'unknown network'}</strong>, but you selected <strong>{fromChain.name}</strong>.
+                <br />
+                <span className="text-xs text-zt-paper/70">MetaMask should prompt you to switch. If not, please switch manually.</span>
+              </div>
+            </div>
+          )}
 
           {/* From Section */}
           <div className="mb-6">
@@ -637,9 +765,10 @@ const Swap = () => {
             ) : (
               <button
                 onClick={handleExecute}
-                disabled={loading || !quote}
+                disabled={loading || !quote || (needsApproval && !tokenIn.isNative)}
                 className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid="execute-swap-btn"
+                title={needsApproval && !tokenIn.isNative ? 'Please approve token first' : ''}
               >
                 {loading ? <Loader2 className="inline w-5 h-5 animate-spin" /> : 'Execute Swap'}
               </button>
