@@ -253,6 +253,22 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         
+        # 🔧 FIX: MockDEXAdapter cannot handle native tokens (0xEEEE...)
+        # If output is native (ETH/POL), convert to wrapped (WETH/WMATIC)
+        needs_unwrap = False
+        if token_out.lower() == "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee":
+            logging.info(f"⚠️ Native token requested ({token_out_symbol}), converting to wrapped")
+            if dst_chain_id == 11155111:  # Sepolia
+                token_out = get_token_address("WETH", dst_chain_id)
+                token_out_symbol = "WETH"
+                needs_unwrap = True
+            elif dst_chain_id == 80002:  # Amoy
+                token_out = get_token_address("WMATIC", dst_chain_id)
+                token_out_symbol = "WMATIC"
+                needs_unwrap = True
+            logging.info(f"   → Swapping to {token_out_symbol} instead: {token_out}")
+            logging.info(f"   → TODO: Unwrap {token_out_symbol} → native after swap")
+        
         # Convert amounts to wei (assuming 18 decimals for most tokens, 6 for USDC)
         # Simplified: use 18 decimals for now (will be refined per token)
         decimals_in = 6 if token_in_symbol in ['USDC', 'PYUSD', 'USDT'] else 18
