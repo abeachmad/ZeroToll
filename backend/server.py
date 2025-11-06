@@ -228,7 +228,15 @@ async def get_quote(request: QuoteRequest, req: Request):
 async def execute_intent(request: ExecuteRequest, req: Request):
     """Execute swap with REAL blockchain transaction via RouterHub"""
     try:
+        # DEBUG: Log received userOp
+        logging.info(f"🔍 DEBUG - Received userOp: {request.userOp}")
+        
         user_address = request.userOp.get('sender', '')
+        logging.info(f"🔍 DEBUG - Extracted user_address: {user_address}")
+        
+        if not user_address:
+            raise HTTPException(status_code=400, detail="Missing user address (sender)")
+        
         fee_mode = request.userOp.get('feeMode', 'INPUT')
         fee_token_symbol = request.userOp.get('feeToken', 'ETH')
         

@@ -12,8 +12,21 @@ sleep 2
 # Start MongoDB if not running
 if ! pgrep -x "mongod" > /dev/null; then
     echo "📦 Starting MongoDB..."
-    sudo -u mongodb mongod --dbpath /data/db --logpath /tmp/mongodb.log --fork
+    # Remove stale lock file if exists
+    if [ -f /data/db/mongod.lock ]; then
+        echo "   Removing stale lock file..."
+        sudo rm -f /data/db/mongod.lock
+    fi
+    # Start MongoDB
+    sudo mongod --dbpath /data/db --logpath /tmp/mongodb.log --bind_ip 127.0.0.1 --fork > /dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        echo "   ✅ MongoDB started successfully"
+    else
+        echo "   ⚠️  MongoDB failed to start (check /tmp/mongodb.log)"
+    fi
     sleep 2
+else
+    echo "✅ MongoDB already running"
 fi
 
 # Start Backend
