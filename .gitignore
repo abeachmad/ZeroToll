@@ -4,11 +4,14 @@ backend/venv/
 frontend/node_modules/
 
 # Environment files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# NOTE: .env files are COMMITTED for demo purposes only
+# All private keys are TEST WALLETS with NO REAL VALUE
+# DO NOT use this configuration in production!
+# .env
+# .env.local
+# .env.development.local
+# .env.test.local
+# .env.production.local
 
 # Logs
 *.log
@@ -44,7 +47,8 @@ jspm_packages/
 .yarn-integrity
 
 # dotenv environment variables file
-.env
+# COMMENTED OUT FOR DEMO - See note above
+# .env
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
