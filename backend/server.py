@@ -390,10 +390,12 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         # Transaction sent successfully (even if reverted, it's on blockchain)
         if error and "reverted" in error.lower():
             logging.warning(f"⚠️ Transaction reverted (but on-chain): {tx_hash}")
-            status_msg = "Transaction on-chain but reverted (adapter not deployed - demo mode)"
+            status_msg = "reverted"
+            error_reason = error  # Capture revert reason
         else:
             logging.info(f"✅ Transaction successful! Hash: {tx_hash}")
             status_msg = "success"
+            error_reason = None
         
         # Step 6: Build explorer URL
         explorer_urls = {
@@ -410,7 +412,7 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         refund = 0.008    # Fee cap - actual fee
         net_out = amount_out - (fee_paid if fee_mode == 'OUTPUT' else 0)
         
-        # Save to history if MongoDB available
+        # Save to history if MongoDB available (SAVE BOTH SUCCESS AND FAILURE!)
         if db is not None:
             try:
                 chain_names = {
@@ -426,22 +428,25 @@ async def execute_intent(request: ExecuteRequest, req: Request):
                     tokenIn=token_in,
                     tokenOut=token_out,
                     amountIn=str(amt_in),
-                    amountOut=str(amount_out),
-                    netOut=str(net_out),
+                    amountOut=str(amount_out) if status_msg == 'success' else '0',
+                    netOut=str(net_out) if status_msg == 'success' else '0',
                     feeMode=fee_mode,
-                    feePaid=str(fee_paid),
+                    feePaid=str(fee_paid) if status_msg == 'success' else '0',
                     feeToken=fee_token,
-                    refund=str(refund),
+                    refund=str(refund) if status_msg == 'success' else '0',
                     oracleSource='Pyth',
                     priceAge=12,
-                    status='success',
+                    status=status_msg,  # Can be 'success' or 'reverted'
                     txHash=tx_hash,
                     explorerUrl=explorer_url
                 )
                 doc = history.model_dump()
                 doc['timestamp'] = doc['timestamp'].isoformat()
+                # Add error reason if reverted
+                if error_reason:
+                    doc['errorReason'] = error_reason
                 await db.swap_history.insert_one(doc)
-                logging.info(f"Saved swap history: {tx_hash}")
+                logging.info(f"💾 Saved swap history (status={status_msg}): {tx_hash}")
             except Exception as e:
                 logging.error(f"Failed to save history: {e}")
         
@@ -457,7 +462,79 @@ async def execute_intent(request: ExecuteRequest, req: Request):
             'message': f'🎉 Transaction sent to blockchain! TX: {tx_hash[:10]}... View on explorer: {explorer_url}'
         }
         
+    except HTTPException as he:
+        # HTTPException from routing or validation errors - still need to save to history
+        if db is not None and user_address:
+            try:
+                chain_names = {
+                    11155111: "Ethereum Sepolia",
+                    80002: "Polygon Amoy",
+                    421614: "Arbitrum Sepolia",
+                    11155420: "Optimism Sepolia",
+                }
+                history = SwapHistory(
+                    user=user_address,
+                    fromChain=chain_names.get(src_chain_id, f"Chain {src_chain_id}"),
+                    toChain=chain_names.get(dst_chain_id, f"Chain {dst_chain_id}"),
+                    tokenIn=token_in_symbol,
+                    tokenOut=token_out_symbol,
+                    amountIn=str(amt_in),
+                    amountOut='0',
+                    netOut='0',
+                    feeMode=fee_mode,
+                    feePaid='0',
+                    feeToken=fee_token_symbol,
+                    refund='0',
+                    oracleSource='Pyth',
+                    priceAge=12,
+                    status='failed',
+                    txHash='',
+                    explorerUrl=''
+                )
+                doc = history.model_dump()
+                doc['timestamp'] = doc['timestamp'].isoformat()
+                doc['errorReason'] = str(he.detail)
+                await db.swap_history.insert_one(doc)
+                logging.info(f"💾 Saved failed swap history: {he.detail}")
+            except Exception as save_err:
+                logging.error(f"Failed to save error history: {save_err}")
+        raise he
     except Exception as e:
+        # General exception - also save to history
+        if db is not None and user_address:
+            try:
+                chain_names = {
+                    11155111: "Ethereum Sepolia",
+                    80002: "Polygon Amoy",
+                    421614: "Arbitrum Sepolia",
+                    11155420: "Optimism Sepolia",
+                }
+                history = SwapHistory(
+                    user=user_address,
+                    fromChain=chain_names.get(src_chain_id if 'src_chain_id' in locals() else 80002, "Unknown"),
+                    toChain=chain_names.get(dst_chain_id if 'dst_chain_id' in locals() else 80002, "Unknown"),
+                    tokenIn=token_in_symbol if 'token_in_symbol' in locals() else 'Unknown',
+                    tokenOut=token_out_symbol if 'token_out_symbol' in locals() else 'Unknown',
+                    amountIn=str(amt_in) if 'amt_in' in locals() else '0',
+                    amountOut='0',
+                    netOut='0',
+                    feeMode=fee_mode,
+                    feePaid='0',
+                    feeToken=fee_token_symbol,
+                    refund='0',
+                    oracleSource='Pyth',
+                    priceAge=12,
+                    status='failed',
+                    txHash='',
+                    explorerUrl=''
+                )
+                doc = history.model_dump()
+                doc['timestamp'] = doc['timestamp'].isoformat()
+                doc['errorReason'] = str(e)
+                await db.swap_history.insert_one(doc)
+                logging.info(f"💾 Saved failed swap history: {str(e)}")
+            except Exception as save_err:
+                logging.error(f"Failed to save error history: {save_err}")
         logging.error(f"Execute request failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
