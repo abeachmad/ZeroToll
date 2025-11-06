@@ -330,39 +330,46 @@ class Web3TransactionBuilder:
         chain_id: int,
     ) -> Tuple[Optional[str], Optional[str]]:
         """
-        Execute swap intent end-to-end (with auto-approval for demo)
+        Execute swap intent end-to-end
+        
+        NOTE: User MUST approve token spending from frontend before calling this.
+        Backend no longer auto-approves - this ensures MetaMask pop-ups appear for users.
         
         Returns:
             Tuple of (tx_hash, error_message)
         """
-        # Step 1: Approve token spending (DEMO MODE: relayer approves for itself)
-        # In production, user would approve via frontend
-        router_address = ROUTER_HUB_ADDRESSES.get(chain_id)
-        if router_address and intent.get("tokenIn"):
-            token_in = intent["tokenIn"]
-            amt_in = int(intent["amtIn"])
-            
-            # Skip approval for native tokens (ETH/POL address is 0xEee...)
-            if not token_in.lower().startswith("0xeeeeee"):
-                logger.info(f"🔐 Approving {amt_in} of token {token_in} for RouterHub...")
-                approve_hash, approve_error = self.approve_token(
-                    token_in,
-                    router_address,
-                    amt_in,
-                    chain_id
-                )
-                
-                if approve_error:
-                    logger.warning(f"⚠️ Approval failed: {approve_error} (continuing anyway)")
-                else:
-                    logger.info(f"✅ Approval successful: {approve_hash}")
+        # REMOVED: Auto-approval logic
+        # Users must now approve tokens via frontend MetaMask before executing swap.
+        # This ensures proper MetaMask pop-ups and user control over approvals.
         
-        # Step 2: Build transaction
+        # router_address = ROUTER_HUB_ADDRESSES.get(chain_id)
+        # if router_address and intent.get("tokenIn"):
+        #     token_in = intent["tokenIn"]
+        #     amt_in = int(intent["amtIn"])
+        #     
+        #     # Skip approval for native tokens (ETH/POL address is 0xEee...)
+        #     if not token_in.lower().startswith("0xeeeeee"):
+        #         logger.info(f"🔐 Approving {amt_in} of token {token_in} for RouterHub...")
+        #         approve_hash, approve_error = self.approve_token(
+        #             token_in,
+        #             router_address,
+        #             amt_in,
+        #             chain_id
+        #         )
+        #         
+        #         if approve_error:
+        #             logger.warning(f"⚠️ Approval failed: {approve_error} (continuing anyway)")
+        #         else:
+        #             logger.info(f"✅ Approval successful: {approve_hash}")
+        
+        logger.info(f"🚀 Executing swap intent (user must have approved tokens beforehand)")
+        
+        # Step 1: Build transaction
         tx = self.build_execute_route_tx(intent, adapter_address, route_data, chain_id)
         if not tx:
             return None, "Failed to build transaction"
         
-        # Step 3: Sign and send
+        # Step 2: Sign and send
         return self.sign_and_send_tx(tx, chain_id)
     
     def get_transaction_status(
