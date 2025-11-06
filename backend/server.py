@@ -325,11 +325,21 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         from web3 import Web3
         from eth_abi import encode
         
+        # Get RouterHub address for this chain (recipient must be RouterHub, not user!)
+        # RouterHub will receive tokens from adapter, then forward to msg.sender (relayer)
+        router_hub_addresses = {
+            80002: "0x63db4Ac855DD552947238498Ab5da561cce4Ac0b",      # Amoy RouterHub v1.3
+            11155111: "0x1449279761a3e6642B02E82A7be9E5234be00159"   # Sepolia RouterHub v1.2.1
+        }
+        router_hub_address = router_hub_addresses.get(src_chain_id)
+        if not router_hub_address:
+            raise HTTPException(status_code=400, detail=f"RouterHub not deployed on chain {src_chain_id}")
+        
         # Build swap() function call
         # function swap(address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, address recipient, uint256 deadline)
         swap_selector = Web3.keccak(text="swap(address,address,uint256,uint256,address,uint256)")[:4]
         
-        # Encode parameters
+        # Encode parameters - recipient MUST be RouterHub address!
         route_data_params = encode(
             ['address', 'address', 'uint256', 'uint256', 'address', 'uint256'],
             [
@@ -337,13 +347,14 @@ async def execute_intent(request: ExecuteRequest, req: Request):
                 Web3.to_checksum_address(token_out),
                 int(amt_in_wei),
                 int(min_out_wei),
-                user_address,  # recipient
+                Web3.to_checksum_address(router_hub_address),  # recipient = RouterHub (not user!)
                 deadline
             ]
         )
         route_data = swap_selector + route_data_params
         
         logging.info(f"📦 Built route_data (swap call): {route_data.hex()[:100]}...")
+        logging.info(f"   Recipient (RouterHub): {router_hub_address}")
         
         # Step 5: Execute transaction on blockchain
         logging.info(f"📡 Sending transaction to chain {src_chain_id}...")
