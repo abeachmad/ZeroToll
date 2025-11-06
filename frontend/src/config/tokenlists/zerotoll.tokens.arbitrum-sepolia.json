@@ -13,6 +13,24 @@
       "feeModes": ["NATIVE", "INPUT", "OUTPUT"]
     },
     {
+      "symbol": "WETH",
+      "name": "Wrapped Ether",
+      "logo": "💎",
+      "address": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "decimals": 18,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT"]
+    },
+    {
+      "symbol": "USDC",
+      "name": "USD Coin",
+      "logo": "💵",
+      "address": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+      "decimals": 6,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT", "STABLE"]
+    },
+    {
       "symbol": "LINK",
       "name": "Chainlink",
       "logo": "🔗",

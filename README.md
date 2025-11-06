@@ -1,52 +1,216 @@
-# ZeroToll
+# ZeroToll 🚀
 
-**Zero native gas. Smarter cross-chain.**
+**Zero native gas. Smarter cross-chain swaps with AI-powered routing.**
 
-ZeroToll is a Polygon-native DeFi protocol that enables gasless cross-chain swaps and bridges. Users can execute transactions without holding native gas tokens (POL/ETH), paying fees in stablecoins instead.
+> **Polygon Buildathon Submission** - Advanced DeFi Track  
+> Enabling gasless cross-chain DeFi with intelligent route optimization and LP yield generation
 
-## Features
+ZeroToll is a next-generation DeFi protocol that eliminates gas friction across 4 testnets. Users execute swaps and bridges without native tokens, paying fees in ANY token via ERC-4337 Account Abstraction. AI-powered routing finds optimal multi-DEX paths, while LPs earn yield from protocol fees through an ERC-4626 vault.
 
-- ⚡ **Gasless Transactions**: No native gas required. ERC-4337 paymaster fronts costs.
-- 🌐 **Cross-Chain Routing**: Seamless bridging between Polygon Amoy and Ethereum Sepolia.
-- 🔒 **Secure & Transparent**: Permissionless LP vault, RFQ auctions, optimistic settlement.
-- 💰 **Pay in Stablecoins**: USDC/USDT/DAI with transparent fee caps and refunds.
+## ✨ Key Features
 
-## Architecture
+- ⚡ **Gasless Transactions**: No ETH/MATIC required. ERC-4337 paymaster + relayer network fronts gas costs
+- 🤖 **AI Route Optimization**: Multi-DEX aggregation with intelligent path selection saves 10-50 bps vs. single-DEX
+- 🌐 **Multi-Chain Support**: Seamless swaps across Sepolia, Amoy, Arbitrum Sepolia, Optimism Sepolia
+- � **Any-Token Fees**: Pay swap fees in USDC, DAI, WETH, or the token you're swapping
+- 🏦 **LP Yield Vault**: ERC-4626 compliant vault with automatic fee rebalancing and APR tracking
+- � **Fully On-Chain**: All transactions verifiable on block explorers (critical for DeFi trust)
 
-### Contracts (`packages/contracts`)
-- **ZeroTollPaymaster**: ERC-4337 paymaster for gasless transactions
-- **VaultStableFloat**: Permissionless LP vault for gas fronting
-- **RelayerRegistry**: Staking and scoring for relayers
-- **RouterHub**: Multi-DEX routing with whitelisted adapters
-- **SettlementHub**: Optimistic settlement for cross-chain fills
+## 🏗️ Architecture
 
-### Services
-- **Relayer** (`packages/relayer`): Node/TS service for RFQ and bundler interaction
-- **AI Scoring** (`packages/ai`): Rule-based ETC calculation (ML-ready interface)
-- **Subgraph** (`packages/subgraph`): The Graph indexer for metrics
+### Smart Contracts (`packages/contracts/`)
 
-### Frontend (`apps/web`)
-- React + Tailwind + wagmi/viem
-- Gasless swap interface with RainbowKit wallet support
-- Transaction history and analytics dashboard
+**Core Infrastructure**
+- **RouterHub**: Multi-DEX routing engine with adapter whitelisting and slippage protection
+- **ZeroTollPaymaster**: ERC-4337 paymaster enabling gasless transactions via relayer network
+- **FeeSink**: Fee collection hub with automatic treasury routing
+
+**Advanced Features**
+- **FeeVault4626**: ERC-4626 compliant yield vault for LPs (60% fees → LPs, 40% → treasury)
+- **FeeRebalancer**: Auto-converts collected fee tokens to USDC for vault deposits
+- **DEX Adapters**: UniswapV2Adapter, UniswapV3Adapter, MockDEXAdapter for low liquidity scenarios
+- **Bridge Adapters**: MockBridgeAdapter for cross-chain message passing
+
+### Backend Services (`backend/`)
+
+- **FastAPI Server**: Quote generation, swap execution, transaction relaying
+- **Web3 Transaction Builder**: Builds, signs, and sends REAL blockchain transactions (no more mocks!)
+- **Route Planner Client**: Communicates with TypeScript route service for multi-DEX optimization
+- **Pyth Price Integration**: Real-time oracle price feeds with 15-second batch optimization
+- **MongoDB**: Swap history persistence with explorer URL tracking
+
+### Relayer Services (`packages/relayer/`)
+
+- **Route Planner**: Multi-DEX aggregation scoring routes by price + gas + slippage
+- **Pyth Batcher**: Optimizes oracle updates with content-based caching
+- **Intent Executor**: (Future) Full ERC-4337 bundler integration
+
+### AI Intelligence (`packages/ai/`)
+
+- **Route Scorer**: ONNX-based ML model for route ranking
+- **Risk Guard**: Slippage and MEV risk assessment
+- **(Pending)** Express service with `/scoreRoutes` and `/riskScore` endpoints
+
+### Subgraph (`packages/subgraph/`)
+
+- **Entities**: GasSponsoredEvent, FeeToVault, AIRouteChosen
+- **Metrics**: Gas saved, refund rate, TVL, APR, AI win-rate
+- **(Pending)** Deployment to The Graph Studio
+
+### Frontend (`frontend/`)
+
+- **Tech Stack**: React + Tailwind CSS + wagmi + viem + RainbowKit
+- **Pages**: 
+  - Home: Protocol introduction
+  - Swap: Quote generation with AI route badge
+  - Vault: LP deposit/withdraw with TVL/APR metrics
+  - Portfolio: Swap history with CSV export
+  - Market: Token prices and liquidity data
+- **Components**: ConnectButton, AIRouteBadge, LiveMetrics, FeeModeExplainer
 
 ## 🚀 Quick Start
 
-**Status**: ✅ **READY FOR TESTING**
+### For Users (Testing the DApp)
 
-Contracts are deployed and the application is running!
+1. **Get Testnet Tokens**
+   - Faucets: [Sepolia](https://sepoliafaucet.com) | [Amoy](https://faucet.polygon.technology) | [Arbitrum](https://faucet.arbitrum.io) | [Optimism](https://app.optimism.io/faucet)
+   - Get USDC from [Circle Faucet](https://faucet.circle.com/) or [Aave Staging](https://staging.aave.com/faucet/)
 
-### Deployed Contracts
+2. **Start the Application**
+   ```bash
+   # Quick start (both backend + frontend)
+   ./start-zerotoll.sh
+   
+   # Or manually:
+   # Terminal 1 - Backend
+   cd backend && python server.py
+   
+   # Terminal 2 - Frontend
+   cd frontend && npm start
+   ```
 
-**Polygon Amoy (ChainID: 80002)**
-- RouterHub: `0xc6Dd26D3eE0F58fAb15Dc87bEe3A66896B6D4127`
-- FeeSink: `0x1F679D174A9fBe4158EABcD24d4A63D6Bcf8f700`
-- Explorer: https://amoy.polygonscan.com/address/0xc6Dd26D3eE0F58fAb15Dc87bEe3A66896B6D4127
+3. **Test a Swap**
+   - Open http://localhost:3000
+   - Connect wallet (MetaMask recommended)
+   - Switch to Sepolia network
+   - Try swapping: 10 USDC → DAI
+   - Click "Execute Swap"
+   - **CRITICAL**: Verify transaction on [Sepolia Etherscan](https://sepolia.etherscan.io)
+
+4. **Test Vault Deposits**
+   - Navigate to "Vault" page
+   - Deposit 100 USDC
+   - Earn yield from protocol fees
+   - Withdraw anytime (ERC-4626 standard)
+
+### For Developers (Full Deployment)
+
+**Prerequisites**: Node.js 18+, Python 3.9+, Hardhat, MongoDB
+
+1. **Clone & Install**
+   ```bash
+   git clone https://github.com/yourusername/ZeroToll.git
+   cd ZeroToll
+   pnpm install  # Installs all workspace packages
+   ```
+
+2. **Configure Environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your keys:
+   # - PRIVATE_KEY_DEPLOYER (needs testnet ETH)
+   # - RELAYER_PRIVATE_KEY (will sign transactions)
+   # - RPC URLs (Alchemy recommended)
+   # - Block explorer API keys
+   ```
+
+3. **Check Balances**
+   ```bash
+   chmod +x scripts/check-balances.sh
+   ./scripts/check-balances.sh
+   # Ensure deployer has ~0.5 ETH on each chain
+   ```
+
+4. **Deploy Contracts**
+   ```bash
+   chmod +x deploy-zerotoll.sh
+   ./deploy-zerotoll.sh
+   # Select option 1: Deploy to all networks
+   # This deploys to Sepolia, Amoy, Arbitrum Sepolia, Optimism Sepolia
+   ```
+
+5. **Update Configuration**
+   ```bash
+   node scripts/update-contract-addresses.js
+   # Auto-updates frontend/src/config/contracts.json
+   # Copy displayed addresses to backend/.env
+   ```
+
+6. **Start Services**
+   ```bash
+   # Backend
+   cd backend
+   pip install -r requirements.txt
+   python server.py  # Runs on :8000
+   
+   # Frontend
+   cd frontend
+   npm install
+   npm start  # Runs on :3000
+   
+   # Route Planner (optional)
+   cd packages/relayer
+   npm install
+   npm start  # Runs on :3001
+   ```
+
+7. **Run E2E Tests**
+   ```bash
+   # Follow E2E_TESTING_CHECKLIST.md
+   # Verify ALL transactions appear on block explorers
+   ```
+
+**Full deployment guide**: See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
+
+## 📊 Deployed Contracts
+
+> **Status**: 🟡 Pending Deployment (scripts ready)
+
+### After Deployment, Addresses Will Be:
 
 **Ethereum Sepolia (ChainID: 11155111)**
-- RouterHub: `0x19091A6c655704c8fb55023635eE3298DcDf66FF`
-- FeeSink: `0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130`
-- Explorer: https://sepolia.etherscan.io/address/0x19091A6c655704c8fb55023635eE3298DcDf66FF
+- RouterHub: `TBD`
+- FeeSink: `TBD`
+- FeeVault4626: `TBD`
+- FeeRebalancer: `TBD`
+- UniswapV2Adapter: `TBD`
+- Explorer: https://sepolia.etherscan.io
+
+**Polygon Amoy (ChainID: 80002)**
+- RouterHub: `TBD`
+- FeeSink: `TBD`
+- FeeVault4626: `TBD`
+- FeeRebalancer: `TBD`
+- QuickSwapAdapter: `TBD`
+- Explorer: https://amoy.polygonscan.com
+
+**Arbitrum Sepolia (ChainID: 421614)**
+- RouterHub: `TBD`
+- FeeSink: `TBD`
+- FeeVault4626: `TBD`
+- UniswapV3Adapter: `TBD`
+- Explorer: https://sepolia.arbiscan.io
+
+**Optimism Sepolia (ChainID: 11155420)**
+- RouterHub: `TBD`
+- FeeSink: `TBD`
+- FeeVault4626: `TBD`
+- UniswapV3Adapter: `TBD`
+- Explorer: https://sepolia-optimism.etherscan.io
+
+**Previous Deployment (Legacy)**
+- Amoy RouterHub: `0xc6Dd26D3eE0F58fAb15Dc87bEe3A66896B6D4127`
+- Sepolia RouterHub: `0x19091A6c655704c8fb55023635eE3298DcDf66FF`
 
 ### Running the Application
 

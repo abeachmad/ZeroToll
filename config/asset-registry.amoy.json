@@ -16,7 +16,7 @@
       "nativeAlias": "POL"
     },
     "USDT": {
-      "address": "TBD_DEPLOY_USDT",
+      "address": "0xb02af5db30228b30552a9c59d764524ac9d24522",
       "decimals": 6,
       "hasPermit2": true,
       "hasEIP2612": true,
@@ -28,7 +28,7 @@
       "allowedFeeModes": ["NATIVE", "INPUT", "OUTPUT", "STABLE"]
     },
     "USDC": {
-      "address": "TBD_DEPLOY",
+      "address": "0x150ae9614a43361775d9d3a006f75ccc558b598f",
       "decimals": 6,
       "hasPermit2": true,
       "hasEIP2612": true,

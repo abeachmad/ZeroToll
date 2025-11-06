@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./libraries/IntentLib.sol";
 
@@ -13,6 +14,8 @@ interface IWETH {
 }
 
 contract RouterHub is Ownable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+    
     mapping(address => bool) public whitelistedAdapter;
     mapping(address => address) public nativeToWrapped; // NATIVE_MARKER => WETH/WPOL
     address public constant NATIVE_MARKER = address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
@@ -29,6 +32,7 @@ contract RouterHub is Ownable, ReentrancyGuard {
     );
     event AdapterWhitelisted(address indexed adapter, bool status);
     event NativeWrappedSet(address indexed wrapped);
+    event PrefundPushed(address indexed token, address indexed adapter, uint256 amount);
     
     constructor() Ownable(msg.sender) {}
     
@@ -43,21 +47,20 @@ contract RouterHub is Ownable, ReentrancyGuard {
         address tokenIn = intent.tokenIn == NATIVE_MARKER ? nativeToWrapped[NATIVE_MARKER] : intent.tokenIn;
         address tokenOut = intent.tokenOut == NATIVE_MARKER ? nativeToWrapped[NATIVE_MARKER] : intent.tokenOut;
         
-        // Pull tokens from sender
-        require(
-            IERC20(tokenIn).transferFrom(msg.sender, address(this), intent.amtIn),
-            "Transfer failed"
-        );
+        // PUSH PATTERN: Pull tokens from intent.user (not msg.sender!)
+        // This allows relayer to submit TX on behalf of user who signed intent
+        IERC20(tokenIn).safeTransferFrom(intent.user, address(this), intent.amtIn);
         
-        // Approve adapter
-        IERC20(tokenIn).approve(adapter, intent.amtIn);
+        // Transfer tokens to adapter (prefund pattern)
+        // Adapter will consume from its own balance, not pull from RouterHub
+        IERC20(tokenIn).safeTransfer(adapter, intent.amtIn);
+        emit PrefundPushed(tokenIn, adapter, intent.amtIn);
         
-        // Execute route via adapter
-        (bool success, bytes memory result) = adapter.call{gas: 500000}(routeData);
+        // Execute route via adapter (no approval needed with push pattern)
+        // Increased gas limit to accommodate SafeERC20 overhead
+        (bool success, bytes memory result) = adapter.call{gas: 800000}(routeData);
         require(success, "Adapter call failed");
         require(result.length > 0, "Empty result");
-        
-        IERC20(tokenIn).approve(adapter, 0);
         
         uint256 grossOut = abi.decode(result, (uint256));
         require(grossOut >= intent.minOut, "Slippage exceeded");

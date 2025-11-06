@@ -13,6 +13,24 @@
       "feeModes": ["NATIVE", "INPUT", "OUTPUT"]
     },
     {
+      "symbol": "WMATIC",
+      "name": "Wrapped MATIC",
+      "logo": "💜",
+      "address": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+      "decimals": 18,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT"]
+    },
+    {
+      "symbol": "USDC",
+      "name": "USD Coin",
+      "logo": "💵",
+      "address": "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582",
+      "decimals": 6,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT", "STABLE"]
+    },
+    {
       "symbol": "LINK",
       "name": "Chainlink",
       "logo": "🔗",
