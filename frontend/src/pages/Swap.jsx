@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowDownUp, Loader2, CheckCircle, Info, HelpCircle, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchNetwork } from 'wagmi';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchChain } from 'wagmi';
 import { parseUnits, maxUint256 } from 'viem';
 import FeeModeExplainer from '../components/FeeModeExplainer';
 import ConnectButton from '../components/ConnectButton';
@@ -85,7 +85,7 @@ const Swap = () => {
   // Wagmi hooks for approval
   const { writeContract: approveToken, data: approveHash } = useWriteContract();
   const { isSuccess: approveSuccess } = useWaitForTransactionReceipt({ hash: approveHash });
-  const { switchNetwork } = useSwitchNetwork();
+  const { switchChain } = useSwitchChain();
   
   // Check allowance
   const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
@@ -126,8 +126,8 @@ const Swap = () => {
         try {
           toast.info(`🔁 Switching to ${fromChain.name}... Please approve in MetaMask`);
           
-          if (switchNetwork) {
-            await switchNetwork({ chainId: fromChain.id });
+          if (switchChain) {
+            await switchChain({ chainId: fromChain.id });
           } else if (window.ethereum) {
             await window.ethereum.request({
               method: 'wallet_switchEthereumChain',
@@ -153,11 +153,17 @@ const Swap = () => {
     } else {
       setShowNetworkWarning(false);
     }
-  }, [chain, fromChain, isConnected, switchNetwork]);
+  }, [chain, fromChain, isConnected, switchChain]);
   
   // Check if approval is needed when amount or allowance changes
   useEffect(() => {
-    if (!amountIn || !currentAllowance || tokenIn?.isNative) {
+    if (!amountIn || tokenIn?.isNative) {
+      setNeedsApproval(false);
+      return;
+    }
+    
+    // If currentAllowance is undefined (still loading), assume no approval needed yet
+    if (currentAllowance === undefined) {
       setNeedsApproval(false);
       return;
     }
@@ -185,7 +191,8 @@ const Swap = () => {
 
       setNeedsApproval(allowanceBig < amountBig);
     } catch (e) {
-      setNeedsApproval(false);
+      console.error('Error checking approval:', e);
+      setNeedsApproval(true); // On error, assume approval needed for safety
     }
   }, [amountIn, currentAllowance, tokenIn]);
   
@@ -273,8 +280,8 @@ const Swap = () => {
       if (chain?.id !== fromChain.id) {
         toast.info('🔁 Switching wallet network to match selection...');
         try {
-          if (switchNetwork) {
-            await switchNetwork({ chainId: fromChain.id });
+          if (switchChain) {
+            await switchChain({ chainId: fromChain.id });
           } else if (window.ethereum) {
             await window.ethereum.request({
               method: 'wallet_switchEthereumChain',
@@ -328,8 +335,8 @@ const Swap = () => {
     if (chain?.id !== fromChain.id) {
       toast.info('🔁 Switching wallet network to match selected chain...');
       try {
-        if (switchNetwork) {
-          await switchNetwork({ chainId: fromChain.id });
+        if (switchChain) {
+          await switchChain({ chainId: fromChain.id });
         } else if (window.ethereum) {
           await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
