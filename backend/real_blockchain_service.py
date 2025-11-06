@@ -14,10 +14,10 @@ class RealBlockchainService:
             11155111: "https://ethereum-sepolia-rpc.publicnode.com"
         }
         
-        # Contract addresses
+        # Contract addresses (RouterHub - UPDATED Nov 6, 2025)
         self.contracts = {
-            80002: "0xc6Dd26D3eE0F58fAb15Dc87bEe3A66896B6D4127",
-            11155111: "0x19091A6c655704c8fb55023635eE3298DcDf66FF"
+            80002: "0x63db4Ac855DD552947238498Ab5da561cce4Ac0b",      # RouterHub v1.3 Amoy
+            11155111: "0x1449279761a3e6642B02E82A7be9E5234be00159"   # RouterHub v1.2.1 Sepolia
         }
         
         # Token addresses

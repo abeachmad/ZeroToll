@@ -14,14 +14,14 @@ class BlockchainService:
             11155111: "https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161"  # Ethereum Sepolia
         }
         
-        # Contract addresses dari deployment
+        # Contract addresses dari deployment (UPDATED Nov 6, 2025)
         self.contracts = {
             80002: {
-                "RouterHub": "0xc6Dd26D3eE0F58fAb15Dc87bEe3A66896B6D4127",
+                "RouterHub": "0x63db4Ac855DD552947238498Ab5da561cce4Ac0b",  # RouterHub v1.3
                 "FeeSink": "0x1F679D174A9fBe4158EABcD24d4A63D6Bcf8f700"
             },
             11155111: {
-                "RouterHub": "0x19091A6c655704c8fb55023635eE3298DcDf66FF", 
+                "RouterHub": "0x1449279761a3e6642B02E82A7be9E5234be00159",  # RouterHub v1.2.1
                 "FeeSink": "0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130"
             }
         }
