@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
 import { Wallet, ChevronDown, LogOut, Network } from 'lucide-react';
+import { useToast } from '../hooks/use-toast';
 import Modal from './ui/Modal';
 import {
   DropdownMenu,
@@ -15,15 +16,42 @@ const ConnectButton = () => {
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChain } = useSwitchChain();
+  const { toast } = useToast();
   const [showModal, setShowModal] = useState(false);
 
   const handleConnect = (connector) => {
-    connect({ connector });
-    setShowModal(false);
+    try {
+      connect({ connector });
+      setShowModal(false);
+    } catch (error) {
+      console.error('Connect error:', error);
+      toast({
+        title: "Connection Failed",
+        description: error.message || "Failed to connect wallet",
+        variant: "destructive"
+      });
+    }
   };
 
-  const handleSwitchNetwork = (chainId) => {
-    switchChain({ chainId });
+  const handleSwitchNetwork = async (chainId) => {
+    try {
+      toast({
+        title: "Switching Network",
+        description: "Please approve in MetaMask...",
+      });
+      await switchChain({ chainId });
+      toast({
+        title: "Network Switched",
+        description: `Connected to ${chainId === 80002 ? 'Polygon Amoy' : 'Ethereum Sepolia'}`,
+      });
+    } catch (error) {
+      console.error('Switch network error:', error);
+      toast({
+        title: "Network Switch Failed",
+        description: error.message || "Please switch network manually in MetaMask",
+        variant: "destructive"
+      });
+    }
   };
 
   if (!isConnected) {
@@ -134,15 +162,32 @@ const ConnectButton = () => {
       </DropdownMenu>
 
       {isWrongNetwork && (
-        <div className="absolute top-full right-0 mt-2 w-64 glass-strong p-4 rounded-xl border border-red-500/50 z-[100]">
-          <p className="text-red-400 text-sm mb-2">⚠️ Wrong Network</p>
-          <p className="text-zt-paper/70 text-xs mb-3">Please switch to Polygon Amoy or Ethereum Sepolia</p>
-          <button
-            onClick={() => handleSwitchNetwork(80002)}
-            className="w-full btn-primary text-sm"
-          >
-            Switch to Amoy
-          </button>
+        <div className="fixed bottom-4 right-4 w-80 glass-strong p-4 rounded-xl border border-red-500/50 shadow-2xl animate-slideInRight z-[100]">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-red-400 text-xl">⚠️</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-red-400 font-semibold text-sm mb-1">Wrong Network Detected</p>
+              <p className="text-zt-paper/70 text-xs mb-3">
+                Please switch to Polygon Amoy or Ethereum Sepolia to use ZeroToll
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleSwitchNetwork(80002)}
+                  className="flex-1 bg-zt-violet/20 hover:bg-zt-violet/30 text-zt-violet px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                >
+                  Switch to Amoy
+                </button>
+                <button
+                  onClick={() => handleSwitchNetwork(11155111)}
+                  className="flex-1 bg-zt-aqua/20 hover:bg-zt-aqua/30 text-zt-aqua px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                >
+                  Switch to Sepolia
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </>

@@ -184,10 +184,20 @@ const History = () => {
                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                           item.status === 'success' ? 'bg-green-500/20 text-green-400' :
                           item.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
-                          'bg-red-500/20 text-red-400'
+                          (item.status === 'reverted' || item.status === 'failed') ? 'bg-red-500/20 text-red-400' :
+                          'bg-gray-500/20 text-gray-400'
                         }`}>
-                          {item.status}
+                          {item.status === 'success' ? '✓ Success' :
+                           item.status === 'pending' ? '⏳ Pending' :
+                           item.status === 'reverted' ? '✗ Reverted' :
+                           item.status === 'failed' ? '✗ Failed' :
+                           item.status}
                         </span>
+                        {item.errorReason && (
+                          <div className="text-red-400 text-xs mt-1 max-w-xs truncate" title={item.errorReason}>
+                            ⚠️ {item.errorReason}
+                          </div>
+                        )}
                       </td>
                       <td className="p-4">
                         {item.txHash && (

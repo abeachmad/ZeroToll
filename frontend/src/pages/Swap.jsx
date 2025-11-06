@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowDownUp, Loader2, CheckCircle, Info, HelpCircle, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
-import { useAccount } from 'wagmi';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
+import { parseUnits, maxUint256 } from 'viem';
 import FeeModeExplainer from '../components/FeeModeExplainer';
 import ConnectButton from '../components/ConnectButton';
 import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
@@ -13,6 +14,32 @@ import optimismSepoliaTokens from '../config/tokenlists/zerotoll.tokens.optimism
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+
+// RouterHub addresses per chain
+const ROUTER_HUB_ADDRESSES = {
+  80002: "0x63db4Ac855DD552947238498Ab5da561cce4Ac0b",      // Amoy
+  11155111: "0x1449279761a3e6642B02E82A7be9E5234be00159",   // Sepolia
+  421614: "0x...",  // Arbitrum Sepolia (if deployed)
+  11155420: "0x..."  // Optimism Sepolia (if deployed)
+};
+
+// ERC20 ABI (minimal for approve/allowance)
+const ERC20_ABI = [
+  {
+    name: 'approve',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    name: 'allowance',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+];
 
 const chains = [
   { id: 80002, name: 'Polygon Amoy', logo: '🔷', tokens: amoyTokens.tokens },
@@ -44,6 +71,26 @@ const Swap = () => {
   const [quote, setQuote] = useState(null);
   const [txHash, setTxHash] = useState(null);
   const [showExplainer, setShowExplainer] = useState(false);
+  
+  // Approval state
+  const [needsApproval, setNeedsApproval] = useState(false);
+  const [approvalPending, setApprovalPending] = useState(false);
+  
+  // Get RouterHub address for current chain
+  const routerHubAddress = ROUTER_HUB_ADDRESSES[fromChain?.id];
+  
+  // Wagmi hooks for approval
+  const { writeContract: approveToken, data: approveHash } = useWriteContract();
+  const { isSuccess: approveSuccess } = useWaitForTransactionReceipt({ hash: approveHash });
+  
+  // Check allowance
+  const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
+    address: tokenIn?.address,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: address && routerHubAddress ? [address, routerHubAddress] : undefined,
+    enabled: Boolean(address && routerHubAddress && tokenIn && !tokenIn.isNative),
+  });
 
   useEffect(() => {
     setTokenIn(fromChain.tokens[0]);
@@ -58,6 +105,31 @@ const Swap = () => {
       setFeeMode(tokenIn.feeModes[0]);
     }
   }, [tokenIn, feeMode]);
+  
+  // Check if approval is needed when amount or allowance changes
+  useEffect(() => {
+    if (!amountIn || !currentAllowance || tokenIn?.isNative) {
+      setNeedsApproval(false);
+      return;
+    }
+    
+    try {
+      const decimals = tokenIn.decimals || 6;
+      const amountWei = parseUnits(amountIn, decimals);
+      setNeedsApproval(currentAllowance < amountWei);
+    } catch (e) {
+      setNeedsApproval(false);
+    }
+  }, [amountIn, currentAllowance, tokenIn]);
+  
+  // Handle approval success
+  useEffect(() => {
+    if (approveSuccess && approvalPending) {
+      setApprovalPending(false);
+      refetchAllowance();
+      toast.success('🎉 Approval confirmed! You can now execute the swap.');
+    }
+  }, [approveSuccess, approvalPending, refetchAllowance]);
 
   const isNativeOutput = tokenOut.isNative;
   const wrappedOutputSymbol = isNativeOutput ? tokenOut.symbol.replace(/^(POL|ETH)$/, 'W$1') : null;
@@ -125,6 +197,35 @@ const Swap = () => {
     }
   };
 
+  const handleApprove = async () => {
+    if (!tokenIn || tokenIn.isNative || !routerHubAddress) return;
+    
+    setApprovalPending(true);
+    try {
+      const decimals = tokenIn.decimals || 6;
+      const amountWei = parseUnits(amountIn, decimals);
+      
+      toast.info('🦊 Opening MetaMask... Please approve token spending');
+      
+      await approveToken({
+        address: tokenIn.address,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [routerHubAddress, amountWei],
+      });
+      
+      toast.success('✅ Approval submitted! Waiting for blockchain confirmation...');
+    } catch (error) {
+      console.error('Approval error:', error);
+      setApprovalPending(false);
+      if (error.message?.includes('User rejected') || error.message?.includes('User denied')) {
+        toast.error('❌ Approval cancelled by user');
+      } else {
+        toast.error(error.message || 'Failed to approve token');
+      }
+    }
+  };
+
   const handleExecute = async () => {
     if (!quote) {
       toast.error('Get a quote first');
@@ -135,8 +236,16 @@ const Swap = () => {
       toast.error('Please connect your wallet');
       return;
     }
+    
+    // CRITICAL: Check approval before executing swap
+    if (needsApproval && !tokenIn.isNative) {
+      toast.error('⚠️ Please approve token spending first');
+      return;
+    }
 
     setLoading(true);
+    toast.info('🦊 Preparing swap transaction...');
+    
     try {
       const intentId = `0x${Date.now().toString(16).padStart(64, '0')}`;
       const feeToken = feeMode === 'INPUT' ? tokenIn.symbol : 
@@ -164,9 +273,9 @@ const Swap = () => {
       if (response.data && response.data.success) {
         setTxHash(response.data.txHash);
         if (response.data.status === 'demo') {
-          toast.success('Demo swap executed! (No real transaction)');
+          toast.success('✅ Demo swap executed! (No real transaction)');
         } else {
-          toast.success(`Swap executed! Block: ${response.data.blockNumber || 'pending'}`);
+          toast.success(`🎉 Swap executed! Block: ${response.data.blockNumber || 'pending'}`);
         }
       } else {
         toast.error(response.data?.detail || response.data?.message || 'Execution failed');
@@ -507,15 +616,45 @@ const Swap = () => {
             >
               {loading ? <Loader2 className="inline w-5 h-5 animate-spin" /> : 'Get Quote'}
             </button>
-            <button
-              onClick={handleExecute}
-              disabled={loading || !quote}
-              className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed"
-              data-testid="execute-swap-btn"
-            >
-              {loading ? <Loader2 className="inline w-5 h-5 animate-spin" /> : 'Execute Swap'}
-            </button>
+            
+            {/* Show Approve button if needed, otherwise Execute */}
+            {needsApproval && !tokenIn.isNative ? (
+              <button
+                onClick={handleApprove}
+                disabled={approvalPending || loading}
+                className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed"
+                data-testid="approve-token-btn"
+              >
+                {approvalPending ? (
+                  <>
+                    <Loader2 className="inline w-5 h-5 animate-spin mr-2" />
+                    Approving...
+                  </>
+                ) : (
+                  `Approve ${tokenIn.symbol}`
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={handleExecute}
+                disabled={loading || !quote}
+                className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed"
+                data-testid="execute-swap-btn"
+              >
+                {loading ? <Loader2 className="inline w-5 h-5 animate-spin" /> : 'Execute Swap'}
+              </button>
+            )}
           </div>
+          
+          {/* Approval Info Banner */}
+          {needsApproval && !tokenIn.isNative && (
+            <div className="mt-4 glass p-4 rounded-xl flex items-start gap-3 border border-yellow-500/30">
+              <Info className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-zt-paper/80">
+                <strong className="text-yellow-400">Approval Required:</strong> You need to approve the RouterHub contract to spend your {tokenIn.symbol} before executing the swap.
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Info Cards */}
