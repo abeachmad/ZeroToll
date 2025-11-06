@@ -15,10 +15,10 @@ import optimismSepoliaTokens from '../config/tokenlists/zerotoll.tokens.optimism
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// RouterHub addresses per chain
+// RouterHub addresses per chain (UPGRADED Nov 6, 2025 - Bug Fix: Transfer to user)
 const ROUTER_HUB_ADDRESSES = {
-  80002: "0x63db4Ac855DD552947238498Ab5da561cce4Ac0b",      // Amoy
-  11155111: "0x1449279761a3e6642B02E82A7be9E5234be00159",   // Sepolia
+  80002: "0x5335f887E69F4B920bb037062382B9C17aA52ec6",      // Amoy RouterHub v1.4
+  11155111: "0xC3144E9C3e432b2222DE115989f90468a3A7cd95",   // Sepolia RouterHub v1.4
   421614: "0x...",  // Arbitrum Sepolia (if deployed)
   11155420: "0x..."  // Optimism Sepolia (if deployed)
 };
@@ -716,22 +716,59 @@ const Swap = () => {
                 <p className="text-zt-paper/70 text-sm font-mono mb-2">{txHash.slice(0, 20)}...</p>
                 {txHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
                   <div className="flex gap-2">
-                    <a 
-                      href={`https://sepolia.etherscan.io/tx/${txHash}`}
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-zt-aqua text-xs hover:text-zt-violet transition-colors"
-                    >
-                      View on Sepolia Explorer →
-                    </a>
-                    <a 
-                      href={`https://amoy.polygonscan.com/tx/${txHash}`}
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-zt-aqua text-xs hover:text-zt-violet transition-colors"
-                    >
-                      View on Amoy Explorer →
-                    </a>
+                    {/* Show only source chain explorer for same-chain swaps */}
+                    {fromChain.id === toChain.id ? (
+                      <a 
+                        href={fromChain.id === 11155111 
+                          ? `https://sepolia.etherscan.io/tx/${txHash}`
+                          : fromChain.id === 80002
+                          ? `https://amoy.polygonscan.com/tx/${txHash}`
+                          : fromChain.id === 421614
+                          ? `https://sepolia.arbiscan.io/tx/${txHash}`
+                          : `https://sepolia-optimism.etherscan.io/tx/${txHash}`
+                        }
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-zt-aqua text-xs hover:text-zt-violet transition-colors"
+                      >
+                        View on {fromChain.name} Explorer →
+                      </a>
+                    ) : (
+                      /* Show both explorers for cross-chain swaps */
+                      <>
+                        <a 
+                          href={fromChain.id === 11155111 
+                            ? `https://sepolia.etherscan.io/tx/${txHash}`
+                            : fromChain.id === 80002
+                            ? `https://amoy.polygonscan.com/tx/${txHash}`
+                            : fromChain.id === 421614
+                            ? `https://sepolia.arbiscan.io/tx/${txHash}`
+                            : `https://sepolia-optimism.etherscan.io/tx/${txHash}`
+                          }
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-zt-aqua text-xs hover:text-zt-violet transition-colors"
+                        >
+                          View on {fromChain.name} Explorer →
+                        </a>
+                        <span className="text-zt-paper/50 text-xs">•</span>
+                        <a 
+                          href={toChain.id === 11155111 
+                            ? `https://sepolia.etherscan.io/tx/${txHash}`
+                            : toChain.id === 80002
+                            ? `https://amoy.polygonscan.com/tx/${txHash}`
+                            : toChain.id === 421614
+                            ? `https://sepolia.arbiscan.io/tx/${txHash}`
+                            : `https://sepolia-optimism.etherscan.io/tx/${txHash}`
+                          }
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-zt-violet text-xs hover:text-zt-aqua transition-colors"
+                        >
+                          View on {toChain.name} Explorer →
+                        </a>
+                      </>
+                    )}
                   </div>
                 )}
                 {txHash === '0x0000000000000000000000000000000000000000000000000000000000000000' && (
