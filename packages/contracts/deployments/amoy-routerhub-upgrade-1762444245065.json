@@ -1,0 +1,10 @@
+{
+  "network": "amoy",
+  "timestamp": "2025-11-06T15:50:45.065Z",
+  "oldRouterHub": "0x63db4Ac855DD552947238498Ab5da561cce4Ac0b",
+  "newRouterHub": "0x5335f887E69F4B920bb037062382B9C17aA52ec6",
+  "mockDexAdapter": "0x7caFe27c7367FA0E929D4e83578Cec838E3Ceec7",
+  "wmatic": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "bugFixed": "Transfer output to intent.user instead of msg.sender (relayer)"
+}

@@ -349,11 +349,10 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         from web3 import Web3
         from eth_abi import encode
         
-        # Get RouterHub address for this chain (recipient must be RouterHub, not user!)
-        # RouterHub will receive tokens from adapter, then forward to msg.sender (relayer)
+        # Get RouterHub address for this chain (UPGRADED - v1.4 sends output to user, not relayer!)
         router_hub_addresses = {
-            80002: "0x63db4Ac855DD552947238498Ab5da561cce4Ac0b",      # Amoy RouterHub v1.3
-            11155111: "0x1449279761a3e6642B02E82A7be9E5234be00159"   # Sepolia RouterHub v1.2.1
+            80002: "0x5335f887E69F4B920bb037062382B9C17aA52ec6",      # Amoy RouterHub v1.4 (fixed)
+            11155111: "0xC3144E9C3e432b2222DE115989f90468a3A7cd95"   # Sepolia RouterHub v1.4 (fixed)
         }
         router_hub_address = router_hub_addresses.get(src_chain_id)
         if not router_hub_address:

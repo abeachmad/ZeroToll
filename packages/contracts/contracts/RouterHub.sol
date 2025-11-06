@@ -80,7 +80,7 @@ contract RouterHub is Ownable, ReentrancyGuard {
             
             // Unwrap to native
             IWETH(tokenOut).withdraw(netOut);
-            payable(msg.sender).transfer(netOut);
+            payable(intent.user).transfer(netOut); // FIX: Send to intent.user, not msg.sender (relayer)
             
             emit RouteExecuted(
                 IntentLib.hashIntent(intent),
@@ -93,7 +93,7 @@ contract RouterHub is Ownable, ReentrancyGuard {
         } else if (isNativeOut) {
             // No fee deduction, just unwrap
             IWETH(tokenOut).withdraw(grossOut);
-            payable(msg.sender).transfer(grossOut);
+            payable(intent.user).transfer(grossOut); // FIX: Send to intent.user, not msg.sender (relayer)
             
             emit RouteExecuted(
                 IntentLib.hashIntent(intent),
@@ -105,7 +105,7 @@ contract RouterHub is Ownable, ReentrancyGuard {
             );
         } else {
             // Standard ERC20 output
-            IERC20(tokenOut).transfer(msg.sender, grossOut);
+            IERC20(tokenOut).transfer(intent.user, grossOut); // FIX: Send to intent.user, not msg.sender (relayer)
             
             emit RouteExecuted(
                 IntentLib.hashIntent(intent),
