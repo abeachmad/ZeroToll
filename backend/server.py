@@ -209,9 +209,12 @@ async def get_quote(request: QuoteRequest, req: Request):
                 pass
         
         # Fallback mock response with netOut
+        # Load relayer address from private key in .env
+        relayer_address = os.getenv("RELAYER_ADDRESS", "0xf304eeD846d82a91d688d1bC1A4fA692051d1D7A")
+        
         return QuoteResponse(
             success=True,
-            relayer="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
+            relayer=relayer_address,
             costEstimate="0.001",
             estimatedFee=f"{estimated_fee:.4f}",
             feeUSD=f"${fee_usd:.2f}",
