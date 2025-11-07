@@ -350,9 +350,12 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         from eth_abi import encode
         
         # Get RouterHub address for this chain (UPGRADED - v1.4 sends output to user, not relayer!)
+        # IMPORTANT: Load from .env to avoid hardcoded stale addresses!
         router_hub_addresses = {
-            80002: "0x5335f887E69F4B920bb037062382B9C17aA52ec6",      # Amoy RouterHub v1.4 (fixed)
-            11155111: "0xC3144E9C3e432b2222DE115989f90468a3A7cd95"   # Sepolia RouterHub v1.4 (fixed)
+            80002: os.getenv("AMOY_ROUTERHUB", "0x5335f887E69F4B920bb037062382B9C17aA52ec6"),
+            11155111: os.getenv("SEPOLIA_ROUTERHUB", "0x15dbf63c4B3Df4CF6Cfd31701C1D373c6640DADd"),  # Nov 8 upgrade
+            421614: os.getenv("ARB_SEPOLIA_ROUTERHUB"),
+            11155420: os.getenv("OP_SEPOLIA_ROUTERHUB"),
         }
         router_hub_address = router_hub_addresses.get(src_chain_id)
         if not router_hub_address:

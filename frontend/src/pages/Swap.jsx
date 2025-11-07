@@ -172,6 +172,13 @@ const Swap = () => {
       return;
     }
     
+    console.log('🔍 Allowance check:', {
+      currentAllowance: currentAllowance?.toString(),
+      amountIn,
+      tokenSymbol: tokenIn?.symbol,
+      routerHub: routerHubAddress
+    });
+    
     try {
       const decimals = tokenIn.decimals || 6;
       const amountWei = parseUnits(amountIn, decimals);
@@ -193,7 +200,13 @@ const Swap = () => {
       const allowanceBig = toBigInt(currentAllowance);
       const amountBig = toBigInt(amountWei);
 
-      setNeedsApproval(allowanceBig < amountBig);
+      const needsApprove = allowanceBig < amountBig;
+      console.log('💰 Approval decision:', {
+        allowanceBig: allowanceBig.toString(),
+        amountBig: amountBig.toString(),
+        needsApproval: needsApprove
+      });
+      setNeedsApproval(needsApprove);
     } catch (e) {
       console.error('Error checking approval:', e);
       setNeedsApproval(true); // On error, assume approval needed for safety
@@ -305,12 +318,24 @@ const Swap = () => {
       
       toast.info('🦊 Opening MetaMask... Please approve token spending');
       
-      await approveToken({
+      // Prepare approve config with gas safety for testnet
+      const approveConfig = {
         address: tokenIn.address,
         abi: ERC20_ABI,
         functionName: 'approve',
         args: [routerHubAddress, amountWei],
-      });
+      };
+      
+      // For Amoy testnet, add minimum gas price to avoid 0 gas price rejection
+      if (fromChain.id === 80002) {
+        // Amoy polygon testnet - set minimum gas price
+        approveConfig.gas = 100000n; // reasonable gas limit for ERC20 approve
+        approveConfig.maxFeePerGas = 50000000000n; // 50 gwei minimum for Amoy
+        approveConfig.maxPriorityFeePerGas = 30000000000n; // 30 gwei priority
+        console.log('🔧 Using manual gas config for Amoy testnet:', approveConfig);
+      }
+      
+      await approveToken(approveConfig);
       
       toast.success('✅ Approval submitted! Waiting for blockchain confirmation...');
     } catch (error) {
