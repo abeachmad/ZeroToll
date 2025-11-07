@@ -15,10 +15,10 @@ import optimismSepoliaTokens from '../config/tokenlists/zerotoll.tokens.optimism
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// RouterHub addresses per chain (UPGRADED Nov 6, 2025 - Bug Fix: Transfer to user)
+// RouterHub addresses per chain (UPGRADED Nov 6-8, 2025 - Bug Fix: Transfer to user)
 const ROUTER_HUB_ADDRESSES = {
   80002: "0x5335f887E69F4B920bb037062382B9C17aA52ec6",      // Amoy RouterHub v1.4
-  11155111: "0xC3144E9C3e432b2222DE115989f90468a3A7cd95",   // Sepolia RouterHub v1.4
+  11155111: "0x15dbf63c4B3Df4CF6Cfd31701C1D373c6640DADd",   // Sepolia RouterHub v1.4 (Nov 8)
   421614: "0x...",  // Arbitrum Sepolia (if deployed)
   11155420: "0x..."  // Optimism Sepolia (if deployed)
 };

@@ -8,7 +8,7 @@ async function main() {
   
   // Existing addresses
   const OLD_ROUTER_HUB = "0x1449279761a3e6642B02E82A7be9E5234be00159";
-  const MOCK_DEX_ADAPTER = "0x81e9A77A88Df15fB408e6D7d573C0F62bb6A6e09";
+  const MOCK_DEX_ADAPTER = "0x2Ed51974196EC8787a74c00C5847F03664d66Dc5";  // Correct checksum
   const WETH = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14";
   
   // Deploy new RouterHub

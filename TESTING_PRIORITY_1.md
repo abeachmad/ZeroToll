@@ -35,9 +35,9 @@ Log: /tmp/zerotoll_frontend.log
 - ❌ Amoy: 0x63db4Ac855DD552947238498Ab5da561cce4Ac0b (OLD)
 - ❌ Sepolia: 0x1449279761a3e6642B02E82A7be9E5234be00159 (OLD)
 
-**New Approvals (REQUIRED):**
-- ✅ Amoy: 0x5335f887E69F4B920bb037062382B9C17aA52ec6 (NEW v1.4)
-- ✅ Sepolia: 0xC3144E9C3e432b2222DE115989f90468a3A7cd95 (NEW v1.4)
+**New Approvals (REQUIRED) - UPDATED NOV 8, 2025:**
+- ✅ Amoy: 0x5335f887E69F4B920bb037062382B9C17aA52ec6 (RouterHub v1.4)
+- ✅ Sepolia: 0x15dbf63c4B3Df4CF6Cfd31701C1D373c6640DADd (RouterHub v1.4 - NEWEST!)
 
 ---
 
@@ -200,8 +200,10 @@ tail -50 /tmp/zerotoll_backend.log
 **Step 1: Approve USDC to NEW RouterHub**
 ```
 Token: USDC - 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
-Spender: 0xC3144E9C3e432b2222DE115989f90468a3A7cd95 (RouterHub v1.4)
+Spender: 0x15dbf63c4B3Df4CF6Cfd31701C1D373c6640DADd (RouterHub v1.4 - Nov 8 upgrade)
 Amount: max uint256
+
+⚠️ CRITICAL: This is a NEW address! Old approvals to 0xC3144E9C... are INVALID!
 
 Check: https://sepolia.etherscan.io/token/0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238#writeContract
 ```
@@ -251,11 +253,12 @@ Check: https://sepolia.etherscan.io/token/0x1c7D4B196Cb0C7B01d743Fbc6116a902379C
 **1. Transaction Sent to CORRECT RouterHub:**
 ```
 ✅ Amoy TX → 0x5335f887E69F4B920bb037062382B9C17aA52ec6
-✅ Sepolia TX → 0xC3144E9C3e432b2222DE115989f90468a3A7cd95
+✅ Sepolia TX → 0x15dbf63c4B3Df4CF6Cfd31701C1D373c6640DADd (UPDATED NOV 8!)
 
 ❌ NOT to OLD addresses:
    0x63db4Ac855DD552947238498Ab5da561cce4Ac0b (Amoy OLD)
-   0x1449279761a3e6642B02E82A7be9E5234be00159 (Sepolia OLD)
+   0x1449279761a3e6642B02E82A7be9E5234be00159 (Sepolia OLD v1.2)
+   0xC3144E9C3e432b2222DE115989f90468a3A7cd95 (Sepolia OLD v1.3)
 ```
 
 **2. Output Tokens Go to USER:**
@@ -263,7 +266,7 @@ Check: https://sepolia.etherscan.io/token/0x1c7D4B196Cb0C7B01d743Fbc6116a902379C
 Check PolygonScan/Etherscan Transfer events:
 LAST transfer MUST be:
 
-From: RouterHub (0x5335f887... or 0xC3144E9C...)
+From: RouterHub (0x5335f887... or 0x15dbf63c...)
 To: YOUR_WALLET_ADDRESS ✅
 NOT To: 0xf304eeD846d82a91d688d1bC1A4fA692051d1D7A (relayer) ❌
 ```
