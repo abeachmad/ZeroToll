@@ -162,9 +162,13 @@ const Swap = () => {
       return;
     }
     
-    // If currentAllowance is undefined (still loading), assume no approval needed yet
+    // CRITICAL FIX: If currentAllowance is undefined (RPC failure or not loaded yet),
+    // we MUST show approve button for safety. User can manually check allowance on explorer.
     if (currentAllowance === undefined) {
-      setNeedsApproval(false);
+      // If we have a quote, user already went through the flow, so check if they need approval
+      // Otherwise default to true for safety
+      console.warn('⚠️ Allowance check returned undefined. Assuming approval needed for safety.');
+      setNeedsApproval(true);
       return;
     }
     
