@@ -2,34 +2,45 @@
 Real DEX Swap Service with Liquidity Checking
 """
 import os
+import json
+from pathlib import Path
 from web3 import Web3
 from eth_account import Account
+from dotenv import load_dotenv
 import logging
 
 logger = logging.getLogger(__name__)
 
+# Load environment variables
+load_dotenv()
+
 class DEXSwapService:
     def __init__(self):
+        # Load RPC URLs from .env with fallbacks
         self.rpc_urls = {
-            80002: ["https://rpc-amoy.polygon.technology", "https://polygon-amoy.drpc.org"],
-            11155111: ["https://ethereum-sepolia-rpc.publicnode.com", "https://sepolia.drpc.org"],
-            421614: ["https://sepolia-rollup.arbitrum.io/rpc", "https://arbitrum-sepolia.blockpi.network/v1/rpc/public"],
-            11155420: ["https://sepolia.optimism.io", "https://optimism-sepolia.blockpi.network/v1/rpc/public"]
+            80002: [os.getenv("RPC_AMOY", "https://rpc-amoy.polygon.technology"), "https://polygon-amoy.drpc.org"],
+            11155111: [os.getenv("RPC_SEPOLIA", "https://ethereum-sepolia-rpc.publicnode.com"), "https://sepolia.drpc.org"],
+            421614: [os.getenv("RPC_ARBITRUM_SEPOLIA", "https://sepolia-rollup.arbitrum.io/rpc"), "https://arbitrum-sepolia.blockpi.network/v1/rpc/public"],
+            11155420: [os.getenv("RPC_OPTIMISM_SEPOLIA", "https://sepolia.optimism.io"), "https://optimism-sepolia.blockpi.network/v1/rpc/public"]
         }
         
+        # Load DEX router addresses from .env
         self.dex_routers = {
-            80002: {"router": "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff", "name": "QuickSwap V2"},
-            11155111: {"router": "0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008", "name": "Uniswap V2"},
-            421614: {"router": "0x101F443B4d1b059569D643917553c771E1b9663E", "name": "Uniswap V3"},
-            11155420: {"router": "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4", "name": "Uniswap V3"}
+            80002: {"router": os.getenv("AMOY_DEX_ROUTER", "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff"), "name": "QuickSwap V2"},
+            11155111: {"router": os.getenv("SEPOLIA_DEX_ROUTER", "0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008"), "name": "Uniswap V2"},
+            421614: {"router": os.getenv("ARB_SEPOLIA_DEX_ROUTER", "0x101F443B4d1b059569D643917553c771E1b9663E"), "name": "Uniswap V3"},
+            11155420: {"router": os.getenv("OP_SEPOLIA_DEX_ROUTER", "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4"), "name": "Uniswap V3"}
         }
         
-        self.tokens = {
-            80002: {"WPOL": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9", "LINK": "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904"},
-            11155111: {"WETH": "0xfFf9976782d46CC05630D1f6ebaB18b2324d6B14", "LINK": "0x779877A7B0D9E8603169DdBD7836e478b4624789"},
-            421614: {"WETH": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73", "LINK": "0xb1D4538B4571d411F07960EF2838Ce337FE1E80E"},
-            11155420: {"WETH": "0x4200000000000000000000000000000000000006", "LINK": "0xE4aB69C077896252FAFBD49EFD26B5D171A32410"}
-        }
+        # Load token addresses from JSON file
+        token_file = Path(__file__).parent / "token_addresses.json"
+        with open(token_file, 'r') as f:
+            token_data = json.load(f)
+        
+        # Convert to old format for backward compatibility
+        self.tokens = {}
+        for chain_id, data in token_data.items():
+            self.tokens[int(chain_id)] = data["tokens"]
         
         self.private_key = os.getenv('RELAYER_PRIVATE_KEY')
         

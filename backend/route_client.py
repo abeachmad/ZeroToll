@@ -174,10 +174,12 @@ class RoutePlannerClient:
         src_chain = intent["srcChainId"]
         dst_chain = intent["dstChainId"]
         
-        # Use deployed MockDEXAdapter addresses (UPDATED Nov 6, 2025)
+        # Use deployed MockDEXAdapter addresses - Load from .env (BEST PRACTICE)
         adapter_addresses = {
-            11155111: "0x2Ed51974196EC8787a74c00C5847F03664d66Dc5",  # Sepolia MockDEXAdapter (whitelisted in RouterHub v1.2.1)
-            80002: "0x7caFe27c7367FA0E929D4e83578Cec838E3Ceec7",      # Amoy MockDEXAdapter (whitelisted in RouterHub v1.3)
+            11155111: os.getenv("SEPOLIA_MOCKDEX_ADAPTER", "0x2Ed51974196EC8787a74c00C5847F03664d66Dc5"),
+            80002: os.getenv("AMOY_MOCKDEX_ADAPTER", "0x7caFe27c7367FA0E929D4e83578Cec838E3Ceec7"),
+            421614: os.getenv("ARB_SEPOLIA_MOCKDEX_ADAPTER"),
+            11155420: os.getenv("OP_SEPOLIA_MOCKDEX_ADAPTER"),
         }
         mock_adapter = adapter_addresses.get(src_chain, "0x0000000000000000000000000000000000000001")
         

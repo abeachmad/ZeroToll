@@ -88,13 +88,11 @@ const ERC20_ABI = [
   },
 ];
 
-// USDC addresses per chain
-const USDC_ADDRESSES = {
-  11155111: '0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8', // Sepolia
-  80002: '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582', // Amoy
-  421614: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d', // Arbitrum Sepolia
-  11155420: '0x5fd84259d66Cd46123540766Be93DFE6D43130D7', // Optimism Sepolia
-};
+import ConnectButton from '../components/ConnectButton';
+import vaultsConfig from '../config/vaults.json';
+
+// USDC addresses per chain - Load from config
+const USDC_ADDRESSES = vaultsConfig.USDC;
 
 export default function Vault() {
   const { address, chain } = useAccount();

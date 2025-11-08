@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowDownUp, Loader2, CheckCircle, Info, HelpCircle, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowDownUp, Loader2, CheckCircle, Info, HelpCircle, Zap, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchChain } from 'wagmi';
@@ -11,14 +11,16 @@ import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
 import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
 import arbitrumSepoliaTokens from '../config/tokenlists/zerotoll.tokens.arbitrum-sepolia.json';
 import optimismSepoliaTokens from '../config/tokenlists/zerotoll.tokens.optimism-sepolia.json';
+import contractsConfig from '../config/contracts.json';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 // RouterHub addresses per chain (UPGRADED Nov 6-8, 2025 - Bug Fix: Transfer to user)
+// Load from config file to avoid hardcoding
 const ROUTER_HUB_ADDRESSES = {
-  80002: "0x5335f887E69F4B920bb037062382B9C17aA52ec6",      // Amoy RouterHub v1.4
-  11155111: "0x15dbf63c4B3Df4CF6Cfd31701C1D373c6640DADd",   // Sepolia RouterHub v1.4 (Nov 8)
+  80002: contractsConfig.amoy.routerHub,          // Amoy RouterHub v1.4
+  11155111: contractsConfig.sepolia.routerHub,    // Sepolia RouterHub v1.4 (Nov 8)
   421614: "0x...",  // Arbitrum Sepolia (if deployed)
   11155420: "0x..."  // Optimism Sepolia (if deployed)
 };
@@ -838,15 +840,31 @@ const Swap = () => {
             ) : (
               <button
                 onClick={handleExecute}
-                disabled={loading || !quote || (needsApproval && !tokenIn.isNative)}
+                disabled={loading || !quote || (needsApproval && !tokenIn.isNative) || (fromChain.id !== toChain.id)}
                 className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid="execute-swap-btn"
-                title={needsApproval && !tokenIn.isNative ? 'Please approve token first' : ''}
+                title={
+                  fromChain.id !== toChain.id ? 'Cross-chain swaps not yet supported' :
+                  needsApproval && !tokenIn.isNative ? 'Please approve token first' : 
+                  ''
+                }
               >
                 {loading ? <Loader2 className="inline w-5 h-5 animate-spin" /> : 'Execute Swap'}
               </button>
             )}
           </div>
+          
+          {/* Cross-Chain Warning Banner */}
+          {fromChain.id !== toChain.id && (
+            <div className="mt-4 glass p-4 rounded-xl flex items-start gap-3 border border-orange-500/30 bg-orange-500/5">
+              <AlertTriangle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-zt-paper/80">
+                <strong className="text-orange-400">Cross-Chain Swaps Currently Unavailable:</strong> Cross-chain bridging is not yet implemented. MockBridgeAdapter only simulates bridging for testing. Please use same-chain swaps for now (e.g., USDC → WETH on Sepolia, or USDC → WMATIC on Amoy).
+                <br />
+                <span className="text-xs text-zt-paper/60 mt-1 block">ℹ️ Real bridge integration (Polygon PoS Portal) coming soon!</span>
+              </div>
+            </div>
+          )}
           
           {/* Approval Info Banner */}
           {needsApproval && !tokenIn.isNative && (

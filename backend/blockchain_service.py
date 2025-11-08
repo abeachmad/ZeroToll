@@ -1,43 +1,45 @@
 import os
 import json
+from pathlib import Path
 from web3 import Web3
 from eth_account import Account
+from dotenv import load_dotenv
 import logging
 
 logger = logging.getLogger(__name__)
 
+# Load environment variables
+load_dotenv()
+
 class BlockchainService:
     def __init__(self):
-        # RPC URLs untuk testnet
+        # Load RPC URLs from .env with fallbacks
         self.rpc_urls = {
-            80002: "https://rpc-amoy.polygon.technology/",  # Polygon Amoy
-            11155111: "https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161"  # Ethereum Sepolia
+            80002: os.getenv("RPC_AMOY", "https://rpc-amoy.polygon.technology/"),
+            11155111: os.getenv("RPC_SEPOLIA", "https://ethereum-sepolia-rpc.publicnode.com")
         }
         
-        # Contract addresses dari deployment (UPGRADED Nov 6, 2025 - Bug Fix: Transfer to user)
+        # Load contract addresses from .env (BEST PRACTICE - Nov 8, 2025)
         self.contracts = {
             80002: {
-                "RouterHub": "0x5335f887E69F4B920bb037062382B9C17aA52ec6",  # RouterHub v1.4 (fixed output transfer)
-                "FeeSink": "0x1F679D174A9fBe4158EABcD24d4A63D6Bcf8f700"
+                "RouterHub": os.getenv("AMOY_ROUTERHUB", "0x5335f887E69F4B920bb037062382B9C17aA52ec6"),
+                "FeeSink": os.getenv("AMOY_FEESINK", "0x1F679D174A9fBe4158EABcD24d4A63D6Bcf8f700")
             },
             11155111: {
-                "RouterHub": "0xC3144E9C3e432b2222DE115989f90468a3A7cd95",  # RouterHub v1.4 (fixed output transfer)
-                "FeeSink": "0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130"
+                "RouterHub": os.getenv("SEPOLIA_ROUTERHUB", "0x15dbf63c4B3Df4CF6Cfd31701C1D373c6640DADd"),  # v1.4 Nov 8!
+                "FeeSink": os.getenv("SEPOLIA_FEESINK", "0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130")
             }
         }
         
-        # Token addresses
-        self.tokens = {
-            80002: {
-                "WPOL": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
-                "WETH": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
-                "USDC": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582"
-            },
-            11155111: {
-                "WETH": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
-                "USDC": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
-            }
-        }
+        # Load token addresses from JSON file
+        token_file = Path(__file__).parent / "token_addresses.json"
+        with open(token_file, 'r') as f:
+            token_data = json.load(f)
+        
+        # Convert to old format for backward compatibility
+        self.tokens = {}
+        for chain_id, data in token_data.items():
+            self.tokens[int(chain_id)] = data["tokens"]
         
         # Load private key dari environment
         self.private_key = os.getenv('RELAYER_PRIVATE_KEY')

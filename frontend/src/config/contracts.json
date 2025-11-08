@@ -14,7 +14,7 @@
   },
   "sepolia": {
     "chainId": 11155111,
-    "routerHub": "0xC3144E9C3e432b2222DE115989f90468a3A7cd95",
+    "routerHub": "0x15dbf63c4B3Df4CF6Cfd31701C1D373c6640DADd",
     "feeSink": "0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130",
     "wrappedToken": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
     "feeVault": "TBD_AFTER_DEPLOYMENT",
