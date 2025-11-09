@@ -1,0 +1,14 @@
+{
+  "network": "amoy",
+  "chainId": 80002,
+  "timestamp": "2025-11-08T13:36:06.422Z",
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "contracts": {
+    "adapter": "0x716bA57120a5043ee9eAC7171c10BF092f6FA45c",
+    "oracle": "0x88eb5eEACEF27C3B824fC891b4C37C819332d0b1",
+    "routerHub": "0x5335f887E69F4B920bb037062382B9C17aA52ec6",
+    "wpol": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+    "usdc": "0x642Ec30B4a41169770246d594621332eE60a28f0"
+  },
+  "oldAdapter": "0x7caFe27c7367FA0E929D4e83578Cec838E3Ceec7"
+}

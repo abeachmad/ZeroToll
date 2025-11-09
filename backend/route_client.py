@@ -175,8 +175,10 @@ class RoutePlannerClient:
         dst_chain = intent["dstChainId"]
         
         # Use deployed MockDEXAdapter addresses - Load from .env (BEST PRACTICE)
+        # Nov 8, 2025: Updated to use Pyth Oracle (REAL-TIME prices, NO HARDCODE!)
+        # Sepolia adapter now queries MultiTokenPythOracle (0x729fBc26977F8df79B45c1c5789A483640E89b4A)
         adapter_addresses = {
-            11155111: os.getenv("SEPOLIA_MOCKDEX_ADAPTER", "0x2Ed51974196EC8787a74c00C5847F03664d66Dc5"),
+            11155111: os.getenv("SEPOLIA_MOCKDEX_ADAPTER", "0x86D1AA2228F3ce649d415F19fC71134264D0E84B"),
             80002: os.getenv("AMOY_MOCKDEX_ADAPTER", "0x7caFe27c7367FA0E929D4e83578Cec838E3Ceec7"),
             421614: os.getenv("ARB_SEPOLIA_MOCKDEX_ADAPTER"),
             11155420: os.getenv("OP_SEPOLIA_MOCKDEX_ADAPTER"),

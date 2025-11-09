@@ -7,8 +7,8 @@
     "feeVault": "TBD_AFTER_DEPLOYMENT",
     "feeRebalancer": "TBD_AFTER_DEPLOYMENT",
     "adapters": {
-      "quickswapV2": "0x7caFe27c7367FA0E929D4e83578Cec838E3Ceec7",
-      "mockDex": "0x7caFe27c7367FA0E929D4e83578Cec838E3Ceec7",
+      "quickswapV2": "0xbe6F932465D5155c1564FF0AD7Cc9D2D2a4316d5",
+      "mockDex": "0xbe6F932465D5155c1564FF0AD7Cc9D2D2a4316d5",
       "mockBridge": "TBD_AFTER_DEPLOYMENT"
     }
   },
@@ -20,9 +20,9 @@
     "feeVault": "TBD_AFTER_DEPLOYMENT",
     "feeRebalancer": "TBD_AFTER_DEPLOYMENT",
     "adapters": {
-      "uniswapV2": "0x2Ed51974196EC8787a74c00C5847F03664d66Dc5",
-      "uniswapV3": "0x2Ed51974196EC8787a74c00C5847F03664d66Dc5",
-      "mockDex": "0x2Ed51974196EC8787a74c00C5847F03664d66Dc5",
+      "uniswapV2": "0x86D1AA2228F3ce649d415F19fC71134264D0E84B",
+      "uniswapV3": "0x86D1AA2228F3ce649d415F19fC71134264D0E84B",
+      "mockDex": "0x86D1AA2228F3ce649d415F19fC71134264D0E84B",
       "mockBridge": "TBD_AFTER_DEPLOYMENT"
     }
   },

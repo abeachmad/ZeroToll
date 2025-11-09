@@ -164,6 +164,12 @@ const Swap = () => {
       return;
     }
     
+    // CRITICAL: Refetch allowance when amountIn changes to avoid stale cache
+    // User might have used allowance in previous swap
+    if (amountIn && !tokenIn?.isNative && refetchAllowance) {
+      refetchAllowance();
+    }
+    
     // CRITICAL FIX: If currentAllowance is undefined (RPC failure or not loaded yet),
     // we MUST show approve button for safety. User can manually check allowance on explorer.
     if (currentAllowance === undefined) {
@@ -213,7 +219,7 @@ const Swap = () => {
       console.error('Error checking approval:', e);
       setNeedsApproval(true); // On error, assume approval needed for safety
     }
-  }, [amountIn, currentAllowance, tokenIn]);
+  }, [amountIn, currentAllowance, tokenIn, refetchAllowance]);
   
   // Handle approval success
   useEffect(() => {
@@ -258,6 +264,7 @@ const Swap = () => {
         amtIn: parseFloat(amountIn),
         tokenOut: tokenOut.symbol,
         minOut: parseFloat(amountIn) * 0.995,
+        srcChainId: fromChain.id,  // ✅ FIX: Send source chain ID
         dstChainId: toChain.id,
         feeMode,
         feeCap: parseFloat(feeCap),
@@ -320,7 +327,36 @@ const Swap = () => {
       
       toast.info('🦊 Opening MetaMask... Please approve token spending');
       
-      // Prepare approve config with gas safety for testnet
+      // CRITICAL FIX: Reset allowance to 0 first, then approve exact amount
+      // This forces user to approve every single swap, preventing stale approvals
+      // Step 1: Reset to 0
+      console.log('🔄 Resetting allowance to 0 first...');
+      const resetConfig = {
+        address: tokenIn.address,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [routerHubAddress, 0n],
+      };
+      
+      // For Amoy testnet, add minimum gas price
+      if (fromChain.id === 80002) {
+        resetConfig.gas = 100000n;
+        resetConfig.maxFeePerGas = 50000000000n; // 50 gwei
+        resetConfig.maxPriorityFeePerGas = 30000000000n; // 30 gwei
+      }
+      
+      try {
+        await approveToken(resetConfig);
+        toast.info('⏳ Waiting for reset confirmation...');
+        // Wait 2 seconds for reset to be mined
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (resetError) {
+        console.warn('Reset failed, continuing with approval:', resetError);
+        // Continue anyway - some tokens don't allow reset
+      }
+      
+      // Step 2: Approve exact amount needed
+      console.log('✅ Approving exact amount:', amountWei.toString());
       const approveConfig = {
         address: tokenIn.address,
         abi: ERC20_ABI,

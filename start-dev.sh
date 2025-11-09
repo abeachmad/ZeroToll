@@ -49,6 +49,10 @@ fi
 echo ""
 echo -e "${YELLOW}📦 Starting Backend...${NC}"
 cd backend
+# Load environment variables from .env
+set -a
+source .env 2>/dev/null
+set +a
 ./venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
 BACKEND_PID=$!
 echo -e "${GREEN}✅ Backend started (PID: $BACKEND_PID)${NC}"

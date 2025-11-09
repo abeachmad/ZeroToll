@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""
+Manually decode intent.user from transaction calldata
+"""
+
+from web3 import Web3
+
+# Failed TX input
+# Method: executeRoute(Intent, address, bytes)
+# 0xe60269c6 = executeRoute
+
+# Raw calldata from failed TX
+calldata = "0xe60269c60000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000020000000000000000000000002ed51974196ec8787a74c00c5847f03664d66dc500000000000000000000000005a87a3c738cf99db95787d51b627217b6de12f620000000000000000000000000fff9976782d46cc05630d1f6ebab18b2324d6b1400000000000000000000000000000000000000000000000000038d7ea4c6800000000000000000000000000000001c7d4b196cb0c7b01d743fbc6116a902379c72380000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000aa36a70000000000000000000000005a87a3c738cf99db95787d51b627217b6de12f620000000000000000000000000000000000000000000000000000000067469c0300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001a4f91a5e0d000000000000000000000000fff9976782d46cc05630d1f6ebab18b2324d6b1400000000000000000000000000000000000000000000000000038d7ea4c680000000000000000000000000001c7d4b196cb0c7b01d743fbc6116a902379c72380000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005a87a3c738cf99db95787d51b627217b6de12f620000000000000000000000000000000000000000000000000000000067469c030000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a0000000000000000000000000000000000000000000000000000000000000004176e75ff9f2f65ba13b20a8c53f9e88b73e46f29d4ee39b65e63f2177e9bc0a0c5f4e2f07f27ba3b41f30fcccad51b8e03c32a66e89dc1deb76e19de12ae2f6a31b00000000000000000000000000000000000000000000000000000000000000"
+
+print("=" * 70)
+print("🔍 MANUAL DECODE: Intent.user from Failed TX")
+print("=" * 70)
+
+# Skip method selector (4 bytes = 8 hex chars after 0x)
+data = calldata[10:]  # Remove '0x' + 8 chars
+
+# Decode intent struct (offset 0x60 = 96 bytes)
+# Intent is at offset 96 from start
+
+# Intent struct fields:
+# 0: user (address)
+# 1: tokenIn (address)
+# 2: amtIn (uint256)
+# 3: tokenOut (address)
+# 4: minOut (uint256)
+# 5: chainId (uint256)
+# 6: recipient (address)
+# 7: deadline (uint256)
+# 8: nonce (uint256)
+
+# Each uint256/address is 32 bytes = 64 hex chars
+
+# user is first field after intent offset
+offset_intent = 96 * 2  # 96 bytes = 192 hex chars
+
+user_hex = data[offset_intent:offset_intent+64]
+user_address = "0x" + user_hex[24:]  # Remove padding
+
+tokenIn_hex = data[offset_intent+64:offset_intent+128]
+tokenIn_address = "0x" + tokenIn_hex[24:]
+
+amtIn_hex = data[offset_intent+128:offset_intent+192]
+amtIn = int(amtIn_hex, 16)
+
+tokenOut_hex = data[offset_intent+192:offset_intent+256]
+tokenOut_address = "0x" + tokenOut_hex[24:]
+
+deadline_hex = data[offset_intent+448:offset_intent+512]
+deadline = int(deadline_hex, 16)
+
+print(f"\nIntent Details:")
+print(f"  user: {user_address}")
+print(f"  tokenIn: {tokenIn_address}")
+print(f"  amtIn: {amtIn} wei ({Web3.from_wei(amtIn, 'ether')} WETH)")
+print(f"  tokenOut: {tokenOut_address}")
+print(f"  deadline: {deadline}")
+
+print(f"\n🔑 KEY CHECK:")
+USER = "0x5A87a3C738cF99DB95787D51B627217b6dE12F62"
+WETH = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
+USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+
+if user_address.lower() == USER.lower():
+    print(f"  ✅ User: {USER} (YOUR WALLET)")
+else:
+    print(f"  ⚠️ User: {user_address} (NOT your wallet?)")
+    
+if tokenIn_address.lower() == WETH.lower():
+    print(f"  ✅ TokenIn: WETH")
+else:
+    print(f"  ⚠️ TokenIn: {tokenIn_address}")
+    
+if tokenOut_address.lower() == USDC.lower():
+    print(f"  ✅ TokenOut: USDC")
+else:
+    print(f"  ⚠️ TokenOut: {tokenOut_address}")
+
+print(f"\n🎯 ISSUE:")
+print(f"  RouterHub tries: WETH.transferFrom(intent.user, routerHub, {Web3.from_wei(amtIn, 'ether')})")
+print(f"  Requires: User ({user_address}) must have approved RouterHub")
+print(f"  We checked: Allowance = 0.001 WETH ✅")
+print(f"  BUT: Does RouterHub have correct address in its code?")
+
+print("=" * 70)

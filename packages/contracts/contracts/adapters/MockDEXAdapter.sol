@@ -135,13 +135,25 @@ contract MockDEXAdapter is IDEXAdapter {
         address tokenOut,
         uint256 amountIn
     ) external view override returns (uint256 amountOut, address[] memory path) {
-        // Get prices (USD, 8 decimals)
+        // Get prices from oracle (USD, 8 decimals) - REAL-TIME from Pyth!
         uint256 priceIn;
         uint256 priceOut;
         
-        // Use hardcoded prices (oracle at 0x1 is just a placeholder)
-        priceIn = tokenIn == address(0) ? 2000 * 1e8 : getHardcodedPrice(tokenIn);
-        priceOut = tokenOut == address(0) ? 2000 * 1e8 : getHardcodedPrice(tokenOut);
+        // Use Pyth oracle for real-time prices (NO MORE HARDCODING!)
+        // Native token (address(0)) defaults to wrapped token price
+        if (tokenIn == address(0)) {
+            // For native token, use a default price or fetch from oracle
+            // In production, native token should also have oracle
+            priceIn = 2000 * 1e8; // Fallback only for native
+        } else {
+            priceIn = priceOracle.getPrice(tokenIn);
+        }
+        
+        if (tokenOut == address(0)) {
+            priceOut = 2000 * 1e8; // Fallback only for native
+        } else {
+            priceOut = priceOracle.getPrice(tokenOut);
+        }
 
         require(priceIn > 0 && priceOut > 0, "Price not available");
 
@@ -226,26 +238,7 @@ contract MockDEXAdapter is IDEXAdapter {
             IERC20(token).safeTransfer(owner, amount);
         }
     }
-    /**
-     * @notice Get hardcoded price for common testnet tokens (fallback)
-     * @param token Token address
-     * @return price Price in USD (8 decimals)
-     */
-    function getHardcodedPrice(address token) internal pure returns (uint256 price) {
-        // Sepolia testnet token addresses
-        if (token == 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238) {
-            return 1 * 1e8; // USDC = $1
-        } else if (token == 0x779877A7B0D9E8603169DdbD7836e478b4624789) {
-            return 15 * 1e8; // LINK = $15 (approx)
-        } else if (token == 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14) {
-            return 2000 * 1e8; // WETH = $2000 (approx)
-        } else if (token == 0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9) {
-            return 1 * 1e8; // PYUSD = $1
-        } else {
-            return 1 * 1e8; // Default: $1
-        }
-    }
-
+    
     // Allow receiving ETH
     receive() external payable {}
 }

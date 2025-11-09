@@ -32,6 +32,10 @@ fi
 # Start Backend
 echo "🔧 Starting Backend..."
 cd /home/abeachmad/ZeroToll/backend
+# Load environment variables from .env
+set -a
+source .env 2>/dev/null
+set +a
 /home/abeachmad/ZeroToll/backend/venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000 > /tmp/zerotoll_backend.log 2>&1 &
 cd ..
 

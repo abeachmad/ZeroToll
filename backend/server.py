@@ -17,6 +17,7 @@ from dex_swap_service import DEXSwapService
 from route_client import get_best_route_for_intent
 from web3_tx_builder import execute_intent_on_chain
 from token_registry import get_token_address
+from pyth_oracle_service import pyth_service  # NO MORE HARDCODED PRICES!
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -59,6 +60,7 @@ class Intent(BaseModel):
     amtIn: float
     tokenOut: str
     minOut: float
+    srcChainId: int  # ✅ FIX: Add source chain ID
     dstChainId: int
     feeMode: str  # NATIVE, INPUT, OUTPUT, STABLE
     feeCap: float
@@ -86,7 +88,7 @@ class Intent(BaseModel):
             raise ValueError('Invalid fee mode')
         return v
     
-    @field_validator('dstChainId')
+    @field_validator('srcChainId', 'dstChainId')
     @classmethod
     def validate_chain(cls, v):
         if v not in [80002, 11155111, 421614, 11155420]:
@@ -143,28 +145,22 @@ async def get_quote(request: QuoteRequest, req: Request):
     try:
         intent = request.intent
         
-        # Pyth price feeds - Real prices from Pyth Network
-        # Price IDs: https://pyth.network/developers/price-feed-ids
-        prices = {
-            'ETH': 3709.35,   # Crypto.ETH/USD
-            'WETH': 3709.35,
-            'POL': 0.179665,  # Crypto.POL/USD (formerly MATIC)
-            'WPOL': 0.179665,
-            'LINK': 23.45,    # Crypto.LINK/USD
-            'ARB': 0.85,      # Crypto.ARB/USD
-            'OP': 2.15        # Crypto.OP/USD
-        }
+        # Get chain IDs from intent (✅ FIXED: No more default to Sepolia!)
+        src_chain_id = intent.srcChainId
+        dst_chain_id = intent.dstChainId
+        
+        # ✅ Query Pyth Oracle for REAL-TIME prices (NO MORE HARDCODING!)
+        price_in = pyth_service.get_price(intent.tokenIn, src_chain_id)
+        price_out = pyth_service.get_price(intent.tokenOut, dst_chain_id)
         
         # Calculate output amount based on real prices
-        price_in = prices.get(intent.tokenIn, 1.0)
-        price_out = prices.get(intent.tokenOut, 1.0)
-        
         # Convert input amount to USD, then to output token
         usd_value = intent.amtIn * price_in
         output_amount = usd_value / price_out
         
-        # Apply slippage (0.5%)
-        net_out = output_amount * 0.995
+        # Apply slippage (5% to match MockDEXAdapter)
+        # MockDEXAdapter applies 5% slippage: amountOut * 9500 / 10000
+        net_out = output_amount * 0.95
         
         # Determine fee token based on mode
         if intent.feeMode == 'INPUT':
@@ -178,7 +174,8 @@ async def get_quote(request: QuoteRequest, req: Request):
         
         # Mock quote calculation
         estimated_fee = intent.feeCap * 0.2  # 20% of cap as estimate
-        fee_usd = estimated_fee * prices.get(fee_token, 1.0)
+        fee_token_price = pyth_service.get_price(fee_token, src_chain_id)
+        fee_usd = estimated_fee * fee_token_price
         
         # Mock oracle data
         oracle_source = "Pyth" if intent.feeMode in ['INPUT', 'OUTPUT'] else "TWAP"
@@ -252,6 +249,9 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         src_chain_id = call_data.get('srcChainId', 11155111)
         dst_chain_id = call_data.get('dstChainId', 80002)
         
+        # DEBUG: Log minOut received from frontend
+        logging.info(f"🔍 DEBUG minOut from frontend: {min_out} ({token_out_symbol})")
+        
         # Set deadline to 10 minutes from now (fixes "Intent expired" revert)
         deadline = int(datetime.now().timestamp()) + 600
         logging.info(f"⏰ Intent deadline set to: {deadline} (current: {int(datetime.now().timestamp())})")
@@ -287,6 +287,13 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         
         amt_in_wei = str(int(amt_in * (10 ** decimals_in)))
         min_out_wei = str(int(min_out * (10 ** decimals_out)))
+        
+        # DEBUG: Log conversion details
+        logging.info(f"🔍 DEBUG minOut conversion:")
+        logging.info(f"   Input: min_out = {min_out} ({token_out_symbol})")
+        logging.info(f"   Decimals: {decimals_out}")
+        logging.info(f"   Formula: {min_out} * 10^{decimals_out}")
+        logging.info(f"   Result: min_out_wei = {min_out_wei}")
         
         logging.info(f"🚀 Executing intent: {user_address} swap {amt_in} {token_in_symbol} → {token_out_symbol}")
         
