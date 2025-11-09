@@ -1,0 +1,16 @@
+{
+  "network": "amoy",
+  "timestamp": 1762668841577,
+  "oracle": "0x14BfA9bdf75a2c8049C826B63EeEf6ED7F52E838",
+  "pyth": "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729",
+  "tokens": {
+    "WPOL": {
+      "address": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+      "priceId": "0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68153335374ec10722edd70472"
+    },
+    "USDC": {
+      "address": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
+      "priceId": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"
+    }
+  }
+}
