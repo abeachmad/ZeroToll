@@ -140,20 +140,18 @@ contract MockDEXAdapter is IDEXAdapter {
         uint256 priceOut;
         
         // Use Pyth oracle for real-time prices (NO MORE HARDCODING!)
-        // Native token (address(0)) defaults to wrapped token price
+        // Note: RouterHub converts NATIVE_MARKER to wrapped token before calling adapter
+        // So adapter should NEVER receive address(0) as tokenIn/tokenOut
+        // If it does, revert instead of using hardcoded fallback
         if (tokenIn == address(0)) {
-            // For native token, use a default price or fetch from oracle
-            // In production, native token should also have oracle
-            priceIn = 2000 * 1e8; // Fallback only for native
-        } else {
-            priceIn = priceOracle.getPrice(tokenIn);
+            revert("Native token not supported - use wrapped token");
         }
+        priceIn = priceOracle.getPrice(tokenIn);
         
         if (tokenOut == address(0)) {
-            priceOut = 2000 * 1e8; // Fallback only for native
-        } else {
-            priceOut = priceOracle.getPrice(tokenOut);
+            revert("Native token not supported - use wrapped token");
         }
+        priceOut = priceOracle.getPrice(tokenOut);
 
         require(priceIn > 0 && priceOut > 0, "Price not available");
 

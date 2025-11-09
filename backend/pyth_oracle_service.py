@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 # MultiTokenPythOracle addresses (deployed with Pyth integration)
 ORACLE_ADDRESSES = {
-    11155111: os.getenv("SEPOLIA_PYTH_ORACLE", "0x729fBc26977F8df79B45c1c5789A483640E89b4A"),  # Sepolia
-    80002: os.getenv("AMOY_PYTH_ORACLE", "0xA4F18e08201949425B2330731782E4bba7FE1346"),  # Amoy - TestnetPriceOracle
+    11155111: os.getenv("SEPOLIA_PYTH_ORACLE", "0x1240c97bc33f7635b8e25C721fF6D05d2bfC44Db"),  # Sepolia MultiTokenPythOracle
+    80002: os.getenv("AMOY_PYTH_ORACLE", "0x14BfA9bdf75a2c8049C826B63EeEf6ED7F52E838"),  # Amoy MultiTokenPythOracle
 }
 
 # RPC endpoints
