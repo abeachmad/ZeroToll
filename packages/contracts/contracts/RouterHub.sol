@@ -22,6 +22,10 @@ contract RouterHub is Ownable, ReentrancyGuard {
     address public twapOracle;
     address public feeSink;
     
+    // Gasless fee configuration (Phase 1)
+    uint16 public gaslessFeeBps = 50; // 0.5% default for gasless swaps
+    address public gaslessFeeRecipient; // Paymaster treasury for gasless fee collection
+    
     event RouteExecuted(
         bytes32 indexed intentId,
         uint256 amountOut,
@@ -29,6 +33,14 @@ contract RouterHub is Ownable, ReentrancyGuard {
         bool outIsNative,
         uint256 outGrossWrapped,
         uint256 outNetNative
+    );
+    event GaslessFeeCharged(
+        bytes32 indexed intentId,
+        address indexed user,
+        address indexed token,
+        uint256 grossAmount,
+        uint256 feeAmount,
+        uint256 netAmount
     );
     event AdapterWhitelisted(address indexed adapter, bool status);
     event NativeWrappedSet(address indexed wrapped);
@@ -67,20 +79,32 @@ contract RouterHub is Ownable, ReentrancyGuard {
         require(grossOut > 0, "Invalid output amount");
         
         uint256 netOut = grossOut;
+        uint256 feeAmount = 0;
         bool isNativeOut = intent.tokenOut == NATIVE_MARKER;
+        
+        // Calculate gasless fee if recipient is configured (Phase 1: Gasless)
+        // Fee is taken from output (post-swap) to enable gasless UX
+        if (gaslessFeeRecipient != address(0) && gaslessFeeBps > 0) {
+            feeAmount = (grossOut * gaslessFeeBps) / 10000;
+            netOut = grossOut - feeAmount;
+            
+            // Safety check: ensure netOut still meets user's minOut requirement
+            require(netOut >= intent.minOut, "Fee + slippage exceeds minOut");
+        }
         
         // Handle output-fee mode with native unwrap
         if (intent.feeMode == FeeAssetMode.TOKEN_OUTPUT_DEST && isNativeOut) {
+            // Legacy fee mode (using intent.feeCapToken)
             // Skim fee from wrapped, then unwrap remainder
-            uint256 feeAmount = (grossOut * intent.feeCapToken) / 10000; // simplified
-            if (feeAmount > 0) {
-                IERC20(tokenOut).transfer(feeSink, feeAmount);
+            uint256 legacyFee = (grossOut * intent.feeCapToken) / 10000; // simplified
+            if (legacyFee > 0 && feeSink != address(0)) {
+                IERC20(tokenOut).transfer(feeSink, legacyFee);
+                netOut = grossOut - legacyFee;
             }
-            netOut = grossOut - feeAmount;
             
             // Unwrap to native
             IWETH(tokenOut).withdraw(netOut);
-            payable(intent.user).transfer(netOut); // FIX: Send to intent.user, not msg.sender (relayer)
+            payable(intent.user).transfer(netOut);
             
             emit RouteExecuted(
                 IntentLib.hashIntent(intent),
@@ -91,9 +115,22 @@ contract RouterHub is Ownable, ReentrancyGuard {
                 netOut
             );
         } else if (isNativeOut) {
-            // No fee deduction, just unwrap
-            IWETH(tokenOut).withdraw(grossOut);
-            payable(intent.user).transfer(grossOut); // FIX: Send to intent.user, not msg.sender (relayer)
+            // Gasless fee (if configured) from wrapped before unwrap
+            if (feeAmount > 0) {
+                IERC20(tokenOut).safeTransfer(gaslessFeeRecipient, feeAmount);
+                emit GaslessFeeCharged(
+                    IntentLib.hashIntent(intent),
+                    intent.user,
+                    tokenOut,
+                    grossOut,
+                    feeAmount,
+                    netOut
+                );
+            }
+            
+            // Unwrap to native
+            IWETH(tokenOut).withdraw(netOut);
+            payable(intent.user).transfer(netOut);
             
             emit RouteExecuted(
                 IntentLib.hashIntent(intent),
@@ -101,11 +138,24 @@ contract RouterHub is Ownable, ReentrancyGuard {
                 intent.dstChainId,
                 true,
                 grossOut,
-                grossOut
+                netOut
             );
         } else {
-            // Standard ERC20 output
-            IERC20(tokenOut).transfer(intent.user, grossOut); // FIX: Send to intent.user, not msg.sender (relayer)
+            // Standard ERC20 output - apply gasless fee if configured
+            if (feeAmount > 0) {
+                IERC20(tokenOut).safeTransfer(gaslessFeeRecipient, feeAmount);
+                emit GaslessFeeCharged(
+                    IntentLib.hashIntent(intent),
+                    intent.user,
+                    tokenOut,
+                    grossOut,
+                    feeAmount,
+                    netOut
+                );
+            }
+            
+            // Transfer net amount to user
+            IERC20(tokenOut).safeTransfer(intent.user, netOut);
             
             emit RouteExecuted(
                 IntentLib.hashIntent(intent),
@@ -136,6 +186,13 @@ contract RouterHub is Ownable, ReentrancyGuard {
     
     function setTwapOracle(address _twapOracle) external onlyOwner {
         twapOracle = _twapOracle;
+    }
+    
+    // Phase 1: Gasless fee configuration
+    function setGaslessFeeConfig(uint16 _feeBps, address _feeRecipient) external onlyOwner {
+        require(_feeBps <= 200, "Fee too high"); // Max 2%
+        gaslessFeeBps = _feeBps;
+        gaslessFeeRecipient = _feeRecipient;
     }
     
     function rescueTokens(address token, uint256 amount) external onlyOwner {

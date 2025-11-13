@@ -22,11 +22,11 @@ class BlockchainService:
         # Load contract addresses from .env (BEST PRACTICE - Nov 8, 2025)
         self.contracts = {
             80002: {
-                "RouterHub": os.getenv("AMOY_ROUTERHUB", "0x5335f887E69F4B920bb037062382B9C17aA52ec6"),
+                "RouterHub": os.getenv("AMOY_ROUTERHUB", "0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881"),
                 "FeeSink": os.getenv("AMOY_FEESINK", "0x1F679D174A9fBe4158EABcD24d4A63D6Bcf8f700")
             },
             11155111: {
-                "RouterHub": os.getenv("SEPOLIA_ROUTERHUB", "0x15dbf63c4B3Df4CF6Cfd31701C1D373c6640DADd"),  # v1.4 Nov 8!
+                "RouterHub": os.getenv("SEPOLIA_ROUTERHUB", "0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84"),  # Phase 1: Gasless
                 "FeeSink": os.getenv("SEPOLIA_FEESINK", "0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130")
             }
         }

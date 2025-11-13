@@ -1,63 +1,55 @@
 const hre = require("hardhat");
 
+const CONFIGS = {
+  amoy: {
+    routerHub: "0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881",
+    adapter: "0xc8a769B6dd35c34B8c5612b340cCA52Fca7B041c", // OdosAdapter
+  },
+  sepolia: {
+    routerHub: "0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84",
+    adapter: "0x...", // TODO
+  }
+};
+
 async function main() {
-  console.log("🔐 Whitelisting Mock Adapter in RouterHub (Sepolia)...\n");
-
   const [deployer] = await hre.ethers.getSigners();
-  console.log("Account:", deployer.address);
+  const network = hre.network.name;
+  
+  console.log("\n=== WHITELISTING ADAPTER ===");
+  console.log("Network:", network);
+  console.log("Deployer:", deployer.address);
+  
+  const config = CONFIGS[network];
+  if (!config || config.adapter === "0x...") {
+    console.log("❌ No configuration for network:", network);
+    return;
+  }
+  
+  console.log("RouterHub:", config.routerHub);
+  console.log("Adapter:", config.adapter);
 
-  const ROUTER_HUB_ADDRESS = "0x19091A6c655704c8fb55023635eE3298DcDf66FF";
+  const routerHub = await hre.ethers.getContractAt("RouterHub", config.routerHub);
   
-  // Use deployer address as mock adapter for testing
-  const MOCK_ADAPTER = deployer.address;
+  // Check if already whitelisted
+  const isWhitelisted = await routerHub.whitelistedAdapter(config.adapter);
+  console.log("\nCurrent status:", isWhitelisted ? "✅ Already whitelisted" : "❌ Not whitelisted");
   
-  console.log("RouterHub:", ROUTER_HUB_ADDRESS);
-  console.log("Mock Adapter:", MOCK_ADAPTER);
-
-  // RouterHub ABI
-  const routerHubAbi = [
-    "function whitelistAdapter(address adapter, bool status) external",
-    "function isWhitelistedAdapter(address adapter) external view returns (bool)",
-    "function owner() external view returns (address)"
-  ];
-  
-  const routerHub = await hre.ethers.getContractAt(routerHubAbi, ROUTER_HUB_ADDRESS);
-  
-  // Check current owner
-  try {
-    const owner = await routerHub.owner();
-    console.log("RouterHub owner:", owner);
-    console.log("Deployer:", deployer.address);
-    
-    if (owner.toLowerCase() !== deployer.address.toLowerCase()) {
-      console.log("\n❌ ERROR: You are not the owner of RouterHub!");
-      console.log("   Owner:", owner);
-      console.log("   Your address:", deployer.address);
-      console.log("\n💡 Solution: Use the private key that deployed RouterHub");
-      process.exit(1);
-    }
-  } catch (e) {
-    console.log("Warning: Could not check owner, proceeding anyway...");
+  if (isWhitelisted) {
+    console.log("No action needed!");
+    return;
   }
 
   // Whitelist adapter
-  console.log("\n📝 Whitelisting adapter...");
-  const tx = await routerHub.whitelistAdapter(MOCK_ADAPTER, true);
+  console.log("\nWhitelisting adapter...");
+  const tx = await routerHub.whitelistAdapter(config.adapter, true);
   console.log("TX sent:", tx.hash);
   
   await tx.wait();
   console.log("✅ Transaction confirmed!");
 
   // Verify
-  const isWhitelisted = await routerHub.isWhitelistedAdapter(MOCK_ADAPTER);
-  console.log("\n🔍 Verification:");
-  console.log("  Whitelisted:", isWhitelisted ? "✅ YES" : "❌ NO");
-  
-  if (isWhitelisted) {
-    console.log("\n🎉 SUCCESS! Adapter is now whitelisted!");
-    console.log("\n📝 Update backend/.env:");
-    console.log(`SEPOLIA_MOCKDEX_ADAPTER=${MOCK_ADAPTER}`);
-  }
+  const newStatus = await routerHub.whitelistedAdapter(config.adapter);
+  console.log("Verified:", newStatus ? "✅ Whitelisted" : "❌ Failed");
 }
 
 main()

@@ -1,20 +1,20 @@
 {
   "amoy": {
     "chainId": 80002,
-    "routerHub": "0x5335f887E69F4B920bb037062382B9C17aA52ec6",
+    "routerHub": "0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881",
     "feeSink": "0x1F679D174A9fBe4158EABcD24d4A63D6Bcf8f700",
     "wrappedToken": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
     "feeVault": "TBD_AFTER_DEPLOYMENT",
     "feeRebalancer": "TBD_AFTER_DEPLOYMENT",
     "adapters": {
       "quickswapV2": "0xbe6F932465D5155c1564FF0AD7Cc9D2D2a4316d5",
-      "mockDex": "0xbe6F932465D5155c1564FF0AD7Cc9D2D2a4316d5",
+      "mockDex": "0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1",
       "mockBridge": "TBD_AFTER_DEPLOYMENT"
     }
   },
   "sepolia": {
     "chainId": 11155111,
-    "routerHub": "0x15dbf63c4B3Df4CF6Cfd31701C1D373c6640DADd",
+    "routerHub": "0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84",
     "feeSink": "0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130",
     "wrappedToken": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
     "feeVault": "TBD_AFTER_DEPLOYMENT",

@@ -5,8 +5,11 @@ import { toast } from 'sonner';
 import axios from 'axios';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchChain } from 'wagmi';
 import { parseUnits, maxUint256 } from 'viem';
+import { ethers } from 'ethers';
 import FeeModeExplainer from '../components/FeeModeExplainer';
 import ConnectButton from '../components/ConnectButton';
+import GaslessSwapStatus from '../components/GaslessSwapStatus';
+import { useGaslessSwap } from '../hooks/useGaslessSwap';
 import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
 import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
 import arbitrumSepoliaTokens from '../config/tokenlists/zerotoll.tokens.arbitrum-sepolia.json';
@@ -73,6 +76,10 @@ const Swap = () => {
   const [quote, setQuote] = useState(null);
   const [txHash, setTxHash] = useState(null);
   const [showExplainer, setShowExplainer] = useState(false);
+  
+  // Gasless mode toggle
+  const [isGaslessMode, setIsGaslessMode] = useState(false);
+  const gaslessSwap = useGaslessSwap();
   
   // Approval state
   const [needsApproval, setNeedsApproval] = useState(false);
@@ -301,6 +308,7 @@ const Swap = () => {
     if (!tokenIn || tokenIn.isNative || !routerHubAddress) return;
     
     setApprovalPending(true);
+    
     try {
       // Ensure wallet is on the same network as the selected source chain
       if (chain?.id !== fromChain.id) {
@@ -314,7 +322,7 @@ const Swap = () => {
               params: [{ chainId: `0x${fromChain.id.toString(16)}` }]
             });
           }
-          toast.success('✅ Network switched — please approve the transaction in MetaMask');
+          toast.success('✅ Network switched — please approve');
         } catch (swErr) {
           console.error('Network switch failed:', swErr);
           toast.error('Failed to switch network. Please switch network in MetaMask and retry.');
@@ -322,10 +330,39 @@ const Swap = () => {
           return;
         }
       }
+
       const decimals = tokenIn.decimals || 6;
       const amountWei = parseUnits(amountIn, decimals);
-      
-      toast.info('🦊 Opening MetaMask... Please approve token spending');
+
+      // If gasless mode, use gasless approval (no gas fee!)
+      if (isGaslessMode) {
+        toast.info('⚡ Gasless approval - no gas fee!');
+        
+        try {
+          const txHash = await gaslessSwap.executeApproval({
+            tokenAddress: tokenIn.address,
+            spenderAddress: routerHubAddress,
+            amount: amountWei.toString()
+          });
+
+          toast.success('✅ Gasless approval submitted! No gas fee charged.');
+          console.log('Gasless approval txHash:', txHash);
+          
+          // Wait for approval to be mined
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          await refetchAllowance();
+          
+          setApprovalPending(false);
+        } catch (gaslessError) {
+          console.error('Gasless approval error:', gaslessError);
+          toast.error(gaslessError.message || 'Gasless approval failed');
+          setApprovalPending(false);
+        }
+        return;
+      }
+
+      // Standard approval (charges gas in POL/ETH)
+      toast.info('🦊 Opening MetaMask... This will cost gas in POL/ETH');
       
       // CRITICAL FIX: Reset allowance to 0 first, then approve exact amount
       // This forces user to approve every single swap, preventing stale approvals
@@ -387,6 +424,43 @@ const Swap = () => {
     }
   };
 
+  const handleGaslessExecute = async () => {
+    try {
+      toast.info('⚡ Initiating gasless swap...');
+      
+      // Build mock swap callData (in production, this would come from Odos/DEX aggregator)
+      // For testing, we use placeholder routeData
+      const routerHubInterface = new ethers.Interface([
+        "function executeRoute(bytes calldata routeData, uint256 minAmountOut, address paymaster) external payable"
+      ]);
+      
+      const mockRouteData = "0x1234"; // TODO: Replace with real Odos route data
+      const minAmountOut = ethers.parseUnits((parseFloat(amountOut) * 0.95).toString(), tokenOut.decimals || 6);
+      const paymasterAddress = fromChain.id === 80002 
+        ? "0xC721582d25895956491436459df34cd817C6AB74"  // Amoy
+        : "0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9"; // Sepolia
+      
+      const swapCallData = routerHubInterface.encodeFunctionData("executeRoute", [
+        mockRouteData,
+        minAmountOut,
+        paymasterAddress
+      ]);
+      
+      // Execute gasless swap
+      const txHash = await gaslessSwap.executeSwap({
+        routerHub: routerHubAddress,
+        swapCallData
+      });
+      
+      toast.success('🎉 Gasless swap complete! You paid $0 in gas fees!');
+      setTxHash(txHash);
+      
+    } catch (error) {
+      console.error('Gasless swap error:', error);
+      toast.error(error.message || 'Gasless swap failed');
+    }
+  };
+
   const handleExecute = async () => {
     if (!quote) {
       toast.error('Get a quote first');
@@ -396,6 +470,11 @@ const Swap = () => {
     if (!isConnected) {
       toast.error('Please connect your wallet');
       return;
+    }
+
+    // If gasless mode, use different execution path
+    if (isGaslessMode) {
+      return await handleGaslessExecute();
     }
     
     // Ensure wallet network matches the selected source chain
@@ -631,7 +710,64 @@ const Swap = () => {
             )}
           </div>
 
-          {/* Gas Payment Mode Selector */}
+          {/* Gasless Mode Toggle */}
+          {/* Gasless Mode Toggle */}
+          <div className="mb-6">
+            <div className="glass p-4 rounded-xl border border-zt-aqua/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Zap className="w-5 h-5 text-zt-aqua" />
+                  <div>
+                    <div className="font-semibold text-zt-paper">Gasless Swap</div>
+                    <div className="text-xs text-zt-paper/60">Pay $0 gas fees (Account Abstraction)</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsGaslessMode(!isGaslessMode)}
+                  className={`relative w-14 h-7 rounded-full transition-colors ${
+                    isGaslessMode ? 'bg-zt-aqua' : 'bg-white/20'
+                  }`}
+                >
+                  <div
+                    className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                      isGaslessMode ? 'translate-x-7' : ''
+                    }`}
+                  />
+                </button>
+              </div>
+              {isGaslessMode && (
+                <div className="mt-3 pt-3 border-t border-white/10">
+                  <div className="flex items-start gap-2 text-xs text-zt-paper/80">
+                    <Info className="w-4 h-4 text-zt-aqua flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-semibold text-zt-aqua mb-1">Account Abstraction (ERC-4337)</div>
+                      <ul className="space-y-1 text-zt-paper/70">
+                        <li>✅ Zero gas fees - paymaster sponsors your transactions</li>
+                        <li>✅ Approval + Swap - both are gasless!</li>
+                        <li>✅ Just sign with your wallet - no POL/ETH needed</li>
+                        <li>⚡ Service fee deducted from swapped tokens</li>
+                      </ul>
+                      <div className="mt-2 text-zt-violet/90 font-medium">
+                        Limited to 10 swaps/day for testing
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {!isGaslessMode && (
+                <div className="mt-3 pt-3 border-t border-white/10">
+                  <div className="flex items-start gap-2 text-xs text-zt-paper/60">
+                    <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      Standard mode requires POL/ETH for gas fees on approvals and swaps.
+                      <span className="block mt-1 text-zt-aqua">Toggle gasless mode ON for $0 fees!</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>          {/* Gas Payment Mode Selector */}
+          {!isGaslessMode && (
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-3">
               Gas Payment Mode
@@ -683,8 +819,10 @@ const Swap = () => {
               </div>
             )}
           </div>
+          )}
 
-          {/* Fee Cap */}
+          {/* Fee Cap - Only show in non-gasless mode */}
+          {!isGaslessMode && (
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-2">
               Max Fee Cap (
@@ -705,9 +843,10 @@ const Swap = () => {
               ✅ Fee ≤ cap enforced on-chain. Unused amount refunded in fee token.
             </p>
           </div>
+          )}
 
           {/* Info Banners */}
-          {feeMode === 'OUTPUT' && isNativeOutput && (
+          {!isGaslessMode && feeMode === 'OUTPUT' && isNativeOutput && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
               <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -715,7 +854,7 @@ const Swap = () => {
               </div>
             </div>
           )}
-          {feeMode === 'OUTPUT' && !isNativeOutput && (
+          {!isGaslessMode && feeMode === 'OUTPUT' && !isNativeOutput && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
               <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -774,8 +913,18 @@ const Swap = () => {
             </div>
           )}
 
+          {/* Gasless Swap Status */}
+          {isGaslessMode && gaslessSwap.status && (
+            <GaslessSwapStatus
+              status={gaslessSwap.status}
+              message={gaslessSwap.statusMessage}
+              txHash={gaslessSwap.txHash}
+              chainId={fromChain.id}
+            />
+          )}
+
           {/* Success Message */}
-          {txHash && (
+          {txHash && !isGaslessMode && (
             <div className="mb-6 glass p-4 rounded-xl flex items-center gap-3 border border-green-500/30">
               <CheckCircle className="w-6 h-6 text-green-400 flex-shrink-0" />
               <div className="flex-1">
@@ -876,16 +1025,23 @@ const Swap = () => {
             ) : (
               <button
                 onClick={handleExecute}
-                disabled={loading || !quote || (needsApproval && !tokenIn.isNative) || (fromChain.id !== toChain.id)}
-                className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={(loading || gaslessSwap.isLoading) || !quote || (needsApproval && !tokenIn.isNative && !isGaslessMode) || (fromChain.id !== toChain.id)}
+                className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 data-testid="execute-swap-btn"
                 title={
                   fromChain.id !== toChain.id ? 'Cross-chain swaps not yet supported' :
-                  needsApproval && !tokenIn.isNative ? 'Please approve token first' : 
+                  needsApproval && !tokenIn.isNative && !isGaslessMode ? 'Please approve token first' : 
                   ''
                 }
               >
-                {loading ? <Loader2 className="inline w-5 h-5 animate-spin" /> : 'Execute Swap'}
+                {(loading || gaslessSwap.isLoading) ? (
+                  <Loader2 className="inline w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    {isGaslessMode && <Zap className="w-4 h-4" />}
+                    {isGaslessMode ? 'Execute Gasless Swap' : 'Execute Swap'}
+                  </>
+                )}
               </button>
             )}
           </div>

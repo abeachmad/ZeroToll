@@ -1,0 +1,14 @@
+{
+  "network": "Amoy",
+  "chainId": "80002",
+  "timestamp": "2025-11-10T06:29:11.092Z",
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "contracts": {
+    "VerifyingPaymaster": "0xC721582d25895956491436459df34cd817C6AB74",
+    "EntryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
+  },
+  "policyServer": {
+    "signer": "0x84d44b412CeA92064B5441fB7CfC354Ec1750eb2",
+    "privateKey": "0xba65e483a87127ba468cec3a151773a7ae84c64b9cae49fffee6db46c90cf314"
+  }
+}

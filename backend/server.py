@@ -17,7 +17,7 @@ from dex_swap_service import DEXSwapService
 from route_client import get_best_route_for_intent
 from web3_tx_builder import execute_intent_on_chain
 from token_registry import get_token_address
-from pyth_oracle_service import pyth_service  # NO MORE HARDCODED PRICES!
+from pyth_rest_oracle import pyth_oracle  # NEW: LIVE prices from Pyth REST API (off-chain)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -51,6 +51,23 @@ async def lifespan(app: FastAPI):
         logger.info("MongoDB connection closed")
 
 app = FastAPI(lifespan=lifespan)
+
+# Security: CORS with specific origins (MUST be before including routers)
+allowed_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:3000,http://localhost:3001').split(',')
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+)
+
+# Security: Trusted Host
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["localhost", "127.0.0.1", "*.zerotoll.io"]
+)
+
 api_router = APIRouter(prefix="/api")
 
 # Models
@@ -139,6 +156,11 @@ class SwapHistory(BaseModel):
 async def root():
     return {"message": "ZeroToll API - Any-Token Fee Mode", "version": "2.0.0"}
 
+@api_router.options("/quote")
+async def quote_options():
+    """Handle CORS preflight for quote endpoint"""
+    return {}
+
 @api_router.post("/quote", response_model=QuoteResponse)
 async def get_quote(request: QuoteRequest, req: Request):
     """Get quote with any-token fee mode support"""
@@ -149,9 +171,25 @@ async def get_quote(request: QuoteRequest, req: Request):
         src_chain_id = intent.srcChainId
         dst_chain_id = intent.dstChainId
         
-        # ✅ Query Pyth Oracle for REAL-TIME prices (NO MORE HARDCODING!)
-        price_in = pyth_service.get_price(intent.tokenIn, src_chain_id)
-        price_out = pyth_service.get_price(intent.tokenOut, dst_chain_id)
+        # ✅ Query Pyth REST API for REAL-TIME prices (LIVE, off-chain)
+        price_in_data = pyth_oracle.get_price(intent.tokenIn, src_chain_id)
+        price_out_data = pyth_oracle.get_price(intent.tokenOut, dst_chain_id)
+        
+        # Check if prices available (fail-closed)
+        if not price_in_data["available"] or not price_out_data["available"]:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Price unavailable for {intent.tokenIn} or {intent.tokenOut}. Please try again in a moment."
+            )
+        
+        price_in = price_in_data["price"]
+        price_out = price_out_data["price"]
+        
+        # Log if using stale prices
+        if price_in_data["stale"]:
+            logger.warning(f"⚠️  Using STALE price for {intent.tokenIn}: ${price_in:.6f}")
+        if price_out_data["stale"]:
+            logger.warning(f"⚠️  Using STALE price for {intent.tokenOut}: ${price_out:.6f}")
         
         # Calculate output amount based on real prices
         # Convert input amount to USD, then to output token
@@ -174,7 +212,16 @@ async def get_quote(request: QuoteRequest, req: Request):
         
         # Mock quote calculation
         estimated_fee = intent.feeCap * 0.2  # 20% of cap as estimate
-        fee_token_price = pyth_service.get_price(fee_token, src_chain_id)
+        fee_token_price_data = pyth_oracle.get_price(fee_token, src_chain_id)
+        
+        # Check fee token price available
+        if not fee_token_price_data["available"]:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Price unavailable for fee token {fee_token}. Please try again."
+            )
+        
+        fee_token_price = fee_token_price_data["price"]
         fee_usd = estimated_fee * fee_token_price
         
         # Mock oracle data
@@ -362,8 +409,8 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         # Get RouterHub address for this chain (UPGRADED - v1.4 sends output to user, not relayer!)
         # IMPORTANT: Load from .env to avoid hardcoded stale addresses!
         router_hub_addresses = {
-            80002: os.getenv("AMOY_ROUTERHUB", "0x5335f887E69F4B920bb037062382B9C17aA52ec6"),
-            11155111: os.getenv("SEPOLIA_ROUTERHUB", "0x15dbf63c4B3Df4CF6Cfd31701C1D373c6640DADd"),  # Nov 8 upgrade
+            80002: os.getenv("AMOY_ROUTERHUB", "0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881"),
+            11155111: os.getenv("SEPOLIA_ROUTERHUB", "0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84"),  # Phase 1: Gasless
             421614: os.getenv("ARB_SEPOLIA_ROUTERHUB"),
             11155420: os.getenv("OP_SEPOLIA_ROUTERHUB"),
         }
@@ -641,23 +688,27 @@ async def get_stats():
         }
     }
 
+@api_router.get("/oracle/health")
+async def get_oracle_health():
+    """Get Pyth REST Oracle health status"""
+    try:
+        health = pyth_oracle.health_check()
+        return {
+            "success": True,
+            "oracle": "pyth-rest",
+            "status": "healthy" if health["available"] else "degraded",
+            **health
+        }
+    except Exception as e:
+        logger.error(f"Oracle health check failed: {e}")
+        return {
+            "success": False,
+            "oracle": "pyth-rest",
+            "status": "error",
+            "error": str(e)
+        }
+
 app.include_router(api_router)
-
-# Security: CORS with specific origins
-allowed_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(',')
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=allowed_origins,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "Authorization"],
-)
-
-# Security: Trusted Host
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["localhost", "127.0.0.1", "*.zerotoll.io"]
-)
 
 logging.basicConfig(
     level=logging.INFO,

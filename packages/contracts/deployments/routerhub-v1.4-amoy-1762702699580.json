@@ -1,0 +1,11 @@
+{
+  "network": "amoy",
+  "chainId": "80002",
+  "routerHub": "0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881",
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "deployedAt": "2025-11-09T15:38:19.580Z",
+  "gaslessFeeBps": 50,
+  "gaslessFeeRecipient": "0x0000000000000000000000000000000000000000",
+  "phase": "1 - Gasless Fee Support",
+  "existingRouter": "0x5335f887E69F4B920bb037062382B9C17aA52ec6"
+}
