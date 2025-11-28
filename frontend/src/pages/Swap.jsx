@@ -582,6 +582,12 @@ const Swap = () => {
               Market
             </button>
             <button
+              onClick={() => navigate('/pool')}
+              className="text-zt-paper/70 hover:text-zt-aqua transition-colors hidden md:block"
+            >
+              Pool
+            </button>
+            <button
               onClick={() => navigate('/history')}
               className="text-zt-paper/70 hover:text-zt-aqua transition-colors hidden md:block"
               data-testid="view-history-btn"

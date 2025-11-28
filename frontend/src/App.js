@@ -8,6 +8,7 @@ const Home = lazy(() => import('@/pages/Home'));
 const Swap = lazy(() => import('@/pages/Swap'));
 const History = lazy(() => import('@/pages/History'));
 const Market = lazy(() => import('@/pages/Market'));
+const LiquidityPool = lazy(() => import('@/pages/LiquidityPool'));
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
               <Route path="/swap" element={<Swap />} />
               <Route path="/history" element={<History />} />
               <Route path="/market" element={<Market />} />
+              <Route path="/pool" element={<LiquidityPool />} />
             </Routes>
           </Suspense>
         </BrowserRouter>

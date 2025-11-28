@@ -25,6 +25,12 @@ const Home = () => {
               Market
             </button>
             <button
+              onClick={() => navigate('/pool')}
+              className="text-zt-paper/70 hover:text-zt-aqua transition-colors"
+            >
+              Pool
+            </button>
+            <button
               onClick={() => navigate('/swap')}
               className="btn-primary"
               data-testid="header-launch-btn"
