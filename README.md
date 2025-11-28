@@ -69,6 +69,18 @@ Traditional DeFi has a **gas friction problem** that blocks mass adoption:
 
 That's it! No complex setup needed. 🎉
 
+### Available Pages
+
+| Page | URL | Description |
+|------|-----|-------------|
+| Home | http://localhost:3000 | Landing page with overview |
+| Swap | http://localhost:3000/swap | Gasless token swaps |
+| Pool | http://localhost:3000/pool | Liquidity pool landing page |
+| Pool Dashboard | http://localhost:3000/pool/dashboard | Full pool management UI |
+| Docs | http://localhost:3000/docs | Architecture documentation |
+| Market | http://localhost:3000/market | Token market data |
+| History | http://localhost:3000/history | Transaction history |
+
 ### Get Testnet Tokens
 
 - **Amoy POL**: https://faucet.polygon.technology
@@ -101,6 +113,13 @@ That's it! No complex setup needed. 🎉
 | WETH | `0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14` | [View](https://sepolia.etherscan.io/address/0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14) |
 
 **Adapter Liquidity**: ~0.1 WETH + ~53 USDC
+
+### Cross-Chain Bridge Adapters
+
+| Network | MockLayerZeroAdapter | Explorer |
+|---------|---------------------|----------|
+| Polygon Amoy | `0x349436899Da2F3D5Fb2AD4059b5792C3FeE0bE50` | [View](https://amoy.polygonscan.com/address/0x349436899Da2F3D5Fb2AD4059b5792C3FeE0bE50) |
+| Ethereum Sepolia | `0x73F01527EB3f0ea4AA0d25BF12C6e28d48e46A4C` | [View](https://sepolia.etherscan.io/address/0x73F01527EB3f0ea4AA0d25BF12C6e28d48e46A4C) |
 
 ---
 
@@ -281,8 +300,11 @@ npx hardhat run scripts/fund-from-relayer.js --network sepolia
 ### Frontend (`frontend/`)
 
 - **Tech Stack**: React + Tailwind CSS + wagmi + viem + RainbowKit
-- **Pages**: Home, Swap, History, Market
+- **Pages**: Home, Swap, History, Market, Pool, Pool Dashboard, Docs
 - **EIP-7702 Features**: Smart account upgrade, gasless mode toggle
+- **Pool Landing**: Educational page explaining liquidity pools with CTA to dashboard
+- **Pool Dashboard**: Futuristic dark-mode UI with neon accents, APY stats, fee charts
+- **Docs Page**: Interactive architecture documentation with tabbed navigation
 
 ---
 
@@ -317,6 +339,18 @@ ZeroToll/
 ---
 
 ## 📖 Documentation
+
+### In-App Documentation
+
+Access interactive documentation directly in the app at **http://localhost:3000/docs**:
+- Overview & Key Features
+- System Architecture
+- How Gasless Swaps Work
+- Cross-Chain Architecture
+- Liquidity Pools
+- Security & Audits
+
+### Technical Documents
 
 | Document | Purpose |
 |----------|---------|
@@ -425,10 +459,12 @@ MIT License - See [LICENSE](./LICENSE) file for details.
 
 | Metric | Value |
 |--------|-------|
-| Version | 2.1.0 |
+| Version | 2.3.0 |
 | Status | ✅ Testnet Live (Amoy + Sepolia) |
-| EIP-7702 | ✅ Working (20+ verified TX) |
+| EIP-7702 | ✅ Working (25+ verified TX) |
 | Cross-Chain | ✅ Working (Amoy ↔ Sepolia) |
+| Pool Dashboard | ✅ Live (Futuristic UI) |
+| Docs Page | ✅ Interactive Architecture Guide |
 | Last Updated | November 28, 2025 |
 
 ---
