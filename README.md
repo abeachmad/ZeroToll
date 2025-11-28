@@ -16,8 +16,11 @@ ZeroToll is a **next-generation gasless DEX** that eliminates the gas friction p
 ### 🎯 Core Innovation: EIP-7702 + Pimlico Paymaster
 
 **Phase 1 (Current)**: ✅ Pimlico-powered gasless swaps - **WORKING**
+
 **Phase 2 (Planned)**: Self-hosted paymaster with full control
-**Phase 3 (Future)**: Community liquidity pool - LPs earn from gas fees
+
+**Phase 3 (Future)**: Community paymaster & liquidity pool - LPs earn from gas fees
+
 
 ### Key Features
 
@@ -466,4 +469,5 @@ MIT License - See [LICENSE](./LICENSE) file for details.
 ---
 
 **⭐ If you find ZeroToll useful, please star this repository! ⭐**
+
 
