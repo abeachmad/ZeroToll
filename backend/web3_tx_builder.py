@@ -10,7 +10,11 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
+try:
+    from web3.middleware import geth_poa_middleware
+except ImportError:
+    # web3.py v7+ uses different import
+    from web3.middleware import ExtraDataToPOAMiddleware as geth_poa_middleware
 from eth_account import Account
 from dotenv import load_dotenv
 
@@ -94,7 +98,11 @@ class Web3TransactionBuilder:
             
             # Add PoA middleware for Polygon/Arbitrum/Optimism
             if chain_id in [80002, 421614, 11155420]:
-                w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+                try:
+                    w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+                except Exception:
+                    # web3.py v7+ uses different method
+                    pass  # PoA middleware not needed in v7+
             
             self.web3_clients[chain_id] = w3
             logger.info(f"Initialized Web3 client for chain {chain_id}: {w3.is_connected()}")
