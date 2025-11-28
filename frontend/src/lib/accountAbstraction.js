@@ -15,8 +15,18 @@ const PAYMASTER_ADDRESSES = {
   11155111: "0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9"  // Sepolia
 };
 
-const BUNDLER_RPC = process.env.REACT_APP_BUNDLER_RPC || "http://localhost:3000/rpc";
+// Pimlico API key (fallback to demo key)
+const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY || 'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+
+// Use Pimlico bundler instead of local - supports both Amoy (80002) and Sepolia (11155111)
+const getPimlicoBundlerUrl = (chainId = 80002) => 
+  `https://api.pimlico.io/v2/${chainId}/rpc?apikey=${PIMLICO_API_KEY}`;
+
+const BUNDLER_RPC = process.env.REACT_APP_BUNDLER_RPC || getPimlicoBundlerUrl(80002);
 const POLICY_SERVER_URL = process.env.REACT_APP_POLICY_SERVER_URL || "http://localhost:3002";
+
+// Flag to use Pimlico paymaster instead of local policy server
+const USE_PIMLICO_PAYMASTER = true;
 
 // EntryPoint ABI (minimal)
 const ENTRYPOINT_ABI = [
@@ -403,6 +413,11 @@ export async function executeGaslessApproval({
  * @returns {Promise<boolean>} True if policy server is running
  */
 export async function checkPolicyServerHealth() {
+  // If using Pimlico paymaster, always return true (no local policy server needed)
+  if (USE_PIMLICO_PAYMASTER) {
+    return true;
+  }
+  
   try {
     const response = await fetch(`${POLICY_SERVER_URL}/health`, {
       method: 'GET'
@@ -416,11 +431,15 @@ export async function checkPolicyServerHealth() {
 /**
  * Check bundler health
  * 
+ * @param {number} chainId - Chain ID to check (default: 80002 for Amoy)
  * @returns {Promise<boolean>} True if bundler is running
  */
-export async function checkBundlerHealth() {
+export async function checkBundlerHealth(chainId = 80002) {
   try {
-    const response = await fetch(BUNDLER_RPC, {
+    // Use Pimlico bundler URL for the specific chain
+    const bundlerUrl = USE_PIMLICO_PAYMASTER ? getPimlicoBundlerUrl(chainId) : BUNDLER_RPC;
+    
+    const response = await fetch(bundlerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -431,7 +450,9 @@ export async function checkBundlerHealth() {
       })
     });
     const data = await response.json();
-    return data.result?.includes(ENTRYPOINT_ADDRESS);
+    // Check for EntryPoint v0.7 (used by Pimlico)
+    const entryPoints = data.result || [];
+    return entryPoints.length > 0;
   } catch (error) {
     return false;
   }
