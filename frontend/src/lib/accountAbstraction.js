@@ -85,13 +85,49 @@ export async function buildSwapUserOp({ smartAccount, routerHub, swapCallData, c
 }
 
 /**
- * Request paymaster sponsorship from policy server
+ * Request paymaster sponsorship from Pimlico (or fallback to policy server)
  * 
  * @param {Object} userOp - UserOp object
  * @param {number} chainId - Chain ID
  * @returns {Promise<Object>} { paymasterSignature, userOpHash, remaining }
  */
 export async function requestPaymasterSponsorship(userOp, chainId) {
+  // Use Pimlico paymaster directly instead of local policy server
+  if (USE_PIMLICO_PAYMASTER) {
+    try {
+      const pimlicoUrl = getPimlicoBundlerUrl(chainId);
+      
+      // Get paymaster stub data from Pimlico
+      const response = await fetch(pimlicoUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'pm_sponsorUserOperation',
+          params: [userOp, ENTRYPOINT_ADDRESS]
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.message || 'Pimlico sponsorship denied');
+      }
+
+      // Pimlico returns paymasterAndData directly
+      return {
+        paymasterSignature: data.result?.paymasterAndData || '0x',
+        userOpHash: data.result?.userOpHash || '0x',
+        remaining: { daily: 'unlimited', monthly: 'unlimited' }
+      };
+    } catch (error) {
+      console.error('Pimlico paymaster error:', error);
+      throw new Error(`Failed to get Pimlico sponsorship: ${error.message}`);
+    }
+  }
+
+  // Fallback to local policy server
   try {
     const response = await fetch(`${POLICY_SERVER_URL}/api/paymaster/sponsor`, {
       method: 'POST',
