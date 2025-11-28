@@ -3,6 +3,6 @@
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/build",
   "framework": null,
-  "installCommand": "pnpm install --filter=frontend",
+  "installCommand": "cd frontend && npm install",
   "ignoreCommand": "git diff HEAD^ HEAD --quiet . ':(exclude)README.md' ':(exclude)*.md'"
 }
