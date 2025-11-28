@@ -1,0 +1,25 @@
+# Render Blueprint for ZeroToll Backend
+# Deploy: https://render.com/deploy
+
+services:
+  - type: web
+    name: zerotoll-backend
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: AMOY_RPC_URL
+        sync: false
+      - key: SEPOLIA_RPC_URL
+        sync: false
+      - key: PIMLICO_API_KEY
+        sync: false
+      - key: RELAYER_PRIVATE_KEY
+        sync: false
+      - key: MONGODB_URI
+        sync: false

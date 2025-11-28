@@ -52,21 +52,27 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# Security: CORS with specific origins (MUST be before including routers)
-allowed_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:3000,http://localhost:3001').split(',')
+# Security: CORS - Allow all origins for demo/hackathon
+# In production, set CORS_ORIGINS env var to restrict
+cors_origins = os.environ.get('CORS_ORIGINS', '*')
+if cors_origins == '*':
+    allowed_origins = ["*"]
+else:
+    allowed_origins = cors_origins.split(',')
+
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
+    allow_credentials=False if cors_origins == '*' else True,
     allow_origins=allowed_origins,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["*"],
 )
 
-# Security: Trusted Host
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["localhost", "127.0.0.1", "*.zerotoll.io"]
-)
+# Security: Trusted Host - disabled for demo, enable in production
+# app.add_middleware(
+#     TrustedHostMiddleware,
+#     allowed_hosts=["localhost", "127.0.0.1", "*.zerotoll.io", "*.onrender.com", "*.vercel.app"]
+# )
 
 api_router = APIRouter(prefix="/api")
 
