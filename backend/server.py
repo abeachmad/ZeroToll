@@ -53,20 +53,29 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # Security: CORS - Allow all origins for demo/hackathon
-# In production, set CORS_ORIGINS env var to restrict
-cors_origins = os.environ.get('CORS_ORIGINS', '*')
-if cors_origins == '*':
-    allowed_origins = ["*"]
-else:
-    allowed_origins = cors_origins.split(',')
-
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=False if cors_origins == '*' else True,
-    allow_origins=allowed_origins,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+# Additional CORS handler for preflight requests
+from fastapi.responses import Response
+
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(rest_of_path: str):
+    return Response(
+        content="",
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
 
 # Security: Trusted Host - disabled for demo, enable in production
 # app.add_middleware(
