@@ -25,13 +25,19 @@
 ### Step 3: Add Environment Variables
 Click **Environment** and add:
 
-| Key | Value |
-|-----|-------|
-| `AMOY_RPC_URL` | `https://polygon-amoy.g.alchemy.com/v2/YOUR_KEY` |
-| `SEPOLIA_RPC_URL` | `https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY` |
-| `PIMLICO_API_KEY` | Your Pimlico API key |
-| `RELAYER_PRIVATE_KEY` | Your relayer wallet private key |
-| `MONGODB_URI` | `mongodb+srv://...` (use MongoDB Atlas free tier) |
+| Key | Value | Required |
+|-----|-------|----------|
+| `MONGO_URL` | `mongodb+srv://user:pass@cluster.mongodb.net/zerotoll` | Optional |
+| `DB_NAME` | `zerotoll` | Optional |
+| `CORS_ORIGINS` | `*` | Yes |
+| `AMOY_ROUTERHUB` | `0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881` | Yes |
+| `SEPOLIA_ROUTERHUB` | `0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84` | Yes |
+| `AMOY_MOCKDEX_ADAPTER` | `0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1` | Yes |
+| `SEPOLIA_MOCKDEX_ADAPTER` | `0x23e2B44bC22F9940F9eb00C6C674039ed291821F` | Yes |
+| `RELAYER_PRIVATE_KEY` | Your relayer wallet private key | Optional |
+| `RELAYER_ADDRESS` | Your relayer wallet address | Optional |
+
+**Note**: RPC URLs have public fallbacks built-in, no need to set them!
 
 ### Step 4: Deploy
 Click **Create Web Service** and wait ~3-5 minutes.
