@@ -260,7 +260,7 @@ ZeroToll/
 |----------|---------|
 | [EIP7702_GASLESS_SUCCESS.md](./EIP7702_GASLESS_SUCCESS.md) | Proof of working gasless swaps with TX hashes |
 | [SECURITY.md](./SECURITY.md) | Security policy and best practices |
-| [VERCEL_ENV_SETUP.md](./VERCEL_ENV_SETUP.md) | Deploy frontend to Vercel |
+
 | [WHY_WRAPPED_TOKENS.md](./WHY_WRAPPED_TOKENS.md) | Why WETH/WPOL instead of native tokens |
 | [HOW_GASLESS_SWAPS_WORK.md](./HOW_GASLESS_SWAPS_WORK.md) | Technical explanation of gasless flow |
 | [CREDENTIALS_SETUP.md](./CREDENTIALS_SETUP.md) | Setup guide for API keys and wallets |
