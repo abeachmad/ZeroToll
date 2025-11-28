@@ -1,10 +1,10 @@
-# 🤔 Kenapa Pakai WETH/WPOL Instead of Native ETH/POL?
+# 🤔 Why Use WETH/WPOL Instead of Native ETH/POL?
 
-**Pertanyaan Bagus!** Mari saya jelaskan secara detail kenapa wrapped tokens lebih baik.
+**Great Question!** Let me explain in detail why wrapped tokens are better.
 
 ---
 
-## 📊 **FAKTANYA: Pyth Punya Price Feed untuk Native Token**
+## 📊 **THE FACT: Pyth Has Price Feeds for Native Tokens**
 
 ```javascript
 // Pyth Network price feeds
@@ -13,50 +13,50 @@ priceIds: {
   'POL/USD': '0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68153335374ec10722edd70472',
 }
 
-// Contoh query:
+// Example query:
 const ethPrice = await pythOracle.getPrice(ETH_USD_FEED);
 // Result: $3402.07 ✅
 ```
 
-**Jadi kenapa tidak pakai native langsung?** 🤔
+**So why not use native directly?** 🤔
 
 ---
 
-## ❌ **MASALAH DENGAN NATIVE TOKEN**
+## ❌ **PROBLEMS WITH NATIVE TOKENS**
 
-### **1. Native Token BUKAN ERC20** 
+### **1. Native Token is NOT ERC20**
 
 ```solidity
-// ❌ TIDAK BISA - Native ETH tidak punya interface ERC20
+// ❌ NOT POSSIBLE - Native ETH doesn't have ERC20 interface
 IERC20(address(0)).transfer(recipient, amount);  // Error!
 IERC20(address(0)).approve(router, amount);      // Error!
 IERC20(address(0)).balanceOf(user);              // Error!
 
-// ✅ BISA - WETH adalah ERC20 standar
+// ✅ WORKS - WETH is standard ERC20
 IERC20(WETH).transfer(recipient, amount);        // OK ✅
 IERC20(WETH).approve(router, amount);            // OK ✅
 IERC20(WETH).balanceOf(user);                    // OK ✅
 ```
 
-**Implikasi:**
-- Router/Adapter harus handle 2 case berbeda (native vs ERC20)
-- Approval mechanism tidak work untuk native
-- Transfer logic berbeda (call vs transferFrom)
+**Implications:**
+- Router/Adapter must handle 2 different cases (native vs ERC20)
+- Approval mechanism doesn't work for native
+- Transfer logic is different (call vs transferFrom)
 
 ---
 
 ### **2. Smart Contract Complexity**
 
-#### **Dengan Native Token (Complex ❌):**
+#### **With Native Token (Complex ❌):**
 ```solidity
 function swap(address tokenIn, address tokenOut, uint256 amountIn) external payable {
     if (tokenIn == address(0)) {
-        // Case 1: Native ETH sebagai input
+        // Case 1: Native ETH as input
         require(msg.value == amountIn, "Wrong ETH amount");
-        // Tidak bisa pull dari user, harus kirim via msg.value
+        // Can't pull from user, must send via msg.value
         
     } else {
-        // Case 2: ERC20 sebagai input
+        // Case 2: ERC20 as input
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
         require(msg.value == 0, "Don't send ETH");
     }
@@ -64,24 +64,24 @@ function swap(address tokenIn, address tokenOut, uint256 amountIn) external paya
     // Calculate output...
     
     if (tokenOut == address(0)) {
-        // Case 3: Native ETH sebagai output
+        // Case 3: Native ETH as output
         (bool success, ) = recipient.call{value: amountOut}("");
         require(success, "ETH transfer failed");
         
     } else {
-        // Case 4: ERC20 sebagai output
+        // Case 4: ERC20 as output
         IERC20(tokenOut).safeTransfer(recipient, amountOut);
     }
 }
 ```
 
-**Masalah:**
+**Problems:**
 - 4 different code paths (2x2 combinations)
-- Lebih banyak bug potential
-- Gas lebih mahal (if-else branching)
+- More bug potential
+- More expensive gas (if-else branching)
 - Harder to test (need to test all combinations)
 
-#### **Dengan Wrapped Token (Simple ✅):**
+#### **With Wrapped Token (Simple ✅):**
 ```solidity
 function swap(address tokenIn, address tokenOut, uint256 amountIn) external {
     // ✅ SIMPLE - Always ERC20
@@ -92,8 +92,8 @@ function swap(address tokenIn, address tokenOut, uint256 amountIn) external {
     IERC20(tokenOut).safeTransfer(recipient, amountOut);
 }
 
-// ✅ Hanya 1 code path
-// ✅ Lebih simple, less bugs
+// ✅ Only 1 code path
+// ✅ Simpler, less bugs
 // ✅ Gas efficient
 // ✅ Easy to test
 ```
@@ -103,22 +103,22 @@ function swap(address tokenIn, address tokenOut, uint256 amountIn) external {
 ### **3. Approval Mechanism**
 
 ```javascript
-// ❌ NATIVE - User tidak bisa approve native ETH
-// User harus kirim exact amount via transaction
+// ❌ NATIVE - User can't approve native ETH
+// User must send exact amount via transaction
 const tx = await router.swap(ETH, USDC, amount, {
-  value: amount  // ⚠️ Harus kirim langsung
+  value: amount  // ⚠️ Must send directly
 });
 
-// Problem: Bagaimana jika swap gagal? ETH sudah terkirim!
+// Problem: What if swap fails? ETH already sent!
 ```
 
 ```javascript
-// ✅ WRAPPED - User approve dulu, swap kemudian
+// ✅ WRAPPED - User approves first, swaps later
 await weth.approve(router, amount);  // Step 1: Approve
 await router.swap(WETH, USDC, amount);  // Step 2: Swap
 
-// ✅ Jika swap gagal, WETH tidak terkirim (safer!)
-// ✅ User bisa approve unlimited (better UX)
+// ✅ If swap fails, WETH is not sent (safer!)
+// ✅ User can approve unlimited (better UX)
 ```
 
 ---
@@ -126,32 +126,32 @@ await router.swap(WETH, USDC, amount);  // Step 2: Swap
 ### **4. DeFi Composability**
 
 ```solidity
-// ❌ NATIVE - Tidak kompatibel dengan DEX
-Uniswap.swap(address(0), USDC, amount);  // Error! Uniswap tidak terima native
+// ❌ NATIVE - Not compatible with DEXes
+Uniswap.swap(address(0), USDC, amount);  // Error! Uniswap doesn't accept native
 
-// ✅ WRAPPED - Kompatibel dengan semua DEX
+// ✅ WRAPPED - Compatible with all DEXes
 Uniswap.swap(WETH, USDC, amount);  // OK ✅
 SushiSwap.swap(WETH, DAI, amount);  // OK ✅
 Curve.exchange(WETH, USDT, amount);  // OK ✅
 ```
 
-**SEMUA DEX menggunakan WETH/WPOL, bukan native!** Ini standard industri.
+**ALL DEXes use WETH/WPOL, not native!** This is the industry standard.
 
 ---
 
 ### **5. Atomic Swaps & Flash Loans**
 
 ```solidity
-// ❌ NATIVE - Tidak bisa atomic multi-step
+// ❌ NATIVE - Can't do atomic multi-step
 function complexStrategy() external payable {
-    // Step 1: Swap ETH → USDC (kirim ETH)
+    // Step 1: Swap ETH → USDC (send ETH)
     router.swap{value: 1 ether}(ETH, USDC, 1 ether);
     
-    // Step 2: Swap USDC → DAI (tidak ada ETH lagi!)
-    // ❌ Masalah: ETH sudah terkirim di step 1, tidak bisa rollback
+    // Step 2: Swap USDC → DAI (no more ETH!)
+    // ❌ Problem: ETH already sent in step 1, can't rollback
 }
 
-// ✅ WRAPPED - Bisa atomic multi-step
+// ✅ WRAPPED - Can do atomic multi-step
 function complexStrategy() external {
     weth.approve(router, type(uint256).max);  // Approve once
     
@@ -161,15 +161,15 @@ function complexStrategy() external {
     // Step 2: Swap USDC → DAI
     router.swap(USDC, DAI, amount);
     
-    // ✅ Semua atomic, bisa rollback jika gagal
+    // ✅ All atomic, can rollback if failed
 }
 ```
 
 ---
 
-## ✅ **KEUNTUNGAN WRAPPED TOKENS**
+## ✅ **ADVANTAGES OF WRAPPED TOKENS**
 
-### **1. Standardisasi (ERC20)**
+### **1. Standardization (ERC20)**
 ```solidity
 interface IERC20 {
     function transfer(address to, uint256 amount) external returns (bool);
@@ -179,8 +179,8 @@ interface IERC20 {
 }
 
 // ✅ WETH/WPOL implement full ERC20 interface
-// ✅ Work dengan semua tools/libraries (OpenZeppelin, etc.)
-// ✅ Compatible dengan semua DEX
+// ✅ Works with all tools/libraries (OpenZeppelin, etc.)
+// ✅ Compatible with all DEXes
 ```
 
 ### **2. Gas Efficiency**
@@ -207,15 +207,15 @@ await router.swap(WETH, USDC, ...);
 
 ### **4. Better UX**
 ```javascript
-// Native: User harus tahu exact amount di-advance
+// Native: User must know exact amount in advance
 const tx = await swap({value: exactAmount});
 
-// Wrapped: User approve once, swap many times
+// Wrapped: User approves once, swaps many times
 await weth.approve(router, UNLIMITED);
 await router.swap(WETH, USDC, 1);   // Swap 1
 await router.swap(WETH, DAI, 2);    // Swap 2
 await router.swap(WETH, LINK, 3);   // Swap 3
-// ✅ No need multiple approvals
+// ✅ No need for multiple approvals
 ```
 
 ---
@@ -249,7 +249,7 @@ async function swapTokenToNative(amountUSDC) {
 }
 ```
 
-**Frontend dapat auto-handle wrapping!** User tidak perlu tahu detail teknis.
+**Frontend can auto-handle wrapping!** Users don't need to know the technical details.
 
 ---
 
@@ -257,33 +257,33 @@ async function swapTokenToNative(amountUSDC) {
 
 ### **Uniswap V2/V3:**
 ```solidity
-// Uniswap TIDAK menerima native ETH
-// Semua pair menggunakan WETH
+// Uniswap does NOT accept native ETH
+// All pairs use WETH
 
 // Pair addresses:
 WETH/USDC: 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640
 WETH/DAI:  0x60594a405d53811d3BC4766596EFD80fd545A270
 WETH/USDT: 0x4e68Ccd3E89f51C3074ca5072bbAC773960dFa36
 
-// ✅ Semua pakai WETH, bukan ETH
+// ✅ All use WETH, not ETH
 ```
 
 ### **SushiSwap:**
 ```solidity
-// Same - semua pair pakai WETH
+// Same - all pairs use WETH
 WETH/USDC: 0x397FF1542f962076d0BFE58eA045FfA2d347ACa0
 ```
 
 ### **Curve:**
 ```solidity
-// Same - even stablecoin pools pakai WETH untuk ETH exposure
+// Same - even stablecoin pools use WETH for ETH exposure
 ```
 
-**Kesimpulan: ENTIRE DeFi ecosystem pakai wrapped tokens!**
+**Conclusion: The ENTIRE DeFi ecosystem uses wrapped tokens!**
 
 ---
 
-## 🎯 **IMPLEMENTASI ZEROTOLL**
+## 🎯 **ZEROTOLL IMPLEMENTATION**
 
 ### **Current Design (Correct ✅):**
 ```javascript
@@ -312,7 +312,7 @@ await oracle.setPriceIds([WETH], [ETH_USD_FEED]);
 
 ### **Alternative Design (Complex ❌):**
 ```solidity
-// Jika pakai native
+// If using native
 function swap(address tokenIn, address tokenOut, uint256 amountIn) 
     external payable 
 {
@@ -335,15 +335,15 @@ function swap(address tokenIn, address tokenOut, uint256 amountIn)
 
 ---
 
-## 💡 **KESIMPULAN**
+## 💡 **CONCLUSION**
 
-### **Kenapa WETH/WPOL, bukan ETH/POL:**
+### **Why WETH/WPOL instead of ETH/POL:**
 
-1. ✅ **ERC20 Standard** - Compatible dengan semua DeFi protocols
+1. ✅ **ERC20 Standard** - Compatible with all DeFi protocols
 2. ✅ **Simpler Code** - 1 code path instead of 4
 3. ✅ **Safer** - Approval mechanism prevents loss
 4. ✅ **Gas Efficient** - Less branching = cheaper
-5. ✅ **Industry Standard** - Semua DEX pakai wrapped
+5. ✅ **Industry Standard** - All DEXes use wrapped tokens
 6. ✅ **Same Price** - WETH = ETH (1:1 peg via Pyth)
 7. ✅ **Better UX** - Approve once, swap many times
 
@@ -354,7 +354,7 @@ function swap(address tokenIn, address tokenOut, uint256 amountIn)
 const ethPrice = await oracle.getPrice(ETH_USD_FEED);   // $3402.07
 const wethPrice = await oracle.getPrice(WETH_ADDRESS);  // $3402.07
 
-// ✅ SAMA! WETH is just wrapped ETH (1:1 convertible)
+// ✅ SAME! WETH is just wrapped ETH (1:1 convertible)
 ```
 
 ### **User Experience:**
@@ -367,16 +367,16 @@ Backend does:
 2. Swap WETH → USDC (using WETH price = ETH price)
 3. (Optional) Unwrap if user wants native back
 
-✅ User tidak perlu tahu WETH exists
-✅ Frontend handle wrapping seamlessly
-✅ Contract tetap simple & safe
+✅ User doesn't need to know WETH exists
+✅ Frontend handles wrapping seamlessly
+✅ Contract stays simple & safe
 ```
 
 ---
 
 ## 🚀 **RECOMMENDATION**
 
-**KEEP USING WRAPPED TOKENS!** Ini bukan kekurangan, tapi **best practice industry standard**.
+**KEEP USING WRAPPED TOKENS!** This is not a limitation, but **industry best practice**.
 
 **Alternative (if you insist on native):**
 ```solidity
@@ -394,4 +394,4 @@ function swapNative(address tokenOut, uint256 minOut) external payable {
 // - Contract internally uses WETH (safer)
 ```
 
-**Tapi ini OPTIONAL!** Current design sudah optimal. 🎯
+**But this is OPTIONAL!** Current design is already optimal. 🎯

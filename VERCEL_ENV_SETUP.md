@@ -17,9 +17,9 @@ REACT_APP_BACKEND_URL=https://your-backend-url.com
 
 ### Pimlico API Key (for EIP-7702 Gasless Transactions)
 ```
-REACT_APP_PIMLICO_API_KEY=pim_SBVmcVZ3jZgcvmDWUSE6QR
+REACT_APP_PIMLICO_API_KEY=your_pimlico_api_key_here
 ```
-**Note:** This is the current API key. Get your own from https://dashboard.pimlico.io/ for production.
+**Note:** Get your API key from https://dashboard.pimlico.io/ (free tier: 1,000 UserOps/month).
 
 ---
 
@@ -56,10 +56,10 @@ Copy all of these to Vercel:
 
 ```
 REACT_APP_BACKEND_URL=https://your-backend-url.com
-REACT_APP_PIMLICO_API_KEY=pim_SBVmcVZ3jZgcvmDWUSE6QR
+REACT_APP_PIMLICO_API_KEY=your_pimlico_api_key_here
 REACT_APP_RPC_AMOY=https://rpc-amoy.polygon.technology
 REACT_APP_RPC_SEPOLIA=https://ethereum-sepolia-rpc.publicnode.com
-REACT_APP_WALLETCONNECT_PROJECT_ID=demo-project-id
+REACT_APP_WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id
 GENERATE_SOURCEMAP=false
 IGNORE_WARNINGS=true
 ```
@@ -115,7 +115,7 @@ If you just want to get the frontend deployed quickly:
 
 ```
 REACT_APP_BACKEND_URL=http://localhost:8000
-REACT_APP_PIMLICO_API_KEY=pim_SBVmcVZ3jZgcvmDWUSE6QR
+REACT_APP_PIMLICO_API_KEY=your_pimlico_api_key_here
 REACT_APP_RPC_AMOY=https://rpc-amoy.polygon.technology
 REACT_APP_RPC_SEPOLIA=https://ethereum-sepolia-rpc.publicnode.com
 GENERATE_SOURCEMAP=false

@@ -4,6 +4,5 @@
   "outputDirectory": "build",
   "framework": null,
   "installCommand": "npm install",
-  "rootDirectory": "frontend",
-  "ignoreCommand": "git diff HEAD^ HEAD --quiet . ':(exclude)README.md' ':(exclude)*.md'"
+  "rootDirectory": "frontend"
 }
