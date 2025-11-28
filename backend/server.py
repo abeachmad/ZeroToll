@@ -165,7 +165,15 @@ async def root():
 @api_router.options("/quote")
 async def quote_options():
     """Handle CORS preflight for quote endpoint"""
-    return {}
+    from fastapi.responses import Response
+    return Response(
+        content="",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
 
 @api_router.post("/quote", response_model=QuoteResponse)
 async def get_quote(request: QuoteRequest, req: Request):
