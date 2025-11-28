@@ -1,17 +1,17 @@
 /**
  * useGaslessSwap Hook
  * 
- * React hook for executing gasless swaps using permissionless.js + Pimlico
+ * React hook for executing gasless swaps using EIP-7702 + Pimlico
  */
 
 import { useState, useCallback } from 'react';
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
 import {
-  createGaslessAccount,
+  create7702SmartAccount,
   executeGaslessTransaction,
   checkPimlicoAvailability,
   SUPPORTED_CHAINS
-} from '../lib/gasless';
+} from '../lib/eip7702';
 
 export function useGaslessSwap() {
   const { address, chain } = useAccount();
@@ -69,17 +69,18 @@ export function useGaslessSwap() {
         throw new Error('Pimlico bundler not available');
       }
 
-      // Create smart account
+      // Create EIP-7702 smart account (keeps your EOA address!)
       setStatus('creating');
       setStatusMessage('Creating smart account...');
       
-      const smartAccount = await createGaslessAccount(
+      const smartAccount = await create7702SmartAccount(
         walletClient,
         publicClient,
         chain.id
       );
       
       console.log('✅ Smart account:', smartAccount.address);
+      console.log('   Your EOA:', address);
 
       // Prepare the call
       const calls = [{
@@ -95,7 +96,10 @@ export function useGaslessSwap() {
       const transactionHash = await executeGaslessTransaction(
         smartAccount,
         calls,
-        chain.id
+        null, // bundlerClient - will be created inside
+        publicClient,
+        chain.id,
+        walletClient
       );
 
       setTxHash(transactionHash);
@@ -129,7 +133,7 @@ export function useGaslessSwap() {
     setStatusMessage('Approving token...');
 
     try {
-      const smartAccount = await createGaslessAccount(
+      const smartAccount = await create7702SmartAccount(
         walletClient,
         publicClient,
         chain.id
@@ -147,7 +151,10 @@ export function useGaslessSwap() {
       const transactionHash = await executeGaslessTransaction(
         smartAccount,
         calls,
-        chain.id
+        null,
+        publicClient,
+        chain.id,
+        walletClient
       );
 
       setTxHash(transactionHash);
