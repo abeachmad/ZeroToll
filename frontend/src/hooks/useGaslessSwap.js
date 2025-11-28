@@ -1,23 +1,22 @@
 /**
  * useGaslessSwap Hook
  * 
- * React hook for executing gasless swaps using Account Abstraction (ERC-4337)
+ * React hook for executing gasless swaps using permissionless.js + Pimlico
  */
 
 import { useState, useCallback } from 'react';
-import { useAccount, useWalletClient } from 'wagmi';
-import { ethers } from 'ethers';
+import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
 import {
-  executeGaslessSwap,
-  executeGaslessApproval,
-  checkPolicyServerHealth,
-  checkBundlerHealth,
-  getSmartAccountAddress
-} from '../lib/accountAbstraction';
+  createGaslessAccount,
+  executeGaslessTransaction,
+  checkPimlicoAvailability,
+  SUPPORTED_CHAINS
+} from '../lib/gasless';
 
 export function useGaslessSwap() {
   const { address, chain } = useAccount();
   const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
   
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState(null);
@@ -30,78 +29,74 @@ export function useGaslessSwap() {
    */
   const checkAvailability = useCallback(async () => {
     try {
-      const [policyServerOk, bundlerOk] = await Promise.all([
-        checkPolicyServerHealth(),
-        checkBundlerHealth()
-      ]);
-
+      if (!chain?.id || !SUPPORTED_CHAINS[chain.id]) {
+        return { available: false, policyServer: false, bundler: false };
+      }
+      
+      const health = await checkPimlicoAvailability(chain.id);
       return {
-        available: policyServerOk && bundlerOk,
-        policyServer: policyServerOk,
-        bundler: bundlerOk
+        available: health.available,
+        policyServer: true, // Not needed with Pimlico
+        bundler: health.available
       };
     } catch (err) {
       console.error('Availability check failed:', err);
-      return {
-        available: false,
-        policyServer: false,
-        bundler: false
-      };
+      return { available: false, policyServer: false, bundler: false };
     }
-  }, []);
+  }, [chain]);
 
   /**
    * Execute a gasless swap
-   * 
-   * @param {Object} params
-   * @param {string} params.routerHub - RouterHub contract address
-   * @param {string} params.swapCallData - Encoded executeRoute call
-   * @returns {Promise<string>} Transaction hash
    */
   const executeSwap = useCallback(async ({ routerHub, swapCallData }) => {
-    if (!address || !chain || !walletClient) {
+    if (!address || !walletClient || !publicClient || !chain) {
       throw new Error('Wallet not connected');
+    }
+
+    if (!SUPPORTED_CHAINS[chain.id]) {
+      throw new Error(`Chain ${chain.id} not supported for gasless swaps`);
     }
 
     setIsLoading(true);
     setError(null);
-    setTxHash(null);
-    setStatus('building');
-    setStatusMessage('Preparing gasless swap...');
+    setStatus('preparing');
+    setStatusMessage('Preparing gasless transaction...');
 
     try {
-      // Check availability first
+      // Check availability
       const availability = await checkAvailability();
       if (!availability.available) {
-        const missing = [];
-        if (!availability.policyServer) missing.push('Policy Server');
-        if (!availability.bundler) missing.push('Bundler');
-        throw new Error(`Services unavailable: ${missing.join(', ')}`);
+        throw new Error('Pimlico bundler not available');
       }
 
-      // Get smart account address
-      const smartAccount = getSmartAccountAddress(address);
+      // Create smart account
+      setStatus('creating');
+      setStatusMessage('Creating smart account...');
+      
+      const smartAccount = await createGaslessAccount(
+        walletClient,
+        publicClient,
+        chain.id
+      );
+      
+      console.log('✅ Smart account:', smartAccount.address);
 
-      // Create ethers provider and signer from wagmi
-      const provider = new ethers.BrowserProvider(walletClient);
-      const signer = await provider.getSigner();
+      // Prepare the call
+      const calls = [{
+        to: routerHub,
+        value: 0n,
+        data: swapCallData
+      }];
 
-      // Status update callback
-      const onStatusUpdate = (newStatus, message) => {
-        setStatus(newStatus);
-        setStatusMessage(message);
-      };
-
-      // Execute gasless swap
-      const transactionHash = await executeGaslessSwap({
+      // Execute gasless transaction
+      setStatus('executing');
+      setStatusMessage('Executing gasless swap...');
+      
+      const transactionHash = await executeGaslessTransaction(
         smartAccount,
-        routerHub,
-        swapCallData,
-        chainId: chain.id,
-        provider,
-        signer,
-        onStatusUpdate
-      });
+        calls,
+        chain.id
+      );
 
       setTxHash(transactionHash);
       setStatus('success');
@@ -118,66 +113,46 @@ export function useGaslessSwap() {
       setIsLoading(false);
       throw err;
     }
-  }, [address, chain, walletClient, checkAvailability]);
+  }, [address, walletClient, publicClient, chain, checkAvailability]);
 
   /**
-   * Execute a gasless token approval
-   * 
-   * @param {Object} params
-   * @param {string} params.tokenAddress - ERC20 token address
-   * @param {string} params.spenderAddress - Spender address (RouterHub)
-   * @param {string} params.amount - Amount to approve
-   * @returns {Promise<string>} Transaction hash
+   * Execute a gasless approval
    */
-  const executeApproval = useCallback(async ({ tokenAddress, spenderAddress, amount }) => {
-    if (!address || !chain || !walletClient) {
+  const executeApproval = useCallback(async ({ tokenAddress, spender, amount }) => {
+    if (!address || !walletClient || !publicClient || !chain) {
       throw new Error('Wallet not connected');
     }
 
     setIsLoading(true);
     setError(null);
-    setTxHash(null);
-    setStatus('building');
-    setStatusMessage('Preparing gasless approval...');
+    setStatus('approving');
+    setStatusMessage('Approving token...');
 
     try {
-      // Check availability first
-      const availability = await checkAvailability();
-      if (!availability.available) {
-        const missing = [];
-        if (!availability.policyServer) missing.push('Policy Server');
-        if (!availability.bundler) missing.push('Bundler');
-        throw new Error(`Services unavailable: ${missing.join(', ')}`);
-      }
+      const smartAccount = await createGaslessAccount(
+        walletClient,
+        publicClient,
+        chain.id
+      );
 
-      // Get smart account address
-      const smartAccount = getSmartAccountAddress(address);
+      // ERC20 approve call
+      const approveData = `0x095ea7b3${spender.slice(2).padStart(64, '0')}${BigInt(amount).toString(16).padStart(64, '0')}`;
+      
+      const calls = [{
+        to: tokenAddress,
+        value: 0n,
+        data: approveData
+      }];
 
-      // Create ethers provider and signer from wagmi
-      const provider = new ethers.BrowserProvider(walletClient);
-      const signer = await provider.getSigner();
-
-      // Status update callback
-      const onStatusUpdate = (newStatus, message) => {
-        setStatus(newStatus);
-        setStatusMessage(message);
-      };
-
-      // Execute gasless approval
-      const transactionHash = await executeGaslessApproval({
+      const transactionHash = await executeGaslessTransaction(
         smartAccount,
-        tokenAddress,
-        spenderAddress,
-        amount,
-        chainId: chain.id,
-        provider,
-        signer,
-        onStatusUpdate
-      });
+        calls,
+        chain.id
+      );
 
       setTxHash(transactionHash);
       setStatus('success');
-      setStatusMessage('Approval completed (no gas fee)!');
+      setStatusMessage('Approval completed!');
       setIsLoading(false);
 
       return transactionHash;
@@ -190,37 +165,23 @@ export function useGaslessSwap() {
       setIsLoading(false);
       throw err;
     }
-  }, [address, chain, walletClient, checkAvailability]);
-
-  /**
-   * Reset hook state
-   */
-  const reset = useCallback(() => {
-    setIsLoading(false);
-    setStatus(null);
-    setStatusMessage('');
-    setError(null);
-    setTxHash(null);
-  }, []);
+  }, [address, walletClient, publicClient, chain]);
 
   return {
     executeSwap,
     executeApproval,
     checkAvailability,
-    reset,
     isLoading,
     status,
     statusMessage,
     error,
     txHash,
-    // Convenience flags
-    isBuilding: status === 'building',
-    isRequesting: status === 'requesting',
-    isSponsoring: status === 'sponsoring',
-    isSigning: status === 'signing',
-    isSubmitting: status === 'submitting',
-    isPending: status === 'pending',
-    isSuccess: status === 'success',
-    isError: status === 'error'
+    reset: useCallback(() => {
+      setIsLoading(false);
+      setStatus(null);
+      setStatusMessage('');
+      setError(null);
+      setTxHash(null);
+    }, [])
   };
 }
