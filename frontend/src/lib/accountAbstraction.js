@@ -97,6 +97,28 @@ export async function requestPaymasterSponsorship(userOp, chainId) {
     try {
       const pimlicoUrl = getPimlicoBundlerUrl(chainId);
       
+      // Convert v0.6 UserOp to v0.7 format for Pimlico
+      // v0.7 uses factory/factoryData instead of initCode
+      // v0.7 uses paymaster/paymasterData instead of paymasterAndData
+      const userOpV7 = {
+        sender: userOp.sender,
+        nonce: userOp.nonce,
+        callData: userOp.callData,
+        callGasLimit: userOp.callGasLimit,
+        verificationGasLimit: userOp.verificationGasLimit,
+        preVerificationGas: userOp.preVerificationGas,
+        maxFeePerGas: userOp.maxFeePerGas,
+        maxPriorityFeePerGas: userOp.maxPriorityFeePerGas,
+        signature: userOp.signature,
+        // v0.7 fields (empty for existing accounts)
+        factory: null,
+        factoryData: '0x',
+        paymaster: null,
+        paymasterVerificationGasLimit: '0x0',
+        paymasterPostOpGasLimit: '0x0',
+        paymasterData: '0x'
+      };
+      
       // Get paymaster stub data from Pimlico
       const response = await fetch(pimlicoUrl, {
         method: 'POST',
@@ -105,7 +127,7 @@ export async function requestPaymasterSponsorship(userOp, chainId) {
           jsonrpc: '2.0',
           id: 1,
           method: 'pm_sponsorUserOperation',
-          params: [userOp, ENTRYPOINT_ADDRESS]
+          params: [userOpV7, ENTRYPOINT_ADDRESS]
         })
       });
 
@@ -115,9 +137,10 @@ export async function requestPaymasterSponsorship(userOp, chainId) {
         throw new Error(data.error.message || 'Pimlico sponsorship denied');
       }
 
-      // Pimlico returns paymasterAndData directly
+      // Pimlico returns paymaster data in v0.7 format
       return {
-        paymasterSignature: data.result?.paymasterAndData || '0x',
+        paymasterSignature: data.result?.paymasterData || data.result?.paymasterAndData || '0x',
+        paymaster: data.result?.paymaster,
         userOpHash: data.result?.userOpHash || '0x',
         remaining: { daily: 'unlimited', monthly: 'unlimited' }
       };
