@@ -1,8 +1,13 @@
-run = "cd backend && pip install -r requirements.txt && uvicorn server:app --host 0.0.0.0 --port 8080"
+run = "cd backend && python -m pip install -r requirements.txt && python -m uvicorn server:app --host 0.0.0.0 --port 8080"
 entrypoint = "backend/server.py"
+modules = ["python-3.11"]
 
 [nix]
 channel = "stable-23_11"
 
+[env]
+PYTHONPATH = "${REPL_HOME}/backend"
+
 [deployment]
-run = ["sh", "-c", "cd backend && uvicorn server:app --host 0.0.0.0 --port 8080"]
+run = ["sh", "-c", "cd backend && python -m uvicorn server:app --host 0.0.0.0 --port 8080"]
+deploymentTarget = "cloudrun"
