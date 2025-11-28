@@ -9,10 +9,6 @@
 
 ---
 
-> **Polygon Buildathon Submission** - Advanced DeFi Track
-
----
-
 ## ✨ What is ZeroToll?
 
 ZeroToll is a **next-generation gasless DEX** that eliminates the gas friction problem in DeFi through **EIP-7702 smart account upgrades**:
@@ -470,3 +466,4 @@ MIT License - See [LICENSE](./LICENSE) file for details.
 ---
 
 **⭐ If you find ZeroToll useful, please star this repository! ⭐**
+
