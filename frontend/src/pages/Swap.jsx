@@ -16,7 +16,7 @@ import arbitrumSepoliaTokens from '../config/tokenlists/zerotoll.tokens.arbitrum
 import optimismSepoliaTokens from '../config/tokenlists/zerotoll.tokens.optimism-sepolia.json';
 import contractsConfig from '../config/contracts.json';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 const API = `${BACKEND_URL}/api`;
 
 // RouterHub addresses per chain (UPGRADED Nov 6-8, 2025 - Bug Fix: Transfer to user)

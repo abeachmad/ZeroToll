@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { TrendingUp, Zap, DollarSign, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 
 const LiveMetrics = () => {
   const [stats, setStats] = useState(null);
