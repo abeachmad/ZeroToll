@@ -1,6 +1,6 @@
 # ZeroToll 🚀
 
-**Gasless DeFi with EIP-7702 Smart Accounts - Zero Hardcoded Values**
+**Gasless DeFi with EIP-7702 Smart Accounts**
 
 > Next-generation DeFi protocol enabling **true gasless swaps** with EIP-7702 account upgrades.
 > Swap tokens without native gas. Pay fees in ANY token. Fully on-chain.
@@ -90,21 +90,24 @@ That's it! No complex setup needed. 🎉
 
 **Adapter Liquidity**: ~11 WPOL + ~39 USDC
 
-### Ethereum Sepolia (ChainID: 11155111)
+### Ethereum Sepolia (ChainID: 11155111) - EIP-7702 WORKING ✅
 
 | Contract | Address | Explorer |
 |----------|---------|----------|
 | RouterHub | `0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84` | [View](https://sepolia.etherscan.io/address/0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84) |
 | MockDEXAdapter | `0x86D1AA2228F3ce649d415F19fC71134264D0E84B` | [View](https://sepolia.etherscan.io/address/0x86D1AA2228F3ce649d415F19fC71134264D0E84B) |
-| MultiTokenPythOracle | `0x1240c97bc33f7635b8e25C721fF6D05d2bfC44Db` | [View](https://sepolia.etherscan.io/address/0x1240c97bc33f7635b8e25C721fF6D05d2bfC44Db) |
+| USDC | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` | [View](https://sepolia.etherscan.io/address/0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238) |
+| WETH | `0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14` | [View](https://sepolia.etherscan.io/address/0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14) |
 
-**Adapter Liquidity**: ~0.05 WETH + ~6,158 USDC
+**Adapter Liquidity**: ~0.1 WETH + ~53 USDC
 
 ---
 
 ## ✅ Proven Gasless Transactions
 
-EIP-7702 gasless swaps are **WORKING** on Polygon Amoy! Here are verified transactions:
+EIP-7702 gasless swaps are **WORKING** on both Polygon Amoy and Ethereum Sepolia!
+
+### Polygon Amoy
 
 | Swap | TX Hash | Explorer |
 |------|---------|----------|
@@ -112,7 +115,15 @@ EIP-7702 gasless swaps are **WORKING** on Polygon Amoy! Here are verified transa
 | 0.3 USDC → WPOL | `0x3cab5a0a0d66478689ee5d5c8c045ef837912b211e05987879608cda41bba891` | [View](https://amoy.polygonscan.com/tx/0x3cab5a0a0d66478689ee5d5c8c045ef837912b211e05987879608cda41bba891) |
 | 1.0 WPOL → USDC | `0x4d75400d9914ffb9846cfec825fd00fec67311155407dff6775c1897d3e1aa36` | [View](https://amoy.polygonscan.com/tx/0x4d75400d9914ffb9846cfec825fd00fec67311155407dff6775c1897d3e1aa36) |
 
-**Gas spent by user: ZERO POL** - All gas sponsored by Pimlico paymaster!
+### Ethereum Sepolia
+
+| Swap | TX Hash | Explorer |
+|------|---------|----------|
+| 1 USDC → WETH | `0x97ad117e29444d9ff26e15ea1d25667a803a25086347f814ab8f2621553f1019` | [View](https://sepolia.etherscan.io/tx/0x97ad117e29444d9ff26e15ea1d25667a803a25086347f814ab8f2621553f1019) |
+| 1 USDC → WETH | `0x0efe5fefdb17eb7fd393ed02bb5785f4f8db7ee64567eb226cd4c89dff0ed76b` | [View](https://sepolia.etherscan.io/tx/0x0efe5fefdb17eb7fd393ed02bb5785f4f8db7ee64567eb226cd4c89dff0ed76b) |
+| 0.0005 WETH → USDC | `0x829f63cee7df4e8d919a97a5cea57868734a48828072b627cba622e6a431452a` | [View](https://sepolia.etherscan.io/tx/0x829f63cee7df4e8d919a97a5cea57868734a48828072b627cba622e6a431452a) |
+
+**Gas spent by user: ZERO** - All gas sponsored by Pimlico paymaster on both networks!
 
 See [EIP7702_GASLESS_SUCCESS.md](./EIP7702_GASLESS_SUCCESS.md) for full transaction list.
 
@@ -160,17 +171,59 @@ See [EIP7702_GASLESS_SUCCESS.md](./EIP7702_GASLESS_SUCCESS.md) for full transact
 - Full control over sponsorship logic
 - Privacy - no third-party tracking
 
+**Cost Savings**:
+- Pimlico: $0.001 per UserOp → $1,000 for 1M swaps
+- Self-hosted: $50/month + gas → ~$500 for 1M swaps
+- **Savings: 50%** 💰
 ---
 
 ### Phase 3: Community Liquidity Pool 🔵 FUTURE
 
 **Goal**: Fully decentralized, sustainable, community-owned paymaster
 
-**Concept**:
-- PaymasterVault (ERC-4626) - LPs deposit POL/ETH, earn yield
-- GasRefiller - Converts swap fees → native token, auto-refills paymaster
-- Rewards Distributor - Bonus for long-term LPs
+**Architecture**:
+```
+┌─────────────────────────────────────────┐
+│ Community Paymaster Liquidity Pool      │
+├─────────────────────────────────────────┤
+│ 1. PaymasterVault (ERC-4626)           │
+│    - LPs deposit POL/ETH                │
+│    - Earn yield from gas fees           │
+│    - Withdraw anytime                   │
+│                                         │
+│ 2. GasRefiller (Automation)            │
+│    - Converts swap fees → native token │
+│    - Auto-refills paymaster             │
+│                                         │
+│ 3. Rewards Distributor                 │
+│    - Distributes $ZEROTOLL tokens       │
+│    - Bonus for long-term LPs            │
+└─────────────────────────────────────────┘
+```
 
+**Economic Model**:
+```
+Example: 10,000 gasless swaps/day
+
+Gas cost per swap: $0.001
+Daily gas cost: $10
+Monthly gas cost: $300
+
+Fee collected (0.5% on $100 avg swap): $0.50
+Daily fee revenue: $5,000
+Monthly fee revenue: $150,000
+
+LP Pool needed: $1,000 (covers 3 months gas)
+Protocol takes 80%: $120,000
+LPs get 20%: $30,000
+LP APR: 3,000% 🤯
+```
+
+**Benefits**:
+- ✅ **Fully decentralized** - No single point of failure
+- ✅ **Sustainable** - Community funds itself
+- ✅ **Competitive moat** - First decentralized gasless DEX
+- ✅ **Token utility** - $ZEROTOLL for rewards
 ---
 
 ## 💰 Why Adapters Need Funds

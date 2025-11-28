@@ -2,11 +2,47 @@
 
 ## Summary
 
-EIP-7702 gasless transactions are **WORKING** on Polygon Amoy testnet!
+EIP-7702 gasless transactions are **WORKING** on both **Polygon Amoy** and **Ethereum Sepolia** testnets!
 
 Users can swap tokens **without paying any gas fees** - all gas is sponsored by the Pimlico paymaster.
 
-## Test Results
+---
+
+## Ethereum Sepolia Results (November 28, 2025)
+
+### Successful Gasless Swaps (USDC -> WETH)
+
+| Amount | TX Hash | Explorer |
+|--------|---------|----------|
+| 1 USDC | `0x97ad117e29444d9ff26e15ea1d25667a803a25086347f814ab8f2621553f1019` | [View](https://sepolia.etherscan.io/tx/0x97ad117e29444d9ff26e15ea1d25667a803a25086347f814ab8f2621553f1019) |
+| 1 USDC | `0x0efe5fefdb17eb7fd393ed02bb5785f4f8db7ee64567eb226cd4c89dff0ed76b` | [View](https://sepolia.etherscan.io/tx/0x0efe5fefdb17eb7fd393ed02bb5785f4f8db7ee64567eb226cd4c89dff0ed76b) |
+| 1 USDC | `0xe7d5e6a37203f93533cd3d26ad6f6bfd2610ba1863a0574cc1d4c1f428c9177b` | [View](https://sepolia.etherscan.io/tx/0xe7d5e6a37203f93533cd3d26ad6f6bfd2610ba1863a0574cc1d4c1f428c9177b) |
+
+### Successful Gasless Swaps (WETH -> USDC)
+
+| Amount | TX Hash | Explorer |
+|--------|---------|----------|
+| 0.0005 WETH | `0x829f63cee7df4e8d919a97a5cea57868734a48828072b627cba622e6a431452a` | [View](https://sepolia.etherscan.io/tx/0x829f63cee7df4e8d919a97a5cea57868734a48828072b627cba622e6a431452a) |
+
+### Gasless Approvals (Sepolia)
+
+| Token | TX Hash | Explorer |
+|-------|---------|----------|
+| USDC | `0x9ce56c8bb7b8040425579dac9cd0278806d6b70b126ec6c842e17c6c8104d513` | [View](https://sepolia.etherscan.io/tx/0x9ce56c8bb7b8040425579dac9cd0278806d6b70b126ec6c842e17c6c8104d513) |
+| WETH | `0x7992a5df03580e755a75ee8ab38d632069dd199880c03dea07a7f2d264d0616d` | [View](https://sepolia.etherscan.io/tx/0x7992a5df03580e755a75ee8ab38d632069dd199880c03dea07a7f2d264d0616d) |
+
+### Sepolia Contract Addresses
+
+- **RouterHub**: `0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84`
+- **MockDEXAdapter**: `0x86D1AA2228F3ce649d415F19fC71134264D0E84B`
+- **USDC**: `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`
+- **WETH**: `0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14`
+
+---
+
+## Polygon Amoy Results
+
+### Successful Gasless Swaps (USDC -> WPOL)
 
 ### Successful Gasless Swaps (USDC -> WPOL)
 
@@ -55,12 +91,21 @@ Users can swap tokens **without paying any gas fees** - all gas is sponsored by 
 
 ## Key Components
 
-1. **User EOA**: `0x8F322fAF976F5F584f6574a5b217E5443f2CD848`
-2. **Smart Account**: `0xEef74EB6f5eA5f869115846E9771A8551f9e4323`
-3. **RouterHub**: `0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881`
-4. **MockDEXAdapter**: `0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1`
-5. **USDC**: `0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582`
-6. **WPOL**: `0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9`
+### Shared (Both Networks)
+- **User EOA**: `0x8F322fAF976F5F584f6574a5b217E5443f2CD848`
+- **Smart Account**: `0xEef74EB6f5eA5f869115846E9771A8551f9e4323`
+
+### Polygon Amoy
+- **RouterHub**: `0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881`
+- **MockDEXAdapter**: `0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1`
+- **USDC**: `0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582`
+- **WPOL**: `0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9`
+
+### Ethereum Sepolia
+- **RouterHub**: `0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84`
+- **MockDEXAdapter**: `0x86D1AA2228F3ce649d415F19fC71134264D0E84B`
+- **USDC**: `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`
+- **WETH**: `0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14`
 
 ## How It Works
 
@@ -73,28 +118,44 @@ Users can swap tokens **without paying any gas fees** - all gas is sponsored by 
 
 ## Gas Spent by User
 
-**ZERO POL** - All gas is sponsored by Pimlico paymaster!
+**ZERO** - All gas is sponsored by Pimlico paymaster on both networks!
 
+### Polygon Amoy
 ```
 EOA POL (before): 0.071042930340590034
 EOA POL (after):  0.071042930340590034
 Gas spent:        0 POL
 ```
 
+### Ethereum Sepolia
+```
+EOA ETH (before): 0.04999993784037841
+EOA ETH (after):  0.04999993784037841
+Gas spent:        0 ETH
+```
+
 ## Test Scripts
 
+### Polygon Amoy
 - `frontend/test-eip7702-gasless.mjs` - Basic gasless swap test
 - `frontend/test-eip7702-multiple.mjs` - Multiple swap amounts
 - `frontend/test-eip7702-reverse.mjs` - WPOL -> USDC swap
-- `frontend/test-eip7702-comprehensive.mjs` - Full test suite
-- `frontend/test-eip7702-final.mjs` - Final verification
+
+### Ethereum Sepolia
+- `frontend/test-eip7702-sepolia.mjs` - Basic gasless swap test
+- `frontend/test-eip7702-sepolia-multiple.mjs` - Multiple swap amounts
+- `frontend/test-eip7702-sepolia-reverse.mjs` - WETH -> USDC swap
 
 ## Run Tests
 
 ```bash
 cd frontend
+
+# Polygon Amoy
 node test-eip7702-gasless.mjs
-node test-eip7702-0.5usdc.mjs
+
+# Ethereum Sepolia
+node test-eip7702-sepolia.mjs
 ```
 
 ## Notes
