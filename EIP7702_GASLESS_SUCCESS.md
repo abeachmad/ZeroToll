@@ -163,3 +163,73 @@ node test-eip7702-sepolia.mjs
 - The MockDEXAdapter needs sufficient liquidity (WPOL/USDC) to execute swaps
 - If swaps fail with "Adapter call failed", fund the adapter with more tokens
 - Native POL output requires `setNativeWrapped` to be configured on RouterHub
+
+
+---
+
+## Cross-Chain Gasless Swaps (November 28, 2025) 🌉
+
+### Architecture: SushiXSwap-style with MockLayerZeroAdapter
+
+Cross-chain gasless swaps are now **WORKING** between Polygon Amoy and Ethereum Sepolia!
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         CROSS-CHAIN GASLESS SWAP                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│  SOURCE CHAIN (Amoy)                    DESTINATION CHAIN (Sepolia)     │
+│  ┌─────────────────────┐                ┌─────────────────────┐         │
+│  │   User Smart Acct   │                │   User Smart Acct   │         │
+│  │   (ERC-4337)        │                │   (Same Address)    │         │
+│  └─────────┬───────────┘                └─────────▲───────────┘         │
+│            │ 1. Gasless TX                        │ 4. Receive Tokens   │
+│            ▼                                      │                     │
+│  ┌─────────────────────┐                ┌─────────┴───────────┐         │
+│  │ MockLayerZeroAdapter│   2. Event     │ MockLayerZeroAdapter│         │
+│  │ - Lock tokens       │ ──────────────▶│ - Execute swap      │         │
+│  │ - Emit event        │   (Relayer)    │ - Transfer tokens   │         │
+│  └─────────────────────┘                └─────────────────────┘         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Cross-Chain Adapter Addresses
+
+| Network | MockLayerZeroAdapter | Explorer |
+|---------|---------------------|----------|
+| Polygon Amoy | `0x349436899Da2F3D5Fb2AD4059b5792C3FeE0bE50` | [View](https://amoy.polygonscan.com/address/0x349436899Da2F3D5Fb2AD4059b5792C3FeE0bE50) |
+| Ethereum Sepolia | `0x73F01527EB3f0ea4AA0d25BF12C6e28d48e46A4C` | [View](https://sepolia.etherscan.io/address/0x73F01527EB3f0ea4AA0d25BF12C6e28d48e46A4C) |
+
+### Same-Chain Gasless Swaps (Latest Tests)
+
+| Network | Swap | TX Hash | Explorer |
+|---------|------|---------|----------|
+| Sepolia | 0.05 USDC → WETH | `0xd1a191b475172f5743a990312a7814f66adb254bc634606e48239352d2e2451c` | [View](https://sepolia.etherscan.io/tx/0xd1a191b475172f5743a990312a7814f66adb254bc634606e48239352d2e2451c) |
+| Amoy | 0.005 USDC → LINK | `0x49834dc0e1e967fd5efce591b2df08a40e7e8b0cab4a4508cd4a8a100d050951` | [View](https://amoy.polygonscan.com/tx/0x49834dc0e1e967fd5efce591b2df08a40e7e8b0cab4a4508cd4a8a100d050951) |
+
+### Cross-Chain Gasless Swap (Amoy → Sepolia)
+
+| Step | Description | TX Hash | Explorer |
+|------|-------------|---------|----------|
+| 1 | Source Chain (Amoy) - Gasless initiation | `0x80be9211adb9221404d0890553e39464f22b9047b26d419578ab622c033382af` | [View](https://amoy.polygonscan.com/tx/0x80be9211adb9221404d0890553e39464f22b9047b26d419578ab622c033382af) |
+| 2 | Destination Chain (Sepolia) - Relayer execution | `0x462f1ff9d7778f99e47605e3286dc46dc0ad73c9e9883c8a732eaaeacf73f1bb` | [View](https://sepolia.etherscan.io/tx/0x462f1ff9d7778f99e47605e3286dc46dc0ad73c9e9883c8a732eaaeacf73f1bb) |
+
+**Result**: User sent 0.005 USDC on Amoy (gasless) → Received 0.005 USDC on Sepolia
+
+### Test Scripts
+
+```bash
+cd frontend
+
+# Test all gasless swaps (same-chain + cross-chain)
+node test-all-gasless-swaps.mjs
+
+# Test cross-chain only
+node test-crosschain-layerzero.mjs
+```
+
+### Key Features
+
+- ✅ **Gasless on source chain** - User pays 0 gas via ERC-4337 smart account
+- ✅ **Same address on both chains** - Deterministic smart account deployment
+- ✅ **SushiXSwap-style architecture** - Event-based cross-chain messaging
+- ✅ **Relayer executes on destination** - Off-chain relayer monitors events

@@ -30,6 +30,7 @@ ZeroToll is a **next-generation gasless DEX** that eliminates the gas friction p
 - 💰 **Any-Token Fees**: Pay swap fees in USDC, DAI, WETH, or the token you're swapping
 - 🔮 **LIVE Oracle Prices**: Real-time Pyth Network integration (NO hardcoded values!)
 - 🌐 **Multi-Chain**: Polygon Amoy + Ethereum Sepolia testnets
+- 🌉 **Cross-Chain Swaps**: Bridge tokens between chains with gasless UX (SushiXSwap-style)
 - 🔐 **Fully On-Chain**: All transactions verifiable on block explorers
 
 ---
@@ -124,6 +125,14 @@ EIP-7702 gasless swaps are **WORKING** on both Polygon Amoy and Ethereum Sepolia
 | 0.0005 WETH → USDC | `0x829f63cee7df4e8d919a97a5cea57868734a48828072b627cba622e6a431452a` | [View](https://sepolia.etherscan.io/tx/0x829f63cee7df4e8d919a97a5cea57868734a48828072b627cba622e6a431452a) |
 
 **Gas spent by user: ZERO** - All gas sponsored by Pimlico paymaster on both networks!
+
+### Cross-Chain Gasless Swaps 🌉
+
+| Route | Source TX | Destination TX |
+|-------|-----------|----------------|
+| Amoy USDC → Sepolia USDC | [View](https://amoy.polygonscan.com/tx/0x80be9211adb9221404d0890553e39464f22b9047b26d419578ab622c033382af) | [View](https://sepolia.etherscan.io/tx/0x462f1ff9d7778f99e47605e3286dc46dc0ad73c9e9883c8a732eaaeacf73f1bb) |
+
+**Cross-chain architecture**: SushiXSwap-style with MockLayerZeroAdapter - gasless on source chain!
 
 See [EIP7702_GASLESS_SUCCESS.md](./EIP7702_GASLESS_SUCCESS.md) for full transaction list.
 
@@ -312,8 +321,8 @@ ZeroToll/
 | Document | Purpose |
 |----------|---------|
 | [EIP7702_GASLESS_SUCCESS.md](./EIP7702_GASLESS_SUCCESS.md) | Proof of working gasless swaps with TX hashes |
+| [CROSSCHAIN_GASLESS_SWAPS.md](./docs/CROSSCHAIN_GASLESS_SWAPS.md) | Cross-chain architecture documentation |
 | [SECURITY.md](./SECURITY.md) | Security policy and best practices |
-
 | [WHY_WRAPPED_TOKENS.md](./WHY_WRAPPED_TOKENS.md) | Why WETH/WPOL instead of native tokens |
 | [HOW_GASLESS_SWAPS_WORK.md](./HOW_GASLESS_SWAPS_WORK.md) | Technical explanation of gasless flow |
 | [CREDENTIALS_SETUP.md](./CREDENTIALS_SETUP.md) | Setup guide for API keys and wallets |
@@ -333,7 +342,7 @@ ZeroToll/
 - Real DEX integrations (Uniswap V3, Curve, Balancer)
 - Multi-hop routing optimization
 - Self-hosted paymaster infrastructure
-- Cross-chain bridges (LayerZero/Axelar integration)
+- Real LayerZero/CCIP integration (currently using MockLayerZeroAdapter)
 
 ---
 
@@ -416,9 +425,10 @@ MIT License - See [LICENSE](./LICENSE) file for details.
 
 | Metric | Value |
 |--------|-------|
-| Version | 2.0.0 |
+| Version | 2.1.0 |
 | Status | ✅ Testnet Live (Amoy + Sepolia) |
-| EIP-7702 | ✅ Working (13+ verified TX) |
+| EIP-7702 | ✅ Working (20+ verified TX) |
+| Cross-Chain | ✅ Working (Amoy ↔ Sepolia) |
 | Last Updated | November 28, 2025 |
 
 ---
