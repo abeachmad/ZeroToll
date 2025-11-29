@@ -10,6 +10,7 @@ import FeeModeExplainer from '../components/FeeModeExplainer';
 import ConnectButton from '../components/ConnectButton';
 import GaslessSwapStatus from '../components/GaslessSwapStatus';
 import { useGaslessSwap } from '../hooks/useGaslessSwap';
+import { useTrueGaslessSwap } from '../hooks/useTrueGaslessSwap';
 import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
 import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
 import arbitrumSepoliaTokens from '../config/tokenlists/zerotoll.tokens.arbitrum-sepolia.json';
@@ -79,7 +80,9 @@ const Swap = () => {
   
   // Gasless mode toggle
   const [isGaslessMode, setIsGaslessMode] = useState(false);
+  const [isTrueGasless, setIsTrueGasless] = useState(true); // Default to TRUE gasless
   const gaslessSwap = useGaslessSwap();
+  const trueGaslessSwap = useTrueGaslessSwap();
   
   // Approval state
   const [needsApproval, setNeedsApproval] = useState(false);
@@ -334,22 +337,33 @@ const Swap = () => {
       const decimals = tokenIn.decimals || 6;
       const amountWei = parseUnits(amountIn, decimals);
 
-      // If gasless mode, use gasless approval (no gas fee!)
+      // If gasless mode, use gasless approval via EIP-7702
       if (isGaslessMode) {
-        toast.info('⚡ Gasless approval - no gas fee!');
+        // Check availability first
+        const availability = await gaslessSwap.checkAvailability();
+        console.log('🔍 Gasless availability:', availability);
+        
+        if (!availability.available) {
+          toast.error(`Gasless not available: ${availability.reason}`);
+          setApprovalPending(false);
+          return;
+        }
+        
+        toast.info(`⚡ Gasless approval on ${availability.chain} - ${availability.note || ''}`);
         
         try {
-          const txHash = await gaslessSwap.executeApproval({
+          // Use the new useSendCalls-based hook with target chain
+          await gaslessSwap.executeApproval({
             tokenAddress: tokenIn.address,
-            spenderAddress: routerHubAddress,
-            amount: amountWei.toString()
+            spender: routerHubAddress,
+            amount: amountWei.toString(),
+            targetChainId: fromChain.id
           });
 
-          toast.success('✅ Gasless approval submitted! No gas fee charged.');
-          console.log('Gasless approval txHash:', txHash);
+          toast.success('✅ Approval submitted! Waiting for confirmation...');
           
-          // Wait for approval to be mined
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          // Wait for approval to be confirmed
+          await new Promise(resolve => setTimeout(resolve, 5000));
           await refetchAllowance();
           
           setApprovalPending(false);
@@ -424,36 +438,227 @@ const Swap = () => {
     }
   };
 
-  const handleGaslessExecute = async () => {
+  // TRUE GASLESS execution using Pimlico paymaster - USER PAYS $0 GAS!
+  const handleTrueGaslessExecute = async () => {
     try {
-      toast.info('⚡ Initiating gasless swap...');
+      toast.info('🎉 Executing TRUE GASLESS swap - You pay $0 in gas!');
       
-      // Build mock swap callData (in production, this would come from Odos/DEX aggregator)
-      // For testing, we use placeholder routeData
+      // Native tokens don't work with gasless
+      if (tokenIn.isNative) {
+        toast.error('❌ Native tokens cannot be used with gasless. Use WPOL/WETH instead.');
+        return;
+      }
+
+      // Validate addresses
+      if (!tokenIn.address?.startsWith('0x') || !tokenOut.address?.startsWith('0x')) {
+        toast.error('❌ Invalid token addresses');
+        return;
+      }
+
+      const decimals = tokenIn.decimals || 6;
+      const amountWei = parseUnits(amountIn, decimals);
+      const minAmountOut = parseUnits((parseFloat(amountOut) * 0.50).toString(), tokenOut.decimals || 6);
+      
+      // Build swap callData
       const routerHubInterface = new ethers.Interface([
-        "function executeRoute(bytes calldata routeData, uint256 minAmountOut, address paymaster) external payable"
+        "function executeRoute(tuple(address user, address tokenIn, uint256 amtIn, address tokenOut, uint256 minOut, uint64 dstChainId, uint64 deadline, address feeToken, uint8 feeMode, uint256 feeCapToken, bytes routeHint, uint256 nonce) intent, address adapter, bytes routeData) external returns (uint256)"
       ]);
       
-      const mockRouteData = "0x1234"; // TODO: Replace with real Odos route data
-      const minAmountOut = ethers.parseUnits((parseFloat(amountOut) * 0.95).toString(), tokenOut.decimals || 6);
-      const paymasterAddress = fromChain.id === 80002 
-        ? "0xC721582d25895956491436459df34cd817C6AB74"  // Amoy
-        : "0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9"; // Sepolia
+      const adapterInterface = new ethers.Interface([
+        "function swap(address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, address recipient, uint256 deadline) external payable returns (uint256 amountOut)"
+      ]);
+      
+      const intent = {
+        user: address,
+        tokenIn: tokenIn.address,
+        amtIn: amountWei,
+        tokenOut: tokenOut.address,
+        minOut: minAmountOut,
+        dstChainId: toChain.id,
+        deadline: Math.floor(Date.now() / 1000) + 600,
+        feeToken: tokenIn.address,
+        feeMode: 1,
+        feeCapToken: parseUnits(feeCap, 18),
+        routeHint: '0x',
+        nonce: BigInt(Date.now())
+      };
+
+      const mockAdapter = fromChain.id === 80002 
+        ? '0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1'
+        : '0x86D1AA2228F3ce649d415F19fC71134264D0E84B';
+      
+      const routeData = adapterInterface.encodeFunctionData("swap", [
+        tokenIn.address,
+        tokenOut.address,
+        amountWei,
+        minAmountOut,
+        routerHubAddress,
+        intent.deadline
+      ]);
       
       const swapCallData = routerHubInterface.encodeFunctionData("executeRoute", [
-        mockRouteData,
-        minAmountOut,
-        paymasterAddress
+        intent,
+        mockAdapter,
+        routeData
       ]);
+
+      // Execute TRUE gasless batch (approve + swap) - $0 gas!
+      console.log('📤 Executing TRUE GASLESS batch via Pimlico paymaster');
       
-      // Execute gasless swap
-      const txHash = await gaslessSwap.executeSwap({
+      await trueGaslessSwap.executeGaslessBatch({
+        tokenAddress: tokenIn.address,
+        spender: routerHubAddress,
+        amount: amountWei.toString(),
         routerHub: routerHubAddress,
         swapCallData
       });
+
+      toast.success('🎉 TRUE GASLESS swap successful! You paid $0 in gas!');
       
-      toast.success('🎉 Gasless swap complete! You paid $0 in gas fees!');
-      setTxHash(txHash);
+    } catch (error) {
+      console.error('TRUE gasless error:', error);
+      toast.error(error.message || 'TRUE gasless swap failed');
+    }
+  };
+
+  const handleGaslessExecute = async () => {
+    try {
+      // Check TRUE gasless availability first
+      const trueGaslessAvailability = await trueGaslessSwap.checkAvailability();
+      console.log('🔍 TRUE Gasless availability:', trueGaslessAvailability);
+      
+      // If TRUE gasless is available and enabled, use it!
+      if (isTrueGasless && trueGaslessAvailability.available && trueGaslessAvailability.gasless) {
+        console.log('🎉 Using TRUE GASLESS (Pimlico paymaster)');
+        return await handleTrueGaslessExecute();
+      }
+      
+      // Fall back to batch mode (still requires gas)
+      const availability = await gaslessSwap.checkAvailability();
+      console.log('🔍 Batch mode availability:', availability);
+      
+      if (!availability.available) {
+        toast.error(`Batch mode not available: ${availability.reason}`);
+        return;
+      }
+
+      // Native tokens (POL/ETH) don't work with gasless swaps - need wrapped version
+      if (tokenIn.isNative) {
+        toast.error('❌ Native tokens (POL/ETH) cannot be used with gasless swaps. Please use WPOL/WETH instead.');
+        return;
+      }
+
+      // Validate token addresses
+      if (!tokenIn.address || tokenIn.address === 'NATIVE' || !tokenIn.address.startsWith('0x')) {
+        toast.error('❌ Invalid input token address. Please select a different token.');
+        return;
+      }
+      if (!tokenOut.address || tokenOut.address === 'NATIVE' || !tokenOut.address.startsWith('0x')) {
+        toast.error('❌ Invalid output token address. Please select a different token.');
+        return;
+      }
+      
+      // Show appropriate message based on Smart Account status
+      if (availability.isSmartAccount) {
+        toast.info(`✅ Smart Account active - executing batch swap on ${availability.chain}...`);
+      } else {
+        toast.info(`⚡ First time on ${availability.chain} - MetaMask will prompt to enable Smart Account...`);
+      }
+      
+      const decimals = tokenIn.decimals || 6;
+      const amountWei = parseUnits(amountIn, decimals);
+      // Use 50% of quoted amount as minOut to account for price differences
+      // between backend (Pyth) and on-chain oracle (can differ 30%+ on testnet)
+      const minAmountOut = parseUnits((parseFloat(amountOut) * 0.50).toString(), tokenOut.decimals || 6);
+      
+      // Build swap callData using ethers
+      const routerHubInterface = new ethers.Interface([
+        "function executeRoute(tuple(address user, address tokenIn, uint256 amtIn, address tokenOut, uint256 minOut, uint64 dstChainId, uint64 deadline, address feeToken, uint8 feeMode, uint256 feeCapToken, bytes routeHint, uint256 nonce) intent, address adapter, bytes routeData) external returns (uint256)"
+      ]);
+      
+      // Build intent struct
+      const intent = {
+        user: address,
+        tokenIn: tokenIn.address,
+        amtIn: amountWei,
+        tokenOut: tokenOut.address,
+        minOut: minAmountOut,
+        dstChainId: toChain.id,
+        deadline: Math.floor(Date.now() / 1000) + 600, // 10 minutes
+        feeToken: tokenIn.address,
+        feeMode: 1, // TOKEN_INPUT_SOURCE
+        feeCapToken: parseUnits(feeCap, 18),
+        routeHint: '0x',
+        nonce: BigInt(Date.now())
+      };
+
+      console.log('📋 Intent struct:', {
+        user: intent.user,
+        tokenIn: intent.tokenIn,
+        amtIn: intent.amtIn.toString(),
+        tokenOut: intent.tokenOut,
+        minOut: intent.minOut.toString(),
+        dstChainId: intent.dstChainId,
+      });
+      
+      // Get adapter address from config
+      const mockAdapter = fromChain.id === 80002 
+        ? '0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1'  // Amoy MockDEXAdapter
+        : '0x86D1AA2228F3ce649d415F19fC71134264D0E84B'; // Sepolia MockDEXAdapter
+      
+      // Build routeData - this is the encoded call to the adapter's swap function
+      // MockDEXAdapter.swap(tokenIn, tokenOut, amountIn, minAmountOut, recipient, deadline)
+      const adapterInterface = new ethers.Interface([
+        "function swap(address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, address recipient, uint256 deadline) external payable returns (uint256 amountOut)"
+      ]);
+      
+      const routeData = adapterInterface.encodeFunctionData("swap", [
+        tokenIn.address,           // tokenIn
+        tokenOut.address,          // tokenOut
+        amountWei,                 // amountIn
+        minAmountOut,              // minAmountOut
+        routerHubAddress,          // recipient (RouterHub receives output, then transfers to user)
+        intent.deadline            // deadline
+      ]);
+
+      console.log('📋 Route data for adapter:', {
+        tokenIn: tokenIn.address,
+        tokenOut: tokenOut.address,
+        amountIn: amountWei.toString(),
+        minAmountOut: minAmountOut.toString(),
+        recipient: routerHubAddress,
+        deadline: intent.deadline
+      });
+      
+      const swapCallData = routerHubInterface.encodeFunctionData("executeRoute", [
+        intent,
+        mockAdapter,
+        routeData
+      ]);
+      
+      // Use BATCH execution (approve + swap in one transaction) - the main benefit of EIP-7702!
+      // This combines approval and swap into a single atomic transaction
+      if (needsApproval && !tokenIn.isNative) {
+        console.log('📦 Using batch execution (approve + swap)');
+        await gaslessSwap.executeBatch({
+          tokenAddress: tokenIn.address,
+          spender: routerHubAddress,
+          amount: amountWei.toString(),
+          routerHub: routerHubAddress,
+          swapCallData,
+          targetChainId: fromChain.id
+        });
+        toast.success('🎉 Batch transaction submitted (approve + swap)!');
+      } else {
+        // No approval needed, just execute swap
+        console.log('📤 Executing swap only (already approved)');
+        await gaslessSwap.executeSwap({
+          routerHub: routerHubAddress,
+          swapCallData,
+          targetChainId: fromChain.id
+        });
+        toast.success('🎉 Swap submitted! Waiting for confirmation...');
+      }
       
     } catch (error) {
       console.error('Gasless swap error:', error);
@@ -716,16 +921,21 @@ const Swap = () => {
             )}
           </div>
 
-          {/* Gasless Mode Toggle */}
-          {/* Gasless Mode Toggle */}
+          {/* TRUE Gasless Mode Toggle (EIP-7702 + Pimlico Paymaster) */}
           <div className="mb-6">
             <div className="glass p-4 rounded-xl border border-zt-aqua/30">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Zap className="w-5 h-5 text-zt-aqua" />
                   <div>
-                    <div className="font-semibold text-zt-paper">Gasless Swap</div>
-                    <div className="text-xs text-zt-paper/60">Pay $0 gas fees (Account Abstraction)</div>
+                    <div className="font-semibold text-zt-paper">
+                      {trueGaslessSwap.isSmartAccount ? '🎉 TRUE Gasless Mode' : 'Batch Mode (EIP-7702)'}
+                    </div>
+                    <div className="text-xs text-zt-paper/60">
+                      {trueGaslessSwap.isSmartAccount 
+                        ? 'Pay $0 in gas fees! Sponsored by Pimlico' 
+                        : 'Combine approve + swap in one transaction'}
+                    </div>
                   </div>
                 </div>
                 <button
@@ -741,32 +951,74 @@ const Swap = () => {
                   />
                 </button>
               </div>
-              {isGaslessMode && (
+              
+              {/* Smart Account Status Indicator */}
+              {isGaslessMode && isConnected && (
                 <div className="mt-3 pt-3 border-t border-white/10">
+                  <div className="flex items-center gap-2 mb-2">
+                    {trueGaslessSwap.isSmartAccount ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-green-400" />
+                        <span className="text-sm text-green-400 font-semibold">🎉 TRUE GASLESS Ready!</span>
+                      </>
+                    ) : trueGaslessSwap.needsUpgrade ? (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                        <span className="text-sm text-yellow-400 font-semibold">Smart Account Not Enabled</span>
+                      </>
+                    ) : (
+                      <>
+                        <Loader2 className="w-4 h-4 text-zt-aqua animate-spin" />
+                        <span className="text-sm text-zt-paper/70">Checking status...</span>
+                      </>
+                    )}
+                  </div>
+                  
                   <div className="flex items-start gap-2 text-xs text-zt-paper/80">
                     <Info className="w-4 h-4 text-zt-aqua flex-shrink-0 mt-0.5" />
                     <div>
-                      <div className="font-semibold text-zt-aqua mb-1">Account Abstraction (ERC-4337)</div>
-                      <ul className="space-y-1 text-zt-paper/70">
-                        <li>✅ Zero gas fees - paymaster sponsors your transactions</li>
-                        <li>✅ Approval + Swap - both are gasless!</li>
-                        <li>✅ Just sign with your wallet - no POL/ETH needed</li>
-                        <li>⚡ Service fee deducted from swapped tokens</li>
-                      </ul>
-                      <div className="mt-2 text-zt-violet/90 font-medium">
-                        Limited to 10 swaps/day for testing
-                      </div>
+                      {trueGaslessSwap.isSmartAccount ? (
+                        <>
+                          <div className="font-semibold text-green-400 mb-1">🎉 TRUE GASLESS Available!</div>
+                          <ul className="space-y-1 text-zt-paper/70">
+                            <li>• <strong className="text-green-400">You pay $0 in gas fees!</strong></li>
+                            <li>• Gas sponsored by Pimlico paymaster</li>
+                            <li>• Approve + Swap in ONE gasless transaction</li>
+                            <li>• Same wallet address, enhanced capabilities</li>
+                          </ul>
+                          <div className="mt-2 p-2 bg-green-500/10 rounded border border-green-500/30">
+                            <span className="text-green-400 font-medium">✅ Gas: $0 (Sponsored)</span>
+                            <span className="text-zt-paper/60 block">Pimlico paymaster covers all gas costs!</span>
+                          </div>
+                        </>
+                      ) : trueGaslessSwap.needsUpgrade ? (
+                        <>
+                          <div className="font-semibold text-yellow-400 mb-1">⚡ Smart Account Required for Gasless</div>
+                          <ul className="space-y-1 text-zt-paper/70">
+                            <li>• Enable Smart Account in MetaMask settings</li>
+                            <li>• Or use MetaMask's upgrade prompt on first tx</li>
+                            <li>• After upgrade, all transactions are FREE!</li>
+                          </ul>
+                          <div className="mt-2 p-2 bg-yellow-500/10 rounded border border-yellow-500/30">
+                            <span className="text-yellow-400 font-medium">⚠️ Upgrade needed for gasless</span>
+                            <span className="text-zt-paper/60 block">Enable Smart Account to unlock $0 gas fees!</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-zt-paper/60">Checking Smart Account status...</div>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
+              
               {!isGaslessMode && (
                 <div className="mt-3 pt-3 border-t border-white/10">
                   <div className="flex items-start gap-2 text-xs text-zt-paper/60">
-                    <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                    <Info className="w-4 h-4 text-zt-aqua flex-shrink-0 mt-0.5" />
                     <div>
-                      Standard mode requires POL/ETH for gas fees on approvals and swaps.
-                      <span className="block mt-1 text-zt-aqua">Toggle gasless mode ON for $0 fees!</span>
+                      Standard mode: Approve and swap are separate transactions.
+                      <span className="block mt-1 text-zt-aqua">Toggle batch mode ON to combine into one transaction!</span>
                     </div>
                   </div>
                 </div>
