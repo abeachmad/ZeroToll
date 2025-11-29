@@ -114,3 +114,4 @@ Thumbs.db
 
 # Temporary
 *.tmp
+backend/venv/
