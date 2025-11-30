@@ -1,33 +1,28 @@
 /**
  * useTrueGaslessSwap Hook - TRUE EIP-7702 Gasless Transactions
  * 
- * This hook implements REAL gasless transactions using:
- * 1. MetaMask Smart Accounts Kit for proper UserOp formatting
- * 2. Pimlico bundler for UserOp submission
- * 3. Pimlico paymaster for gas sponsorship
- * 
  * USER PAYS $0 IN GAS FEES!
  * 
- * Requirements:
- * - Wallet must be upgraded to Smart Account (EIP-7702)
- * - Pimlico API key must be configured
+ * This implementation uses the backend proxy approach that ACTUALLY WORKS.
+ * The backend uses @metamask/smart-accounts-kit + Pimlico paymaster.
+ * 
+ * Flow:
+ * 1. Frontend calls backend /api/gasless/prepare with calls
+ * 2. Backend creates UserOp and returns hash to sign
+ * 3. Frontend asks user to sign the hash via personal_sign (NO GAS POPUP!)
+ * 4. Frontend sends signature to backend /api/gasless/submit
+ * 5. Backend submits to Pimlico bundler - USER PAYS $0!
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { useAccount, usePublicClient, useWalletClient, useSwitchChain } from 'wagmi';
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { encodeFunctionData, parseAbi } from 'viem';
-import { createBundlerClient, entryPoint07Address } from 'viem/account-abstraction';
-import { createPimlicoClient } from 'permissionless/clients/pimlico';
-import { toMetaMaskSmartAccount } from '@metamask/smart-accounts-kit';
-import { http } from 'viem';
 
-// ERC20 ABI for approve
 const ERC20_ABI = parseAbi([
   'function approve(address spender, uint256 amount) returns (bool)',
   'function balanceOf(address account) view returns (uint256)'
 ]);
 
-// Smart Account Status enum
 const SMART_ACCOUNT_STATUS = {
   NOT_UPGRADED: 'NOT_UPGRADED',
   UPGRADED: 'UPGRADED',
@@ -35,24 +30,16 @@ const SMART_ACCOUNT_STATUS = {
   CHECKING: 'CHECKING'
 };
 
-// Pimlico API Key - should be in env
-// eslint-disable-next-line no-undef
-const PIMLICO_API_KEY = typeof import.meta !== 'undefined' && import.meta.env?.VITE_PIMLICO_API_KEY 
-  ? import.meta.env.VITE_PIMLICO_API_KEY 
-  : 'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+// Backend API URL
+const GASLESS_API_URL = process.env.REACT_APP_GASLESS_API_URL || 'http://localhost:3002';
 
-// Supported chains for TRUE gasless
 const SUPPORTED_CHAINS = {
   80002: { 
     name: 'Polygon Amoy',
-    rpc: 'https://rpc-amoy.polygon.technology',
-    pimlicoRpc: `https://api.pimlico.io/v2/80002/rpc?apikey=${PIMLICO_API_KEY}`,
     explorer: 'https://amoy.polygonscan.com'
   },
   11155111: { 
     name: 'Ethereum Sepolia',
-    rpc: 'https://ethereum-sepolia-rpc.publicnode.com',
-    pimlicoRpc: `https://api.pimlico.io/v2/11155111/rpc?apikey=${PIMLICO_API_KEY}`,
     explorer: 'https://sepolia.etherscan.io'
   },
 };
@@ -61,7 +48,6 @@ export function useTrueGaslessSwap() {
   const { address, chain, isConnected } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
-  const { switchChainAsync } = useSwitchChain();
   
   const [status, setStatus] = useState(null);
   const [statusMessage, setStatusMessage] = useState('');
@@ -73,7 +59,7 @@ export function useTrueGaslessSwap() {
   const [isLoading, setIsLoading] = useState(false);
 
   /**
-   * Check if EOA is upgraded to Smart Account
+   * Check if the connected wallet has Smart Account enabled
    */
   const checkSmartAccountStatus = useCallback(async () => {
     if (!address || !publicClient) {
@@ -87,6 +73,29 @@ export function useTrueGaslessSwap() {
 
     try {
       setSmartAccountStatus(SMART_ACCOUNT_STATUS.CHECKING);
+      
+      // Check via backend API first (more reliable)
+      try {
+        const response = await fetch(`${GASLESS_API_URL}/api/gasless/check/${address}/${chain?.id || 80002}`);
+        const data = await response.json();
+        
+        if (data.enabled) {
+          setSmartAccountStatus(SMART_ACCOUNT_STATUS.UPGRADED);
+          setDelegatorAddress(data.delegator);
+          console.log('✅ Smart Account ENABLED via API');
+          console.log('   Delegator:', data.delegator);
+          return {
+            status: SMART_ACCOUNT_STATUS.UPGRADED,
+            isSmartAccount: true,
+            delegatorAddress: data.delegator,
+            message: 'Smart Account enabled - TRUE GASLESS available!'
+          };
+        }
+      } catch (apiError) {
+        console.log('Backend check failed, falling back to direct check:', apiError.message);
+      }
+
+      // Fallback: check directly
       const code = await publicClient.getCode({ address });
       
       if (code && code !== '0x' && code.startsWith('0xef0100')) {
@@ -125,9 +134,8 @@ export function useTrueGaslessSwap() {
         message: `Error: ${err.message}`
       };
     }
-  }, [address, publicClient]);
+  }, [address, publicClient, chain?.id]);
 
-  // Check status on mount and when address/chain changes
   useEffect(() => {
     if (address && publicClient) {
       checkSmartAccountStatus();
@@ -135,66 +143,20 @@ export function useTrueGaslessSwap() {
   }, [address, publicClient, chain?.id, checkSmartAccountStatus]);
 
   /**
-   * Create bundler client with Pimlico paymaster
+   * Execute a gasless swap using the backend proxy (WORKING APPROACH)
    */
-  const createGaslessClient = useCallback(async () => {
-    if (!address || !publicClient || !walletClient || !chain?.id) {
+  const executeGaslessSwap = useCallback(async ({ calls }) => {
+    if (!address || !chain || !walletClient || !publicClient) {
       throw new Error('Wallet not connected');
     }
 
-    const chainConfig = SUPPORTED_CHAINS[chain.id];
-    if (!chainConfig) {
+    if (!SUPPORTED_CHAINS[chain.id]) {
       throw new Error(`Chain ${chain.id} not supported for gasless`);
     }
 
-    // Check smart account status
     const accountStatus = await checkSmartAccountStatus();
     if (accountStatus.status !== SMART_ACCOUNT_STATUS.UPGRADED) {
-      throw new Error('Smart Account not enabled. Please upgrade your wallet first.');
-    }
-
-    // Create MetaMask Smart Account
-    const smartAccount = await toMetaMaskSmartAccount({
-      client: publicClient,
-      implementation: 'Stateless7702',
-      address: address,
-      signer: { walletClient }
-    });
-
-    // Create Pimlico client for paymaster
-    const pimlicoClient = createPimlicoClient({
-      chain: chain,
-      transport: http(chainConfig.pimlicoRpc),
-      entryPoint: {
-        address: entryPoint07Address,
-        version: '0.7'
-      }
-    });
-
-    // Create Bundler Client with paymaster
-    const bundlerClient = createBundlerClient({
-      chain: chain,
-      transport: http(chainConfig.pimlicoRpc),
-      account: smartAccount,
-      paymaster: pimlicoClient,
-      userOperation: {
-        estimateFeesPerGas: async () => {
-          const gasPrices = await pimlicoClient.getUserOperationGasPrice();
-          return gasPrices.fast;
-        }
-      }
-    });
-
-    return { bundlerClient, smartAccount, pimlicoClient };
-  }, [address, publicClient, walletClient, chain, checkSmartAccountStatus]);
-
-  /**
-   * Execute TRUE gasless swap
-   * User pays $0 in gas fees!
-   */
-  const executeGaslessSwap = useCallback(async ({ calls }) => {
-    if (!address || !chain) {
-      throw new Error('Wallet not connected');
+      throw new Error('Smart Account not enabled. Please enable it in MetaMask settings first.');
     }
 
     setError(null);
@@ -204,44 +166,98 @@ export function useTrueGaslessSwap() {
     setIsLoading(true);
 
     try {
-      setStatusMessage('Creating gasless client...');
-      const { bundlerClient } = await createGaslessClient();
-
-      setStatus('signing');
-      setStatusMessage('Please sign the transaction in MetaMask...');
-
-      console.log('📤 Sending GASLESS UserOperation');
-      console.log('   Calls:', calls.length);
-
-      const hash = await bundlerClient.sendUserOperation({ calls });
+      setStatusMessage('Preparing gasless transaction...');
       
-      setUserOpHash(hash);
-      setStatus('submitted');
-      setStatusMessage('UserOperation submitted, waiting for confirmation...');
-      console.log('✅ UserOperation sent:', hash);
-
-      // Wait for receipt
-      setStatusMessage('Waiting for transaction confirmation...');
-      const receipt = await bundlerClient.waitForUserOperationReceipt({
-        hash,
-        timeout: 120000
+      // Step 1: Call backend to prepare the UserOperation
+      console.log('📡 Calling backend to prepare UserOp...');
+      const prepareResponse = await fetch(`${GASLESS_API_URL}/api/gasless/prepare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address,
+          chainId: chain.id,
+          calls: calls.map(c => ({
+            to: c.to,
+            data: c.data || '0x',
+            value: (c.value || 0n).toString()
+          }))
+        })
       });
 
-      setTxHash(receipt.receipt.transactionHash);
+      const prepareData = await prepareResponse.json();
       
-      if (receipt.success) {
+      if (!prepareData.success) {
+        throw new Error(prepareData.error || 'Failed to prepare transaction');
+      }
+
+      console.log('✅ UserOp prepared, opId:', prepareData.opId);
+
+      setStatus('signing');
+      setStatusMessage('Please sign the message in MetaMask (NO GAS!)...');
+
+      // Step 2: Sign the typed data (EIP-712)
+      // The backend provides the typed data structure for signing
+      const { typedData } = prepareData;
+      
+      if (!typedData) {
+        throw new Error('Backend did not provide typedData for signing');
+      }
+
+      console.log('   Signing EIP-712 typed data...');
+      
+      // Use signTypedData (EIP-712) - this is what MetaMask Smart Accounts expect
+      // NO GAS POPUP - just a signature request!
+      const signature = await walletClient.signTypedData({
+        domain: typedData.domain,
+        types: typedData.types,
+        primaryType: typedData.primaryType,
+        message: typedData.message
+      });
+      
+      console.log('   ✅ UserOp signed');
+      
+      setStatus('submitting');
+      setStatusMessage('Submitting to bundler (you pay $0)...');
+
+      // Step 3: Submit the signed UserOp to backend
+      const submitResponse = await fetch(`${GASLESS_API_URL}/api/gasless/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opId: prepareData.opId,
+          signature
+        })
+      });
+
+      const submitData = await submitResponse.json();
+      
+      if (!submitData.success && submitData.error) {
+        throw new Error(submitData.error);
+      }
+
+      setUserOpHash(submitData.userOpHash);
+      setTxHash(submitData.txHash);
+      
+      if (submitData.success) {
         setStatus('success');
         setStatusMessage('🎉 GASLESS transaction successful! You paid $0 in gas!');
         console.log('🎉 GASLESS SUCCESS!');
-        console.log('   TX Hash:', receipt.receipt.transactionHash);
-        console.log('   Block:', receipt.receipt.blockNumber);
+        console.log('   TX Hash:', submitData.txHash);
+        console.log('   Explorer:', submitData.explorerUrl);
       } else {
         setStatus('error');
         setError('Transaction failed on-chain');
         setStatusMessage('Transaction failed');
       }
 
-      return receipt;
+      return {
+        success: submitData.success,
+        receipt: {
+          transactionHash: submitData.txHash
+        },
+        userOpHash: submitData.userOpHash,
+        explorerUrl: submitData.explorerUrl
+      };
 
     } catch (err) {
       console.error('Gasless swap error:', err);
@@ -249,8 +265,6 @@ export function useTrueGaslessSwap() {
       let errorMessage = err.message;
       if (err.message?.includes('User rejected') || err.message?.includes('User denied')) {
         errorMessage = 'Transaction cancelled by user';
-      } else if (err.message?.includes('Smart Account not enabled')) {
-        errorMessage = 'Please upgrade to Smart Account first (use MetaMask settings)';
       }
       
       setError(errorMessage);
@@ -260,10 +274,10 @@ export function useTrueGaslessSwap() {
     } finally {
       setIsLoading(false);
     }
-  }, [address, chain, createGaslessClient]);
+  }, [address, chain, walletClient, publicClient, checkSmartAccountStatus]);
 
   /**
-   * Execute gasless approval
+   * Execute a gasless ERC20 approval
    */
   const executeGaslessApproval = useCallback(async ({ tokenAddress, spender, amount }) => {
     const approveData = encodeFunctionData({
@@ -272,71 +286,39 @@ export function useTrueGaslessSwap() {
       args: [spender, BigInt(amount)]
     });
 
-    const calls = [{
-      to: tokenAddress,
-      data: approveData,
-      value: 0n
-    }];
-
-    return executeGaslessSwap({ calls });
+    return executeGaslessSwap({ calls: [{ to: tokenAddress, data: approveData, value: 0n }] });
   }, [executeGaslessSwap]);
 
   /**
-   * Execute gasless batch (approve + swap)
-   * This is the BEST approach - one transaction, zero gas!
+   * Execute a gasless batch (approve + swap)
    */
-  const executeGaslessBatch = useCallback(async ({ 
-    tokenAddress, 
-    spender, 
-    amount, 
-    routerHub, 
-    swapCallData 
-  }) => {
+  const executeGaslessBatch = useCallback(async ({ tokenAddress, spender, amount, routerHub, swapCallData }) => {
     const approveData = encodeFunctionData({
       abi: ERC20_ABI,
       functionName: 'approve',
       args: [spender, BigInt(amount)]
     });
 
-    const calls = [
-      {
-        to: tokenAddress,
-        data: approveData,
-        value: 0n
-      },
-      {
-        to: routerHub,
-        data: swapCallData,
-        value: 0n
-      }
-    ];
-
-    console.log('📤 Executing GASLESS batch (approve + swap)');
-    return executeGaslessSwap({ calls });
+    return executeGaslessSwap({ 
+      calls: [
+        { to: tokenAddress, data: approveData, value: 0n },
+        { to: routerHub, data: swapCallData, value: 0n }
+      ] 
+    });
   }, [executeGaslessSwap]);
 
   /**
-   * Check availability
+   * Check if gasless is available for current wallet/chain
    */
   const checkAvailability = useCallback(async () => {
     if (!chain?.id || !SUPPORTED_CHAINS[chain.id]) {
-      return { 
-        available: false, 
-        reason: `Chain ${chain?.id} not supported. Use Sepolia or Amoy.`,
-        smartAccountStatus: SMART_ACCOUNT_STATUS.UNKNOWN
-      };
+      return { available: false, reason: `Chain ${chain?.id} not supported`, smartAccountStatus: SMART_ACCOUNT_STATUS.UNKNOWN };
     }
-
     if (!isConnected) {
-      return { 
-        available: false, 
-        reason: 'Wallet not connected',
-        smartAccountStatus: SMART_ACCOUNT_STATUS.UNKNOWN
-      };
+      return { available: false, reason: 'Wallet not connected', smartAccountStatus: SMART_ACCOUNT_STATUS.UNKNOWN };
     }
 
     const accountStatus = await checkSmartAccountStatus();
-    
     return { 
       available: accountStatus.status === SMART_ACCOUNT_STATUS.UPGRADED,
       chain: SUPPORTED_CHAINS[chain.id].name,
@@ -347,14 +329,12 @@ export function useTrueGaslessSwap() {
       delegatorAddress: accountStatus.delegatorAddress,
       note: accountStatus.message,
       gasless: accountStatus.status === SMART_ACCOUNT_STATUS.UPGRADED,
-      reason: accountStatus.status !== SMART_ACCOUNT_STATUS.UPGRADED 
-        ? 'Smart Account not enabled - upgrade required'
-        : 'TRUE GASLESS available!'
+      reason: accountStatus.status !== SMART_ACCOUNT_STATUS.UPGRADED ? 'Smart Account not enabled' : 'TRUE GASLESS available!'
     };
   }, [chain, isConnected, checkSmartAccountStatus]);
 
   /**
-   * Reset state
+   * Reset the hook state
    */
   const reset = useCallback(() => {
     setStatus(null);
@@ -366,40 +346,30 @@ export function useTrueGaslessSwap() {
   }, []);
 
   return {
-    // Actions
     executeGaslessSwap,
     executeGaslessApproval,
     executeGaslessBatch,
     checkAvailability,
     checkSmartAccountStatus,
     reset,
-    
-    // State
     isLoading,
     status,
     statusMessage,
     error,
     txHash,
     userOpHash,
-    
-    // Smart Account Status
     smartAccountStatus,
     isSmartAccount: smartAccountStatus === SMART_ACCOUNT_STATUS.UPGRADED,
     needsUpgrade: smartAccountStatus === SMART_ACCOUNT_STATUS.NOT_UPGRADED,
     delegatorAddress,
-    
-    // Convenience flags
     isPreparing: status === 'preparing',
     isSigning: status === 'signing',
+    isSubmitting: status === 'submitting',
     isSubmitted: status === 'submitted',
     isSuccess: status === 'success',
     isError: status === 'error',
-    
-    // Chain info
     currentChainId: chain?.id,
     supportedChains: SUPPORTED_CHAINS,
-    
-    // Constants
     SMART_ACCOUNT_STATUS,
   };
 }

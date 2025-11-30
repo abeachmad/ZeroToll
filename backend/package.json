@@ -1,0 +1,19 @@
+{
+  "name": "zerotoll-gasless-api",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Gasless Transaction API using EIP-7702 and MetaMask Smart Accounts",
+  "main": "gasless_api.mjs",
+  "scripts": {
+    "start": "node gasless_api.mjs",
+    "dev": "node --watch gasless_api.mjs"
+  },
+  "dependencies": {
+    "@metamask/smart-accounts-kit": "^0.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "permissionless": "^0.3.2",
+    "viem": "^2.31.4"
+  }
+}
