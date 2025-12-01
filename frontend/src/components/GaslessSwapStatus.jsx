@@ -8,12 +8,28 @@ import React from 'react';
 import { Loader2, CheckCircle, XCircle, Zap, FileSignature, Send, Clock } from 'lucide-react';
 
 const STATUS_CONFIG = {
+  preparing: {
+    icon: Loader2,
+    label: 'Preparing Transaction',
+    color: 'text-blue-500',
+    bgColor: 'bg-blue-50',
+    borderColor: 'border-blue-200',
+    spinning: true
+  },
   building: {
     icon: Loader2,
     label: 'Building UserOp',
     color: 'text-blue-500',
     bgColor: 'bg-blue-50',
     borderColor: 'border-blue-200',
+    spinning: true
+  },
+  approving: {
+    icon: FileSignature,
+    label: 'Approving Token',
+    color: 'text-purple-500',
+    bgColor: 'bg-purple-50',
+    borderColor: 'border-purple-200',
     spinning: true
   },
   sponsoring: {
@@ -31,6 +47,14 @@ const STATUS_CONFIG = {
     bgColor: 'bg-yellow-50',
     borderColor: 'border-yellow-200',
     spinning: false
+  },
+  submitted: {
+    icon: Send,
+    label: 'Transaction Submitted',
+    color: 'text-indigo-500',
+    bgColor: 'bg-indigo-50',
+    borderColor: 'border-indigo-200',
+    spinning: true
   },
   submitting: {
     icon: Send,
@@ -50,7 +74,7 @@ const STATUS_CONFIG = {
   },
   success: {
     icon: CheckCircle,
-    label: 'Swap Complete',
+    label: 'Transaction Complete',
     color: 'text-green-500',
     bgColor: 'bg-green-50',
     borderColor: 'border-green-200',
@@ -58,7 +82,7 @@ const STATUS_CONFIG = {
   },
   error: {
     icon: XCircle,
-    label: 'Failed',
+    label: 'Transaction Failed',
     color: 'text-red-500',
     bgColor: 'bg-red-50',
     borderColor: 'border-red-200',
@@ -105,13 +129,24 @@ export function GaslessSwapStatus({ status, message, txHash, chainId }) {
         </div>
       )}
 
-      {/* Gasless indicator */}
+      {/* Error details */}
+      {status === 'error' && message && (
+        <div className="mt-2 pt-2 border-t border-red-200">
+          <p className="text-sm text-red-600 font-medium">
+            ❌ {message}
+          </p>
+          <p className="text-xs text-red-500 mt-1">
+            Check MetaMask activity for more details
+          </p>
+        </div>
+      )}
+
+      {/* Batch transaction indicator */}
       {status !== 'error' && (
         <div className="mt-2 pt-2 border-t border-gray-200">
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <Zap className="w-3 h-3" />
-            <span>Gas sponsored by paymaster</span>
-            <span className="font-semibold text-green-600">$0 fees!</span>
+            <span>Batch transaction via Smart Account (EIP-7702)</span>
           </div>
         </div>
       )}

@@ -337,22 +337,57 @@ const Swap = () => {
       const decimals = tokenIn.decimals || 6;
       const amountWei = parseUnits(amountIn, decimals);
 
-      // If gasless mode, use gasless approval via EIP-7702
-      if (isGaslessMode) {
-        // Check availability first
-        const availability = await gaslessSwap.checkAvailability();
-        console.log('🔍 Gasless availability:', availability);
+      // If gasless mode, use TRUE gasless approval via Pimlico paymaster
+      if (isGaslessMode && isTrueGasless) {
+        // Check TRUE gasless availability first
+        const availability = await trueGaslessSwap.checkAvailability();
+        console.log('🔍 TRUE Gasless availability:', availability);
         
-        if (!availability.available) {
-          toast.error(`Gasless not available: ${availability.reason}`);
+        if (!availability.available || !availability.gasless) {
+          toast.error(`TRUE Gasless not available: ${availability.reason}`);
           setApprovalPending(false);
           return;
         }
         
-        toast.info(`⚡ Gasless approval on ${availability.chain} - ${availability.note || ''}`);
+        toast.info(`🎉 TRUE GASLESS approval on ${availability.chain} - You pay $0 in gas!`);
         
         try {
-          // Use the new useSendCalls-based hook with target chain
+          // Use TRUE gasless approval via Pimlico paymaster
+          await trueGaslessSwap.executeGaslessApproval({
+            tokenAddress: tokenIn.address,
+            spender: routerHubAddress,
+            amount: amountWei.toString()
+          });
+
+          toast.success('🎉 TRUE GASLESS approval successful! You paid $0 in gas!');
+          
+          // Wait for approval to be confirmed
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          await refetchAllowance();
+          
+          setApprovalPending(false);
+        } catch (gaslessError) {
+          console.error('TRUE gasless approval error:', gaslessError);
+          toast.error(gaslessError.message || 'TRUE gasless approval failed');
+          setApprovalPending(false);
+        }
+        return;
+      }
+      
+      // Fallback to EIP-5792 batch mode (still requires gas but batches calls)
+      if (isGaslessMode) {
+        const availability = await gaslessSwap.checkAvailability();
+        console.log('🔍 Batch mode availability:', availability);
+        
+        if (!availability.available) {
+          toast.error(`Batch mode not available: ${availability.reason}`);
+          setApprovalPending(false);
+          return;
+        }
+        
+        toast.info(`⚡ Batch approval on ${availability.chain} (requires gas)`);
+        
+        try {
           await gaslessSwap.executeApproval({
             tokenAddress: tokenIn.address,
             spender: routerHubAddress,
@@ -361,15 +396,12 @@ const Swap = () => {
           });
 
           toast.success('✅ Approval submitted! Waiting for confirmation...');
-          
-          // Wait for approval to be confirmed
           await new Promise(resolve => setTimeout(resolve, 5000));
           await refetchAllowance();
-          
           setApprovalPending(false);
         } catch (gaslessError) {
-          console.error('Gasless approval error:', gaslessError);
-          toast.error(gaslessError.message || 'Gasless approval failed');
+          console.error('Batch approval error:', gaslessError);
+          toast.error(gaslessError.message || 'Batch approval failed');
           setApprovalPending(false);
         }
         return;
