@@ -61,7 +61,7 @@ Traditional DeFi has a **gas friction problem** that blocks mass adoption:
 > "I want to swap 100 USDC to DAI on Polygon, but I need to buy MATIC from Coinbase first just to pay $0.50 in gas fees."
 
 **ZeroToll Solution:**
-> Upgrade your EOA to smart account (EIP-7702) → Swap 100 USDC to DAI → Pay $0 gas (paymaster sponsors) → Fee deducted from output
+> Sign 2 messages (Permit + SwapIntent) → Relayer executes swap → Pimlico pays gas → You pay $0!
 
 ---
 
@@ -351,14 +351,14 @@ npx hardhat run scripts/fund-from-relayer.js --network sepolia
 
 - **FastAPI Server**: Quote generation, swap execution
 - **Pyth Price Integration**: Real-time oracle price feeds
-- **EIP-7702 Routes**: Gasless transaction handling
+- **Pimlico Relayer**: ERC-4337 gasless transaction handling
 - **MongoDB**: Swap history persistence
 
 ### Frontend (`frontend/`)
 
 - **Tech Stack**: React + Tailwind CSS + wagmi + viem + RainbowKit
 - **Pages**: Home, Swap, History, Market, Pool, Pool Dashboard, Docs
-- **EIP-7702 Features**: Smart account upgrade, gasless mode toggle
+- **Gasless Features**: Pimlico gasless toggle for ZTA/ZTB tokens
 - **Pool Landing**: Educational page explaining liquidity pools with CTA to dashboard
 - **Pool Dashboard**: Futuristic dark-mode UI with neon accents, APY stats, fee charts
 - **Docs Page**: Interactive architecture documentation with tabbed navigation
