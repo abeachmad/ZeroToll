@@ -1,0 +1,7 @@
+{
+  "network": "sepolia",
+  "chainId": "11155111",
+  "ZeroTollRouter": "0x7065681d02601004e48C6e8Ac1F82B44cc6b36e6",
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "timestamp": "2025-12-02T08:29:25.592Z"
+}

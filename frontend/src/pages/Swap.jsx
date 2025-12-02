@@ -11,6 +11,7 @@ import ConnectButton from '../components/ConnectButton';
 import GaslessSwapStatus from '../components/GaslessSwapStatus';
 import { useGaslessSwap } from '../hooks/useGaslessSwap';
 import { useTrueGaslessSwap } from '../hooks/useTrueGaslessSwap';
+import { useWorkingGasless, EIP7702_SUPPORTED_CHAINS } from '../hooks/useWorkingGasless';
 import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
 import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
 import arbitrumSepoliaTokens from '../config/tokenlists/zerotoll.tokens.arbitrum-sepolia.json';
@@ -83,6 +84,10 @@ const Swap = () => {
   const [isTrueGasless, setIsTrueGasless] = useState(true); // Default to TRUE gasless
   const gaslessSwap = useGaslessSwap();
   const trueGaslessSwap = useTrueGaslessSwap();
+  const workingGasless = useWorkingGasless(); // NEW: Actually working gasless hook
+  
+  // Check if current chain supports true gasless (Gnosis/Base only)
+  const isGaslessChain = EIP7702_SUPPORTED_CHAINS.includes(chain?.id);
   
   // Approval state
   const [needsApproval, setNeedsApproval] = useState(false);
@@ -555,17 +560,33 @@ const Swap = () => {
 
   const handleGaslessExecute = async () => {
     try {
-      // Check TRUE gasless availability first
-      const trueGaslessAvailability = await trueGaslessSwap.checkAvailability();
-      console.log('🔍 TRUE Gasless availability:', trueGaslessAvailability);
+      // IMPORTANT: Check if we're on a chain that supports EIP-7702
+      // MetaMask only supports EIP-7702 on Gnosis (100) and Base (8453), NOT testnets!
+      const isGaslessSupportedChain = EIP7702_SUPPORTED_CHAINS.includes(chain?.id);
       
-      // If TRUE gasless is available and enabled, use it!
-      if (isTrueGasless && trueGaslessAvailability.available && trueGaslessAvailability.gasless) {
-        console.log('🎉 Using TRUE GASLESS (Pimlico paymaster)');
-        return await handleTrueGaslessExecute();
+      if (!isGaslessSupportedChain) {
+        // Show clear warning about testnet limitations
+        console.log('⚠️ Chain', chain?.id, 'does not support EIP-7702 gasless');
+        toast.warning(
+          `⚠️ MetaMask does not support gasless on ${chain?.name || 'this network'}.\n` +
+          'Using batch mode instead (you will pay gas, but approve+swap in one tx).'
+        );
       }
       
-      // Fall back to batch mode (still requires gas)
+      // Check working gasless availability (uses the new hook)
+      const workingAvailability = await workingGasless.checkAvailability();
+      console.log('🔍 Working Gasless availability:', workingAvailability);
+      
+      // If on a gasless-supported chain with smart account, use true gasless
+      if (isGaslessSupportedChain && workingAvailability.gaslessAvailable) {
+        console.log('🎉 Using TRUE GASLESS on', chain?.name);
+        toast.info('🎉 TRUE GASLESS - You pay $0 in gas!');
+      } else if (workingAvailability.batchAvailable) {
+        console.log('⚡ Using BATCH mode on', chain?.name);
+        // Don't show another toast, we already showed the warning above
+      }
+      
+      // Fall back to batch mode (still requires gas on testnets)
       const availability = await gaslessSwap.checkAvailability();
       console.log('🔍 Batch mode availability:', availability);
       
@@ -955,25 +976,29 @@ const Swap = () => {
 
           {/* TRUE Gasless Mode Toggle (EIP-7702 + Pimlico Paymaster) */}
           <div className="mb-6">
-            <div className="glass p-4 rounded-xl border border-zt-aqua/30">
+            <div className={`glass p-4 rounded-xl border ${isGaslessChain ? 'border-green-500/30' : 'border-yellow-500/30'}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Zap className="w-5 h-5 text-zt-aqua" />
+                  <Zap className={`w-5 h-5 ${isGaslessChain ? 'text-green-400' : 'text-yellow-400'}`} />
                   <div>
                     <div className="font-semibold text-zt-paper">
-                      {trueGaslessSwap.isSmartAccount ? '🎉 TRUE Gasless Mode' : 'Batch Mode (EIP-7702)'}
+                      {isGaslessChain 
+                        ? (trueGaslessSwap.isSmartAccount ? '🎉 TRUE Gasless Mode' : '⚡ Gasless Available')
+                        : '⚡ Batch Mode Only'}
                     </div>
                     <div className="text-xs text-zt-paper/60">
-                      {trueGaslessSwap.isSmartAccount 
-                        ? 'Pay $0 in gas fees! Sponsored by Pimlico' 
-                        : 'Combine approve + swap in one transaction'}
+                      {isGaslessChain 
+                        ? (trueGaslessSwap.isSmartAccount 
+                          ? 'Pay $0 in gas fees! Sponsored by Pimlico' 
+                          : 'Enable Smart Account for $0 gas')
+                        : 'Testnets: Batch approve+swap (gas required)'}
                     </div>
                   </div>
                 </div>
                 <button
                   onClick={() => setIsGaslessMode(!isGaslessMode)}
                   className={`relative w-14 h-7 rounded-full transition-colors ${
-                    isGaslessMode ? 'bg-zt-aqua' : 'bg-white/20'
+                    isGaslessMode ? (isGaslessChain ? 'bg-green-500' : 'bg-yellow-500') : 'bg-white/20'
                   }`}
                 >
                   <div
@@ -983,6 +1008,29 @@ const Swap = () => {
                   />
                 </button>
               </div>
+              
+              {/* Chain Support Warning */}
+              {isGaslessMode && !isGaslessChain && (
+                <div className="mt-3 p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-xs">
+                      <div className="font-semibold text-yellow-400 mb-1">⚠️ Testnet Limitation</div>
+                      <div className="text-zt-paper/70">
+                        MetaMask does not support EIP-7702 gasless on {chain?.name || 'this network'}.
+                        <br />
+                        <span className="text-zt-paper/50">
+                          Batch mode will combine approve+swap into one transaction, but you will pay gas.
+                        </span>
+                        <br />
+                        <span className="text-green-400 mt-1 block">
+                          ✅ For TRUE gasless ($0 gas), use Gnosis Chain or Base.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {/* Smart Account Status Indicator */}
               {isGaslessMode && isConnected && (

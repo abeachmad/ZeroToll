@@ -219,9 +219,13 @@ async def get_quote(request: QuoteRequest, req: Request):
         usd_value = intent.amtIn * price_in
         output_amount = usd_value / price_out
         
-        # Apply slippage (5% to match MockDEXAdapter)
-        # MockDEXAdapter applies 5% slippage: amountOut * 9500 / 10000
-        net_out = output_amount * 0.95
+        # Apply conservative slippage to account for:
+        # 1. Price differences between Pyth (backend) and on-chain oracle (can be 30%+ on testnet!)
+        # 2. MockDEXAdapter's 0.3% slippage
+        # 3. RouterHub's 0.5% gasless fee
+        # Using 40% slippage to be safe (testnet oracles can have stale/different prices)
+        # TODO: Query on-chain oracle directly for accurate quotes
+        net_out = output_amount * 0.60
         
         # Determine fee token based on mode
         if intent.feeMode == 'INPUT':

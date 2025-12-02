@@ -1,0 +1,43 @@
+{
+  "chainId": 80002,
+  "network": "amoy",
+  "tokens": [
+    {
+      "symbol": "POL",
+      "name": "Polygon",
+      "logo": "🔷",
+      "address": "NATIVE",
+      "wrappedAddress": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+      "decimals": 18,
+      "isNative": true,
+      "feeModes": ["NATIVE", "INPUT", "OUTPUT"]
+    },
+    {
+      "symbol": "WMATIC",
+      "name": "Wrapped MATIC",
+      "logo": "💜",
+      "address": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+      "decimals": 18,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT"]
+    },
+    {
+      "symbol": "USDC",
+      "name": "USD Coin",
+      "logo": "💵",
+      "address": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
+      "decimals": 6,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT", "STABLE"]
+    },
+    {
+      "symbol": "LINK",
+      "name": "Chainlink",
+      "logo": "🔗",
+      "address": "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904",
+      "decimals": 18,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT"]
+    }
+  ]
+}

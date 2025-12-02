@@ -11,6 +11,8 @@ const Market = lazy(() => import('@/pages/Market'));
 const Pool = lazy(() => import('@/pages/Pool'));
 const LiquidityPool = lazy(() => import('@/pages/LiquidityPool'));
 const Docs = lazy(() => import('@/pages/Docs'));
+const TestMetaMask7702 = lazy(() => import('@/components/TestMetaMask7702'));
+const TestSmartAccount = lazy(() => import('@/components/TestSmartAccount'));
 
 function App() {
   return (
@@ -30,6 +32,8 @@ function App() {
               <Route path="/pool" element={<Pool />} />
               <Route path="/pool/dashboard" element={<LiquidityPool />} />
               <Route path="/docs" element={<Docs />} />
+              <Route path="/test-7702" element={<TestMetaMask7702 />} />
+              <Route path="/test-smart-account" element={<TestSmartAccount />} />
             </Routes>
           </Suspense>
         </BrowserRouter>

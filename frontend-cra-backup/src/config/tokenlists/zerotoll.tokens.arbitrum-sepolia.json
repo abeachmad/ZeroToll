@@ -1,0 +1,43 @@
+{
+  "chainId": 421614,
+  "network": "arbitrum-sepolia",
+  "tokens": [
+    {
+      "symbol": "ETH",
+      "name": "Ethereum",
+      "logo": "⭐",
+      "address": "NATIVE",
+      "wrappedAddress": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "decimals": 18,
+      "isNative": true,
+      "feeModes": ["NATIVE", "INPUT", "OUTPUT"]
+    },
+    {
+      "symbol": "WETH",
+      "name": "Wrapped Ether",
+      "logo": "💎",
+      "address": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "decimals": 18,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT"]
+    },
+    {
+      "symbol": "USDC",
+      "name": "USD Coin",
+      "logo": "💵",
+      "address": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+      "decimals": 6,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT", "STABLE"]
+    },
+    {
+      "symbol": "LINK",
+      "name": "Chainlink",
+      "logo": "🔗",
+      "address": "0xb1D4538B4571d411F07960EF2838Ce337FE1E80E",
+      "decimals": 18,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT"]
+    }
+  ]
+}

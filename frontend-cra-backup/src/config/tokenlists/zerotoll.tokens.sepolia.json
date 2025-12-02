@@ -1,0 +1,52 @@
+{
+  "chainId": 11155111,
+  "network": "sepolia",
+  "tokens": [
+    {
+      "symbol": "ETH",
+      "name": "Ethereum",
+      "logo": "⭐",
+      "address": "NATIVE",
+      "wrappedAddress": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+      "decimals": 18,
+      "isNative": true,
+      "feeModes": ["NATIVE", "INPUT", "OUTPUT"]
+    },
+    {
+      "symbol": "WETH",
+      "name": "Wrapped Ether",
+      "logo": "💎",
+      "address": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+      "decimals": 18,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT"]
+    },
+    {
+      "symbol": "USDC",
+      "name": "USD Coin",
+      "logo": "💵",
+      "address": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      "decimals": 6,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT", "STABLE"]
+    },
+    {
+      "symbol": "PYUSD",
+      "name": "PayPal USD",
+      "logo": "�",
+      "address": "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9",
+      "decimals": 6,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT", "STABLE"]
+    },
+    {
+      "symbol": "LINK",
+      "name": "Chainlink",
+      "logo": "🔗",
+      "address": "0x779877A7B0D9E8603169DdBD7836e478b4624789",
+      "decimals": 18,
+      "isNative": false,
+      "feeModes": ["INPUT", "OUTPUT"]
+    }
+  ]
+}
