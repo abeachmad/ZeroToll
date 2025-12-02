@@ -15,6 +15,8 @@
   "sepolia": {
     "chainId": 11155111,
     "routerHub": "0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84",
+    "zeroTollRouter": "0xd475255Ae38C92404f9740A19F93B8D2526A684b",
+    "smartDexAdapter": "0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa",
     "feeSink": "0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130",
     "wrappedToken": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
     "feeVault": "TBD_AFTER_DEPLOYMENT",
@@ -24,6 +26,10 @@
       "uniswapV3": "0x86D1AA2228F3ce649d415F19fC71134264D0E84B",
       "mockDex": "0x86D1AA2228F3ce649d415F19fC71134264D0E84B",
       "mockBridge": "TBD_AFTER_DEPLOYMENT"
+    },
+    "gaslessTokens": {
+      "ZTA": "0x4cF58E14DbC9614d7F6112f6256dE9062300C6Bf",
+      "ZTB": "0x8fb844251af76AF090B005643D966FC52852100a"
     }
   },
   "arbitrumSepolia": {

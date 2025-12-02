@@ -12,6 +12,7 @@ import GaslessSwapStatus from '../components/GaslessSwapStatus';
 import { useGaslessSwap } from '../hooks/useGaslessSwap';
 import { useTrueGaslessSwap } from '../hooks/useTrueGaslessSwap';
 import { useWorkingGasless, EIP7702_SUPPORTED_CHAINS } from '../hooks/useWorkingGasless';
+import { useIntentGasless } from '../hooks/useIntentGasless';
 import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
 import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
 import arbitrumSepoliaTokens from '../config/tokenlists/zerotoll.tokens.arbitrum-sepolia.json';
@@ -82,9 +83,12 @@ const Swap = () => {
   // Gasless mode toggle
   const [isGaslessMode, setIsGaslessMode] = useState(false);
   const [isTrueGasless, setIsTrueGasless] = useState(true); // Default to TRUE gasless
+  const [isPimlicoGasless, setIsPimlicoGasless] = useState(false); // Pimlico intent-based gasless
+  const [pimlicoStatus, setPimlicoStatus] = useState('');
   const gaslessSwap = useGaslessSwap();
   const trueGaslessSwap = useTrueGaslessSwap();
   const workingGasless = useWorkingGasless(); // NEW: Actually working gasless hook
+  const intentGasless = useIntentGasless(); // Pimlico intent-based gasless (works on Sepolia!)
   
   // Check if current chain supports true gasless (Gnosis/Base only)
   const isGaslessChain = EIP7702_SUPPORTED_CHAINS.includes(chain?.id);
@@ -719,7 +723,76 @@ const Swap = () => {
     }
   };
 
+  // Pimlico Intent-Based Gasless (works on Sepolia with ZTA/ZTB!)
+  const handlePimlicoGasless = async () => {
+    if (!intentGasless.isSupported) {
+      toast.error('Pimlico gasless not supported on this chain');
+      return;
+    }
+
+    if (!intentGasless.isGaslessToken(tokenIn.address)) {
+      toast.error(`${tokenIn.symbol} doesn't support Pimlico gasless. Use ZTA or ZTB tokens.`);
+      return;
+    }
+
+    setPimlicoStatus('Checking balance...');
+    
+    try {
+      const balance = await intentGasless.getTokenBalance(tokenIn.address);
+      const decimals = tokenIn.decimals || 18;
+      const amountWei = parseUnits(amountIn, decimals);
+      
+      if (balance < amountWei) {
+        toast.error(`Insufficient ${tokenIn.symbol} balance`);
+        setPimlicoStatus('');
+        return;
+      }
+
+      setPimlicoStatus('Sign Permit + Swap Intent in MetaMask (NO GAS!)...');
+      toast.info('⚡ Sign 2 messages in MetaMask - you pay ZERO gas!');
+
+      const minOut = parseUnits((parseFloat(amountIn) * 0.95).toString(), tokenOut.decimals || 18);
+      
+      const result = await intentGasless.submitSwapWithPermit({
+        tokenIn: tokenIn.address,
+        tokenOut: tokenOut.address,
+        amountIn: amountWei.toString(),
+        minAmountOut: minOut.toString(),
+        deadlineMinutes: 30
+      });
+
+      setPimlicoStatus('Swap submitted! Waiting for confirmation...');
+      toast.success(`🎉 Gasless swap submitted! Tx: ${result.txHash?.slice(0, 10)}...`);
+      setTxHash(result.txHash);
+
+      // Poll for confirmation
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const status = await intentGasless.checkStatus(result.requestId);
+        if (status.status === 'confirmed') {
+          setPimlicoStatus('✓ Swap confirmed! You paid ZERO gas!');
+          toast.success('🎉 Gasless swap confirmed! You paid $0 in gas!');
+          return;
+        } else if (status.status === 'failed') {
+          setPimlicoStatus('Swap failed on-chain');
+          toast.error('Swap failed on-chain');
+          return;
+        }
+      }
+      setPimlicoStatus('Check explorer for status');
+    } catch (error) {
+      console.error('Pimlico gasless error:', error);
+      setPimlicoStatus('');
+      toast.error(error.message || 'Pimlico gasless failed');
+    }
+  };
+
   const handleExecute = async () => {
+    // If Pimlico gasless mode is enabled, use that
+    if (isPimlicoGasless && intentGasless.isGaslessToken(tokenIn.address)) {
+      return await handlePimlicoGasless();
+    }
+
     if (!quote) {
       toast.error('Get a quote first');
       return;
@@ -1104,7 +1177,64 @@ const Swap = () => {
                 </div>
               )}
             </div>
-          </div>          {/* Gas Payment Mode Selector */}
+          </div>
+
+          {/* Pimlico Intent Gasless (ZTA/ZTB on Sepolia) */}
+          {fromChain.id === 11155111 && intentGasless.isGaslessToken(tokenIn?.address) && (
+            <div className="mb-6">
+              <div className="glass p-4 rounded-xl border border-green-500/30 bg-green-500/5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Zap className="w-5 h-5 text-green-400" />
+                    <div>
+                      <div className="font-semibold text-green-400">⚡ Pimlico Gasless Available!</div>
+                      <div className="text-xs text-zt-paper/60">
+                        {tokenIn?.symbol} supports ERC-2612 Permit - swap with ZERO gas!
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsPimlicoGasless(!isPimlicoGasless)}
+                    className={`relative w-14 h-7 rounded-full transition-colors ${
+                      isPimlicoGasless ? 'bg-green-500' : 'bg-white/20'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                        isPimlicoGasless ? 'translate-x-7' : ''
+                      }`}
+                    />
+                  </button>
+                </div>
+                
+                {isPimlicoGasless && (
+                  <div className="mt-3 pt-3 border-t border-white/10">
+                    <div className="flex items-start gap-2 text-xs">
+                      <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+                      <div className="text-zt-paper/80">
+                        <div className="font-semibold text-green-400 mb-1">How it works:</div>
+                        <ul className="space-y-1 text-zt-paper/70">
+                          <li>1. Sign Permit (approves token transfer - no gas)</li>
+                          <li>2. Sign Swap Intent (authorizes swap - no gas)</li>
+                          <li>3. Pimlico relayer executes on-chain (they pay gas!)</li>
+                        </ul>
+                        <div className="mt-2 p-2 bg-green-500/10 rounded border border-green-500/30">
+                          <span className="text-green-400 font-medium">✅ You pay: $0 | Pimlico pays: All gas</span>
+                        </div>
+                      </div>
+                    </div>
+                    {pimlicoStatus && (
+                      <div className="mt-2 p-2 bg-zt-aqua/10 rounded text-xs text-zt-aqua">
+                        {pimlicoStatus}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Gas Payment Mode Selector */}
           {!isGaslessMode && (
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-3">
