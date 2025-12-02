@@ -16,7 +16,7 @@ const RELAYER_URL = process.env.REACT_APP_RELAYER_URL || 'http://localhost:3001'
 // ZeroToll Router addresses per chain
 const ZEROTOLL_ROUTERS = {
   11155111: '0xd475255Ae38C92404f9740A19F93B8D2526A684b', // Sepolia
-  // 80002: 'TBD' // Amoy - deploy later
+  80002: '0xa28aB456a0434335c6953fd3A32A15A5cB12FE1A', // Amoy
 };
 
 // Gasless tokens (ERC-2612 Permit)
@@ -24,6 +24,10 @@ const GASLESS_TOKENS = {
   11155111: {
     ZTA: '0x4cF58E14DbC9614d7F6112f6256dE9062300C6Bf',
     ZTB: '0x8fb844251af76AF090B005643D966FC52852100a',
+  },
+  80002: {
+    ZTA: '0x3Bead37cD9fB0E1621C8Cc2c58Ab0753085cF109',
+    ZTB: '0x9e2eE39aDaE9A4985d1aC1Fbb55830e00F686668',
   }
 };
 

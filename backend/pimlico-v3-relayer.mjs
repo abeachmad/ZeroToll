@@ -42,8 +42,26 @@ if (!PIMLICO_API_KEY) {
   process.exit(1);
 }
 
-const ZEROTOLL_ROUTER = '0xd475255Ae38C92404f9740A19F93B8D2526A684b';
-const PIMLICO_URL = `https://api.pimlico.io/v2/sepolia/rpc?apikey=${PIMLICO_API_KEY}`;
+// Multi-chain configuration
+const CHAIN_CONFIG = {
+  11155111: {
+    name: 'sepolia',
+    router: '0xd475255Ae38C92404f9740A19F93B8D2526A684b',
+    rpc: 'https://ethereum-sepolia-rpc.publicnode.com',
+    pimlicoUrl: `https://api.pimlico.io/v2/sepolia/rpc?apikey=${PIMLICO_API_KEY}`
+  },
+  80002: {
+    name: 'polygon-amoy',
+    router: '0xa28aB456a0434335c6953fd3A32A15A5cB12FE1A',
+    rpc: 'https://rpc-amoy.polygon.technology',
+    pimlicoUrl: `https://api.pimlico.io/v2/polygon-amoy/rpc?apikey=${PIMLICO_API_KEY}`
+  }
+};
+
+// Default to Sepolia
+const DEFAULT_CHAIN_ID = 11155111;
+const ZEROTOLL_ROUTER = CHAIN_CONFIG[DEFAULT_CHAIN_ID].router;
+const PIMLICO_URL = CHAIN_CONFIG[DEFAULT_CHAIN_ID].pimlicoUrl;
 
 const SWAP_INTENT_TYPES = {
   SwapIntent: [
