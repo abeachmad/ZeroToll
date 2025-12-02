@@ -285,6 +285,93 @@ app.post('/api/intents/swap-with-permit2', async (req, res) => {
 
 
 // ============================================
+// Gasless Approval - Relayer pays for user's approval tx
+// ============================================
+app.post('/api/gasless-approve', async (req, res) => {
+  try {
+    const { chainId, tokenAddress, spender, userAddress, signature, deadline, nonce } = req.body;
+    if (chainId !== 11155111) return res.status(400).json({ error: 'Only Sepolia supported' });
+
+    // Verify the user signed the approval request
+    // This prevents abuse - user must sign to prove they want this approval
+    const message = {
+      token: getAddress(tokenAddress),
+      spender: getAddress(spender),
+      user: getAddress(userAddress),
+      deadline: BigInt(deadline),
+      nonce: BigInt(nonce)
+    };
+
+    // For simplicity, we'll trust the signature and execute
+    // In production, add proper EIP-712 verification
+    console.log('Gasless approval request:', userAddress, '->', spender, 'for', tokenAddress);
+
+    // Build approve call data
+    const approveData = encodeFunctionData({
+      abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']),
+      functionName: 'approve',
+      args: [getAddress(spender), BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')]
+    });
+
+    // This won't work directly - we can't approve on behalf of user without their signature
+    // The correct approach is to use Permit2 or have user sign a meta-transaction
+    
+    // Alternative: Relayer approves Permit2 for user's tokens (requires user to have approved relayer first)
+    // This is a chicken-and-egg problem!
+    
+    // The REAL solution is:
+    // 1. User signs Permit2 PermitSingle (gasless)
+    // 2. Relayer calls Permit2.permit() with user's signature
+    // 3. Then Permit2 can transfer user's tokens
+    
+    // For tokens without Permit2 approval, user MUST pay gas once to approve Permit2
+    // There's no way around this fundamental limitation
+    
+    res.json({
+      success: false,
+      error: 'Direct gasless approval not possible for tokens without ERC-2612 Permit',
+      solution: 'User must approve Permit2 once (pays gas), then all future swaps are gasless',
+      alternatives: [
+        'Use ZTA/ZTB tokens which have built-in Permit support',
+        'Wrap tokens to pWETH/pUSDC which have Permit support',
+        'Use native ETH swaps (no approval needed)'
+      ]
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// Native ETH Swap - No approval needed!
+// ============================================
+app.post('/api/intents/swap-eth', async (req, res) => {
+  try {
+    const { chainId, userAddress, tokenOut, amountIn, minAmountOut, deadline, signature } = req.body;
+    if (chainId !== 11155111) return res.status(400).json({ error: 'Only Sepolia supported' });
+
+    // For ETH swaps, user sends ETH to relayer, relayer wraps and swaps
+    // This requires a different flow - user must send ETH first
+    
+    res.json({
+      success: false,
+      error: 'ETH swap requires user to send ETH first',
+      instructions: [
+        '1. User sends ETH to ETHSwapRouter contract',
+        '2. User signs swap intent',
+        '3. Relayer executes swap',
+        '4. User receives output tokens'
+      ],
+      note: 'ETH swaps are gasless for the swap itself, but user pays gas to send ETH'
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // Status & Config
 // ============================================
 app.get('/api/intents/:id/status', async (req, res) => {

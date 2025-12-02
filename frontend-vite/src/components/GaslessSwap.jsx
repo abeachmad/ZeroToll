@@ -11,8 +11,10 @@ import { useGaslessSwap } from '../hooks/useGaslessSwap';
 const SEPOLIA_TOKENS = {
   'ZTA (Gasless)': '0x4cF58E14DbC9614d7F6112f6256dE9062300C6Bf',  // ERC-2612 Permit - fully gasless
   'ZTB (Gasless)': '0x8fb844251af76AF090B005643D966FC52852100a',  // ERC-2612 Permit - fully gasless
-  'WETH (Uniswap)': '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14', // Uniswap V3 routing
-  'USDC (Uniswap)': '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238'  // Uniswap V3 routing
+  'pWETH (Gasless)': '0x3af00011Da61751bc58DFfDD0F9F85F69301E180', // Permit-wrapped WETH
+  'pUSDC (Gasless)': '0xD6a7294445F34d0F7244b2072696106904ea807B', // Permit-wrapped USDC
+  'WETH': '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14',           // Native WETH (needs Permit2)
+  'USDC': '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238'            // Native USDC (needs Permit2)
 };
 
 const AMOY_TOKENS = {
@@ -61,10 +63,18 @@ export function GaslessSwap() {
     }
   }, [isConnected, chainId, getTokenBalance, account]);
 
-  // Check if selected token supports ERC-2612 Permit (ZTA/ZTB do)
-  const isPermitToken = tokenIn === ZTA_ADDRESS || tokenIn === ZTB_ADDRESS;
+  // Permit-enabled tokens (fully gasless)
+  const PERMIT_TOKENS = [
+    ZTA_ADDRESS,
+    ZTB_ADDRESS,
+    '0x3af00011Da61751bc58DFfDD0F9F85F69301E180', // pWETH
+    '0xD6a7294445F34d0F7244b2072696106904ea807B'  // pUSDC
+  ];
   
-  // Check if token uses Uniswap routing
+  // Check if selected token supports ERC-2612 Permit
+  const isPermitToken = PERMIT_TOKENS.includes(tokenIn);
+  
+  // Check if token uses Uniswap routing (native WETH/USDC)
   const isUniswapToken = tokenIn === '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14' || 
                          tokenIn === '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
 
@@ -352,13 +362,14 @@ export function GaslessSwap() {
       <p style={styles.subtitle}>Approve once to Permit2 → Sign intents forever (no gas)</p>
 
       <div style={styles.infoBox}>
-        <strong>🚀 Gasless Swap Demo</strong>
+        <strong>🚀 Gasless Swap Options</strong>
         <ul style={{...styles.list, listStyle: 'none', paddingLeft: '0', margin: '8px 0'}}>
-          <li>⚡ <b>ZTA/ZTB</b>: 100% gasless test tokens (use faucet below)</li>
-          <li>🦄 <b>WETH/USDC</b>: Need real tokens + Permit2 approval</li>
+          <li>⚡ <b>ZTA/ZTB</b>: 100% gasless (use faucet below)</li>
+          <li>⚡ <b>pWETH/pUSDC</b>: Permit-wrapped tokens (wrap once, gasless forever)</li>
+          <li>🦄 <b>WETH/USDC</b>: Native tokens (need Permit2 approval once)</li>
         </ul>
-        <p style={{margin: '5px 0 0 0', fontSize: '11px', color: '#e65100', fontWeight: 'bold'}}>
-          💡 For demo: Use ZTA↔ZTB swaps (click faucet to get free tokens)
+        <p style={{margin: '5px 0 0 0', fontSize: '11px', color: '#2e7d32', fontWeight: 'bold'}}>
+          💡 Best: Use ZTA/ZTB or pWETH/pUSDC for fully gasless swaps!
         </p>
       </div>
 
