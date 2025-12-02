@@ -3,28 +3,6 @@
   "network": "amoy",
   "tokens": [
     {
-      "symbol": "ZTA",
-      "name": "ZeroToll Token A",
-      "logo": "⚡",
-      "address": "0x3Bead37cD9fB0E1621C8Cc2c58Ab0753085cF109",
-      "decimals": 18,
-      "isNative": false,
-      "isGasless": true,
-      "permitType": "ERC2612",
-      "feeModes": ["INPUT", "OUTPUT"]
-    },
-    {
-      "symbol": "ZTB",
-      "name": "ZeroToll Token B",
-      "logo": "⚡",
-      "address": "0x9e2eE39aDaE9A4985d1aC1Fbb55830e00F686668",
-      "decimals": 18,
-      "isNative": false,
-      "isGasless": true,
-      "permitType": "ERC2612",
-      "feeModes": ["INPUT", "OUTPUT"]
-    },
-    {
       "symbol": "POL",
       "name": "Polygon",
       "logo": "🔷",

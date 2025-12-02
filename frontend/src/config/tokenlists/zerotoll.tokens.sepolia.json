@@ -3,28 +3,6 @@
   "network": "sepolia",
   "tokens": [
     {
-      "symbol": "ZTA",
-      "name": "ZeroToll Token A",
-      "logo": "⚡",
-      "address": "0x4cF58E14DbC9614d7F6112f6256dE9062300C6Bf",
-      "decimals": 18,
-      "isNative": false,
-      "isGasless": true,
-      "permitType": "ERC2612",
-      "feeModes": ["INPUT", "OUTPUT"]
-    },
-    {
-      "symbol": "ZTB",
-      "name": "ZeroToll Token B",
-      "logo": "⚡",
-      "address": "0x8fb844251af76AF090B005643D966FC52852100a",
-      "decimals": 18,
-      "isNative": false,
-      "isGasless": true,
-      "permitType": "ERC2612",
-      "feeModes": ["INPUT", "OUTPUT"]
-    },
-    {
       "symbol": "ETH",
       "name": "Ethereum",
       "logo": "⭐",

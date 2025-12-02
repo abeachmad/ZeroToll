@@ -1047,8 +1047,8 @@ const Swap = () => {
             )}
           </div>
 
-          {/* TRUE Gasless Mode Toggle (EIP-7702 + Pimlico Paymaster) */}
-          <div className="mb-6">
+          {/* OLD: TRUE Gasless Mode Toggle (EIP-7702) - HIDDEN, not working on testnets */}
+          {false && <div className="mb-6">
             <div className={`glass p-4 rounded-xl border ${isGaslessChain ? 'border-green-500/30' : 'border-yellow-500/30'}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -1177,10 +1177,10 @@ const Swap = () => {
                 </div>
               )}
             </div>
-          </div>
+          </div>}
 
-          {/* Pimlico Intent Gasless (ZTA/ZTB on Sepolia) */}
-          {fromChain.id === 11155111 && intentGasless.isGaslessToken(tokenIn?.address) && (
+          {/* Pimlico Intent Gasless - HIDDEN (ZTA/ZTB removed, not on Pyth oracle) */}
+          {false && (fromChain.id === 11155111 || fromChain.id === 80002) && intentGasless.isGaslessToken(tokenIn?.address) && (
             <div className="mb-6">
               <div className="glass p-4 rounded-xl border border-green-500/30 bg-green-500/5">
                 <div className="flex items-center justify-between">
