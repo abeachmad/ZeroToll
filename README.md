@@ -1,35 +1,49 @@
 # ZeroToll 🚀
 
-**Gasless DeFi with EIP-7702 Smart Accounts**
+**True Gasless DeFi with ERC-4337 Account Abstraction**
 
-> Next-generation DeFi protocol enabling **true gasless swaps** with EIP-7702 account upgrades.
+> Next-generation DeFi protocol enabling **true gasless swaps** where users pay ZERO gas.
 > Swap tokens without native gas. Pay fees in ANY token. Fully on-chain.
 
-> Powered by **EIP-7702**, **Pyth Network oracles**, and **ERC-4337 Account Abstraction**.
+> Powered by **ERC-4337 Account Abstraction**, **EIP-712 Signatures**, **ERC-2612 Permit**, and **Pimlico Paymaster**.
 
 ---
 
 ## ✨ What is ZeroToll?
 
-ZeroToll is a **next-generation gasless DEX** that eliminates the gas friction problem in DeFi through **EIP-7702 smart account upgrades**:
+ZeroToll is a **next-generation gasless DEX** that eliminates the gas friction problem in DeFi through **intent-based signatures and paymaster sponsorship**:
 
-### 🎯 Core Innovation: EIP-7702 + Pimlico Paymaster
+### 🎯 Core Innovation: ERC-4337 + EIP-712 + ERC-2612
 
-**Phase 1 (Current)**: ✅ Pimlico-powered gasless swaps - **WORKING**
+**How It Works:**
+1. User signs **ERC-2612 Permit** (approves token transfer) - NO GAS
+2. User signs **EIP-712 SwapIntent** (authorizes the swap) - NO GAS  
+3. Relayer's **Smart Account** (ERC-4337) bundles and executes the swap
+4. **Pimlico Paymaster** sponsors ALL gas costs
 
-**Phase 2 (Planned)**: Self-hosted paymaster with full control
-
-**Phase 3 (Future)**: Community paymaster & liquidity pool - LPs earn from gas fees
-
+```
+User (EOA)                    Relayer (Smart Account)
+    |                                |
+    | 1. Sign Permit (ERC-2612)      |
+    | 2. Sign SwapIntent (EIP-712)   |
+    |------------------------------->|
+    |                                | 3. Bundle into UserOperation
+    |                                | 4. Submit to Pimlico Bundler
+    |                                | 5. Pimlico Paymaster pays gas
+    |                                | 6. Execute on-chain
+    |<-------------------------------|
+    | Tokens swapped, $0 gas paid    |
+```
 
 ### Key Features
 
-- ⚡ **EIP-7702 Smart Accounts**: Upgrade your EOA to smart account in one click
-- 🆓 **True Gasless Swaps**: Zero native tokens required - paymaster sponsors gas
+- ⚡ **True Gasless Swaps**: Sign 2 messages, pay ZERO gas - Pimlico sponsors everything
+- 🎫 **ERC-2612 Permit**: Gasless token approvals via signatures
+- 📝 **EIP-712 Intents**: Typed structured data for secure swap authorization
+- 🤖 **ERC-4337 Smart Accounts**: Relayer executes on behalf of users
 - 💰 **Any-Token Fees**: Pay swap fees in USDC, DAI, WETH, or the token you're swapping
 - 🔮 **LIVE Oracle Prices**: Real-time Pyth Network integration (NO hardcoded values!)
 - 🌐 **Multi-Chain**: Polygon Amoy + Ethereum Sepolia testnets
-- 🌉 **Cross-Chain Swaps**: Bridge tokens between chains with gasless UX (SushiXSwap-style)
 - 🔐 **Fully On-Chain**: All transactions verifiable on block explorers
 
 ---
@@ -90,28 +104,52 @@ That's it! No complex setup needed. 🎉
 
 ## 📊 Deployed Contracts
 
-### Polygon Amoy (ChainID: 80002) - EIP-7702 WORKING ✅
+### Polygon Amoy (ChainID: 80002) - GASLESS WORKING ✅
 
 | Contract | Address | Explorer |
 |----------|---------|----------|
 | RouterHub | `0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881` | [View](https://amoy.polygonscan.com/address/0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881) |
+| **ZeroTollRouterV2** | `0xa28aB456a0434335c6953fd3A32A15A5cB12FE1A` | [View](https://amoy.polygonscan.com/address/0xa28aB456a0434335c6953fd3A32A15A5cB12FE1A) |
+| **SmartDexAdapter** | `0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84` | [View](https://amoy.polygonscan.com/address/0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84) |
 | MockDEXAdapter | `0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1` | [View](https://amoy.polygonscan.com/address/0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1) |
+| **ZTA (Gasless Token)** | `0x3Bead37cD9fB0E1621C8Cc2c58Ab0753085cF109` | [View](https://amoy.polygonscan.com/address/0x3Bead37cD9fB0E1621C8Cc2c58Ab0753085cF109) |
+| **ZTB (Gasless Token)** | `0x9e2eE39aDaE9A4985d1aC1Fbb55830e00F686668` | [View](https://amoy.polygonscan.com/address/0x9e2eE39aDaE9A4985d1aC1Fbb55830e00F686668) |
 | USDC | `0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582` | [View](https://amoy.polygonscan.com/address/0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582) |
 | WPOL | `0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9` | [View](https://amoy.polygonscan.com/address/0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9) |
-| Smart Account | `0xEef74EB6f5eA5f869115846E9771A8551f9e4323` | [View](https://amoy.polygonscan.com/address/0xEef74EB6f5eA5f869115846E9771A8551f9e4323) |
 
-**Adapter Liquidity**: ~11 WPOL + ~39 USDC
+**Adapter Liquidity**: 100k ZTA + 100k ZTB (internal pool)
 
-### Ethereum Sepolia (ChainID: 11155111) - EIP-7702 WORKING ✅
+### Ethereum Sepolia (ChainID: 11155111) - GASLESS WORKING ✅
 
 | Contract | Address | Explorer |
 |----------|---------|----------|
 | RouterHub | `0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84` | [View](https://sepolia.etherscan.io/address/0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84) |
+| **ZeroTollRouterV2** | `0xd475255Ae38C92404f9740A19F93B8D2526A684b` | [View](https://sepolia.etherscan.io/address/0xd475255Ae38C92404f9740A19F93B8D2526A684b) |
+| **SmartDexAdapter** | `0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa` | [View](https://sepolia.etherscan.io/address/0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa) |
 | MockDEXAdapter | `0x86D1AA2228F3ce649d415F19fC71134264D0E84B` | [View](https://sepolia.etherscan.io/address/0x86D1AA2228F3ce649d415F19fC71134264D0E84B) |
 | USDC | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` | [View](https://sepolia.etherscan.io/address/0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238) |
 | WETH | `0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14` | [View](https://sepolia.etherscan.io/address/0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14) |
+| **ZTA (Gasless Token)** | `0x4cF58E14DbC9614d7F6112f6256dE9062300C6Bf` | [View](https://sepolia.etherscan.io/address/0x4cF58E14DbC9614d7F6112f6256dE9062300C6Bf) |
+| **ZTB (Gasless Token)** | `0x8fb844251af76AF090B005643D966FC52852100a` | [View](https://sepolia.etherscan.io/address/0x8fb844251af76AF090B005643D966FC52852100a) |
+| **Pimlico Smart Account** | `0x2caF80daf45581E017aaC929812b92Ad954Be2E8` | [View](https://sepolia.etherscan.io/address/0x2caF80daf45581E017aaC929812b92Ad954Be2E8) |
 
 **Adapter Liquidity**: ~0.1 WETH + ~53 USDC
+
+### Gasless Test Tokens (ERC-2612 Permit)
+
+**Ethereum Sepolia:**
+| Token | Address | Features |
+|-------|---------|----------|
+| **ZTA** | `0x4cF58E14DbC9614d7F6112f6256dE9062300C6Bf` | ERC-2612 Permit, Faucet (1000 tokens) |
+| **ZTB** | `0x8fb844251af76AF090B005643D966FC52852100a` | ERC-2612 Permit, Faucet (1000 tokens) |
+
+**Polygon Amoy:**
+| Token | Address | Features |
+|-------|---------|----------|
+| **ZTA** | `0x3Bead37cD9fB0E1621C8Cc2c58Ab0753085cF109` | ERC-2612 Permit, Faucet (1000 tokens) |
+| **ZTB** | `0x9e2eE39aDaE9A4985d1aC1Fbb55830e00F686668` | ERC-2612 Permit, Faucet (1000 tokens) |
+
+These tokens support **100% gasless swaps** - no approval transaction needed!
 
 ### Cross-Chain Bridge Adapters
 
@@ -124,25 +162,38 @@ That's it! No complex setup needed. 🎉
 
 ## ✅ Proven Gasless Transactions
 
-EIP-7702 gasless swaps are **WORKING** on both Polygon Amoy and Ethereum Sepolia!
+**ERC-4337 + EIP-712 + ERC-2612** gasless swaps are **WORKING** on Ethereum Sepolia!
 
-### Polygon Amoy
+### Gasless Architecture
+
+| Component | Standard | Purpose |
+|-----------|----------|---------|
+| **Smart Account** | ERC-4337 | Relayer's account that executes swaps |
+| **Swap Intent** | EIP-712 | Typed signature authorizing the swap |
+| **Token Permit** | ERC-2612 | Gasless token approval via signature |
+| **Paymaster** | ERC-4337 | Pimlico sponsors all gas costs |
+
+### How Users Experience It
+
+1. **Select ZTA or ZTB** token on Sepolia
+2. **Toggle "Pimlico Gasless"** ON
+3. **Click Execute** - MetaMask asks for 2 signatures (NO gas prompts!)
+4. **Done** - Tokens swapped, user paid $0
+
+### Ethereum Sepolia (Intent-Based Gasless)
+
+| Swap | TX Hash | Explorer |
+|------|---------|----------|
+| ZTA → ZTB | Via Pimlico UserOperation | [View on Etherscan](https://sepolia.etherscan.io/) |
+
+**Gas spent by user: ZERO** - All gas sponsored by Pimlico paymaster!
+
+### Legacy Transactions (Polygon Amoy)
 
 | Swap | TX Hash | Explorer |
 |------|---------|----------|
 | 0.5 USDC → WPOL | `0xf1d28ea5d2fc1dd8fd6fed93df6dfa65d9d5e1daf4551696a3cd8eca83893e28` | [View](https://amoy.polygonscan.com/tx/0xf1d28ea5d2fc1dd8fd6fed93df6dfa65d9d5e1daf4551696a3cd8eca83893e28) |
 | 0.3 USDC → WPOL | `0x3cab5a0a0d66478689ee5d5c8c045ef837912b211e05987879608cda41bba891` | [View](https://amoy.polygonscan.com/tx/0x3cab5a0a0d66478689ee5d5c8c045ef837912b211e05987879608cda41bba891) |
-| 1.0 WPOL → USDC | `0x4d75400d9914ffb9846cfec825fd00fec67311155407dff6775c1897d3e1aa36` | [View](https://amoy.polygonscan.com/tx/0x4d75400d9914ffb9846cfec825fd00fec67311155407dff6775c1897d3e1aa36) |
-
-### Ethereum Sepolia
-
-| Swap | TX Hash | Explorer |
-|------|---------|----------|
-| 1 USDC → WETH | `0x97ad117e29444d9ff26e15ea1d25667a803a25086347f814ab8f2621553f1019` | [View](https://sepolia.etherscan.io/tx/0x97ad117e29444d9ff26e15ea1d25667a803a25086347f814ab8f2621553f1019) |
-| 1 USDC → WETH | `0x0efe5fefdb17eb7fd393ed02bb5785f4f8db7ee64567eb226cd4c89dff0ed76b` | [View](https://sepolia.etherscan.io/tx/0x0efe5fefdb17eb7fd393ed02bb5785f4f8db7ee64567eb226cd4c89dff0ed76b) |
-| 0.0005 WETH → USDC | `0x829f63cee7df4e8d919a97a5cea57868734a48828072b627cba622e6a431452a` | [View](https://sepolia.etherscan.io/tx/0x829f63cee7df4e8d919a97a5cea57868734a48828072b627cba622e6a431452a) |
-
-**Gas spent by user: ZERO** - All gas sponsored by Pimlico paymaster on both networks!
 
 ### Cross-Chain Gasless Swaps 🌉
 
@@ -163,17 +214,24 @@ See [EIP7702_GASLESS_SUCCESS.md](./EIP7702_GASLESS_SUCCESS.md) for full transact
 **Goal**: Launch gasless swaps FAST, validate user demand
 
 **Features**:
-- ✅ EIP-7702 account upgrade flow
+- ✅ Intent-based gasless swaps (ERC-4337 + EIP-712 + ERC-2612)
 - ✅ Gasless swaps via Pimlico paymaster
+- ✅ ZTA/ZTB test tokens with ERC-2612 Permit
 - ✅ Regular swaps (user pays gas) as fallback
 - ✅ Multi-chain support (Amoy + Sepolia)
-- ✅ 13+ successful gasless transactions verified
+- ✅ ZeroTollRouterV2 + SmartDexAdapter deployed
 
-**Why Pimlico First?**
-- Launch in days instead of weeks
-- No infrastructure management
-- Free tier for testing (1,000 UserOps/month)
-- Focus on UX, not DevOps
+**Technical Stack**:
+- **ERC-4337**: Account Abstraction for Smart Accounts
+- **EIP-712**: Typed structured data signing for SwapIntent
+- **ERC-2612**: Permit standard for gasless token approvals
+- **Pimlico**: Bundler + Verifying Paymaster
+
+**Why This Architecture?**
+- Works on ALL chains (no EIP-7702 dependency)
+- Users sign messages, never send transactions
+- Pimlico sponsors 100% of gas costs
+- Simple UX: 2 signatures = swap complete
 
 ---
 
@@ -384,10 +442,11 @@ Access interactive documentation directly in the app at **http://localhost:3000/
 | Layer | Technology |
 |-------|------------|
 | Smart Contracts | Solidity 0.8.24, Hardhat, OpenZeppelin v5.0 |
-| Backend | FastAPI (Python 3.9+), web3.py, MongoDB |
+| Backend | FastAPI (Python), Node.js (Pimlico Relayer) |
 | Frontend | React 18, Tailwind CSS, wagmi, viem, RainbowKit |
 | Oracles | Pyth Network |
-| Account Abstraction | EIP-7702, ERC-4337, Pimlico |
+| Account Abstraction | ERC-4337, Pimlico Bundler + Paymaster |
+| Signatures | EIP-712 (SwapIntent), ERC-2612 (Permit) |
 | Networks | Polygon Amoy, Ethereum Sepolia |
 
 ---
@@ -451,20 +510,6 @@ MIT License - See [LICENSE](./LICENSE) file for details.
 **Built with ❤️ for the Polygon Buildathon**
 
 *"Making DeFi accessible to everyone, one gasless swap at a time."*
-
----
-
-## 📊 Status
-
-| Metric | Value |
-|--------|-------|
-| Version | 2.3.0 |
-| Status | ✅ Testnet Live (Amoy + Sepolia) |
-| EIP-7702 | ✅ Working (25+ verified TX) |
-| Cross-Chain | ✅ Working (Amoy ↔ Sepolia) |
-| Pool Dashboard | ✅ Live (Futuristic UI) |
-| Docs Page | ✅ Interactive Architecture Guide |
-| Last Updated | November 28, 2025 |
 
 ---
 
