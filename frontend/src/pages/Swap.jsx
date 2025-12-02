@@ -1179,8 +1179,8 @@ const Swap = () => {
             </div>
           </div>}
 
-          {/* Pimlico Intent Gasless - HIDDEN (ZTA/ZTB removed, not on Pyth oracle) */}
-          {false && (fromChain.id === 11155111 || fromChain.id === 80002) && intentGasless.isGaslessToken(tokenIn?.address) && (
+          {/* Pimlico Intent Gasless (ZTA/ZTB on Sepolia or Amoy) */}
+          {(fromChain.id === 11155111 || fromChain.id === 80002) && intentGasless.isGaslessToken(tokenIn?.address) && (
             <div className="mb-6">
               <div className="glass p-4 rounded-xl border border-green-500/30 bg-green-500/5">
                 <div className="flex items-center justify-between">
@@ -1234,8 +1234,8 @@ const Swap = () => {
             </div>
           )}
 
-          {/* Gas Payment Mode Selector */}
-          {!isGaslessMode && (
+          {/* Gas Payment Mode Selector - Hidden when Pimlico gasless is on */}
+          {!isGaslessMode && !isPimlicoGasless && (
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-3">
               Gas Payment Mode
@@ -1290,7 +1290,7 @@ const Swap = () => {
           )}
 
           {/* Fee Cap - Only show in non-gasless mode */}
-          {!isGaslessMode && (
+          {!isGaslessMode && !isPimlicoGasless && (
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-2">
               Max Fee Cap (
@@ -1313,8 +1313,8 @@ const Swap = () => {
           </div>
           )}
 
-          {/* Info Banners */}
-          {!isGaslessMode && feeMode === 'OUTPUT' && isNativeOutput && (
+          {/* Info Banners - Hidden when Pimlico gasless is on */}
+          {!isGaslessMode && !isPimlicoGasless && feeMode === 'OUTPUT' && isNativeOutput && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
               <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -1322,7 +1322,7 @@ const Swap = () => {
               </div>
             </div>
           )}
-          {!isGaslessMode && feeMode === 'OUTPUT' && !isNativeOutput && (
+          {!isGaslessMode && !isPimlicoGasless && feeMode === 'OUTPUT' && !isNativeOutput && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
               <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -1330,7 +1330,7 @@ const Swap = () => {
               </div>
             </div>
           )}
-          {feeMode === 'INPUT' && (
+          {!isPimlicoGasless && feeMode === 'INPUT' && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-violet/30">
               <Info className="w-5 h-5 text-zt-violet flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -1474,7 +1474,8 @@ const Swap = () => {
             </button>
             
             {/* Show Approve button if needed, otherwise Execute */}
-            {needsApproval && !tokenIn.isNative ? (
+            {/* Skip approval for Pimlico gasless (uses ERC-2612 Permit) */}
+            {needsApproval && !tokenIn.isNative && !isPimlicoGasless ? (
               <button
                 onClick={handleApprove}
                 disabled={approvalPending || loading}
@@ -1493,21 +1494,21 @@ const Swap = () => {
             ) : (
               <button
                 onClick={handleExecute}
-                disabled={(loading || gaslessSwap.isLoading) || !quote || (needsApproval && !tokenIn.isNative && !isGaslessMode) || (fromChain.id !== toChain.id)}
+                disabled={(loading || gaslessSwap.isLoading || intentGasless.isLoading) || (!quote && !isPimlicoGasless) || (needsApproval && !tokenIn.isNative && !isGaslessMode && !isPimlicoGasless) || (fromChain.id !== toChain.id)}
                 className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 data-testid="execute-swap-btn"
                 title={
                   fromChain.id !== toChain.id ? 'Cross-chain swaps not yet supported' :
-                  needsApproval && !tokenIn.isNative && !isGaslessMode ? 'Please approve token first' : 
+                  needsApproval && !tokenIn.isNative && !isGaslessMode && !isPimlicoGasless ? 'Please approve token first' : 
                   ''
                 }
               >
-                {(loading || gaslessSwap.isLoading) ? (
+                {(loading || gaslessSwap.isLoading || intentGasless.isLoading) ? (
                   <Loader2 className="inline w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    {isGaslessMode && <Zap className="w-4 h-4" />}
-                    {isGaslessMode ? 'Execute Gasless Swap' : 'Execute Swap'}
+                    {(isGaslessMode || isPimlicoGasless) && <Zap className="w-4 h-4" />}
+                    {isPimlicoGasless ? '⚡ Execute Gasless (No Approval!)' : isGaslessMode ? 'Execute Gasless Swap' : 'Execute Swap'}
                   </>
                 )}
               </button>
@@ -1526,8 +1527,8 @@ const Swap = () => {
             </div>
           )}
           
-          {/* Approval Info Banner */}
-          {needsApproval && !tokenIn.isNative && (
+          {/* Approval Info Banner - Don't show for Pimlico gasless (uses Permit) */}
+          {needsApproval && !tokenIn.isNative && !isPimlicoGasless && (
             <div className="mt-4 glass p-4 rounded-xl flex items-start gap-3 border border-yellow-500/30">
               <Info className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
