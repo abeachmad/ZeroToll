@@ -60,6 +60,7 @@ contract SmartDexAdapter is Ownable {
 
     /**
      * @notice Execute swap - tries Uniswap first, then internal pool
+     * @dev Tokens should already be transferred to this contract by the router
      */
     function swap(
         address tokenIn,
@@ -68,8 +69,10 @@ contract SmartDexAdapter is Ownable {
         uint256 minAmountOut,
         address recipient
     ) external returns (uint256 amountOut) {
-        // Receive tokens
-        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+        // Tokens are already transferred to this contract by the router
+        // Verify we have the tokens
+        uint256 balance = IERC20(tokenIn).balanceOf(address(this));
+        require(balance >= amountIn, "Tokens not received");
         
         // Try Uniswap first
         (bool uniswapSuccess, uint256 uniswapOut) = _tryUniswap(tokenIn, tokenOut, amountIn, minAmountOut, recipient);
@@ -159,11 +162,16 @@ contract SmartDexAdapter is Ownable {
         amountOut = amountOut - fee;
         
         require(amountOut >= minAmountOut, "Slippage exceeded");
-        require(liquidity[tokenOut] >= amountOut, "Insufficient liquidity");
         
-        // Update liquidity
+        // Check actual token balance (not just liquidity mapping)
+        uint256 tokenOutBalance = IERC20(tokenOut).balanceOf(address(this));
+        require(tokenOutBalance >= amountOut, "Insufficient liquidity");
+        
+        // Update liquidity tracking (tokenIn was received, tokenOut is being sent)
         liquidity[tokenIn] += amountIn;
-        liquidity[tokenOut] -= amountOut;
+        if (liquidity[tokenOut] >= amountOut) {
+            liquidity[tokenOut] -= amountOut;
+        }
         
         // Transfer output
         IERC20(tokenOut).safeTransfer(recipient, amountOut);

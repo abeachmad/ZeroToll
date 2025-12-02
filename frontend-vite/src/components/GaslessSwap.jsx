@@ -38,8 +38,13 @@ export function GaslessSwap() {
 
   const [tokenIn, setTokenIn] = useState('');
   const [tokenOut, setTokenOut] = useState('');
-  const [amountIn, setAmountIn] = useState('1000000000000000000');
-  const [minAmountOut, setMinAmountOut] = useState('900000000000000000');
+  const [amountIn, setAmountIn] = useState('50000000000000000'); // 0.05 tokens (18 decimals)
+  const [minAmountOut, setMinAmountOut] = useState('1'); // Minimum 1 wei
+  const [tokenInBalance, setTokenInBalance] = useState(BigInt(0));
+  
+  // Token decimals (USDC = 6, others = 18)
+  const USDC_ADDRESS = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
+  const getDecimals = (addr) => addr?.toLowerCase() === USDC_ADDRESS.toLowerCase() ? 6 : 18;
   const [status, setStatus] = useState('');
   const [txResult, setTxResult] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -78,10 +83,11 @@ export function GaslessSwap() {
   const isUniswapToken = tokenIn === '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14' || 
                          tokenIn === '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
 
-  // Check allowances when tokenIn changes
+  // Check allowances and balance when tokenIn changes
   useEffect(() => {
     if (tokenIn && isConnected && config) {
       checkAllowance(tokenIn).then(setAllowance);
+      getTokenBalance(tokenIn).then(setTokenInBalance);
       // Check if token is approved to Permit2
       const checkP2 = async () => {
         const ownerHex = account.slice(2).toLowerCase().padStart(64, '0');
@@ -153,8 +159,10 @@ export function GaslessSwap() {
 
     // Check balance first
     const balance = await getTokenBalance(tokenIn);
+    const decimals = getDecimals(tokenIn);
+    const divisor = 10 ** decimals;
     if (balance < BigInt(amountIn)) {
-      setStatus(`❌ Insufficient balance! You have ${(Number(balance) / 1e18).toFixed(4)} tokens but trying to swap ${(Number(amountIn) / 1e18).toFixed(4)}`);
+      setStatus(`❌ Insufficient balance! You have ${(Number(balance) / divisor).toFixed(4)} tokens but trying to swap ${(Number(amountIn) / divisor).toFixed(4)}`);
       return;
     }
 
@@ -227,8 +235,10 @@ export function GaslessSwap() {
 
     // Check balance first
     const balance = await getTokenBalance(tokenIn);
+    const decimals = getDecimals(tokenIn);
+    const divisor = 10 ** decimals;
     if (balance < BigInt(amountIn)) {
-      setStatus(`❌ Insufficient balance! You have ${(Number(balance) / 1e18).toFixed(4)} tokens. Get WETH by wrapping Sepolia ETH.`);
+      setStatus(`❌ Insufficient balance! You have ${(Number(balance) / divisor).toFixed(4)} tokens but trying to swap ${(Number(amountIn) / divisor).toFixed(4)}`);
       return;
     }
 
@@ -425,8 +435,9 @@ export function GaslessSwap() {
 
               {tokenIn && (
                 <div style={styles.allowanceBox}>
-                  Allowance: {allowance > BigInt(1e30) ? '∞ (approved)' : allowance.toString()}
-                  {needsApproval && <span style={styles.warningText}> - Needs approval!</span>}
+                  <div>Your Balance: <b>{(Number(tokenInBalance) / (10 ** getDecimals(tokenIn))).toFixed(4)}</b></div>
+                  <div>Allowance: {allowance > BigInt(1e30) ? '∞ (approved)' : (Number(allowance) / (10 ** getDecimals(tokenIn))).toFixed(4)}
+                  {needsApproval && <span style={styles.warningText}> - Needs approval!</span>}</div>
                 </div>
               )}
 
