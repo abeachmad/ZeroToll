@@ -125,12 +125,22 @@ const Faucet = () => {
     try {
       toast.info(`🚰 Requesting ${token.symbol} from faucet...`);
       
-      await callFaucet({
+      // Build transaction config
+      const txConfig = {
         address: token.address,
         abi: ZTOKEN_ABI,
         functionName: 'faucet',
         args: [],
-      });
+      };
+      
+      // Add gas settings for Amoy (Polygon testnet often needs explicit gas)
+      if (selectedChain.id === 80002) {
+        txConfig.gas = 150000n;
+        txConfig.maxFeePerGas = 50000000000n; // 50 gwei
+        txConfig.maxPriorityFeePerGas = 30000000000n; // 30 gwei
+      }
+      
+      await callFaucet(txConfig);
 
       toast.info('⏳ Transaction submitted, waiting for confirmation...');
     } catch (error) {
@@ -139,6 +149,10 @@ const Faucet = () => {
       
       if (error.message?.includes('User rejected') || error.message?.includes('User denied')) {
         toast.error('❌ Transaction cancelled');
+      } else if (error.message?.includes('insufficient funds')) {
+        toast.error('❌ Insufficient POL for gas. Get testnet POL from a faucet first.');
+      } else if (error.message?.includes('execution reverted')) {
+        toast.error('❌ Transaction reverted. The contract may have an issue.');
       } else {
         toast.error(error.shortMessage || error.message || 'Faucet request failed');
       }
@@ -304,6 +318,16 @@ const Faucet = () => {
               >
                 View transaction <ExternalLink className="w-4 h-4" />
               </a>
+            </div>
+          )}
+
+          {/* Network Warning for Amoy */}
+          {selectedChain.id === 80002 && isConnected && chain?.id === 80002 && (
+            <div className="mb-6 glass p-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10">
+              <div className="text-sm text-zt-paper/80">
+                <strong className="text-yellow-400">💡 Tip:</strong> Make sure you have some testnet POL for gas fees. 
+                Get free POL from the <a href="https://faucet.polygon.technology/" target="_blank" rel="noopener noreferrer" className="text-zt-aqua hover:underline">Polygon Faucet</a>.
+              </div>
             </div>
           )}
 
