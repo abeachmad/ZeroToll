@@ -3,26 +3,64 @@
   "network": "amoy",
   "tokens": [
     {
-      "symbol": "ZTA",
-      "name": "ZeroToll Token A",
-      "logo": "⚡",
-      "address": "0x3Bead37cD9fB0E1621C8Cc2c58Ab0753085cF109",
-      "decimals": 18,
+      "symbol": "zUSDC",
+      "name": "ZeroToll USDC",
+      "logo": "💵",
+      "address": "0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD",
+      "decimals": 6,
       "isNative": false,
       "isGasless": true,
       "permitType": "ERC2612",
-      "feeModes": ["INPUT", "OUTPUT"]
+      "pythPriceId": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
     },
     {
-      "symbol": "ZTB",
-      "name": "ZeroToll Token B",
-      "logo": "⚡",
-      "address": "0x9e2eE39aDaE9A4985d1aC1Fbb55830e00F686668",
+      "symbol": "zETH",
+      "name": "ZeroToll ETH",
+      "logo": "💎",
+      "address": "0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9",
       "decimals": 18,
       "isNative": false,
       "isGasless": true,
       "permitType": "ERC2612",
-      "feeModes": ["INPUT", "OUTPUT"]
+      "pythPriceId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
+    },
+    {
+      "symbol": "zPOL",
+      "name": "ZeroToll POL",
+      "logo": "🔷",
+      "address": "0xB0A04aB21faAe4A5399938c07EDdfA0FB41d2B9d",
+      "decimals": 18,
+      "isNative": false,
+      "isGasless": true,
+      "permitType": "ERC2612",
+      "pythPriceId": "0x5de33440f6c8ee7a2c3c3e5e8b5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
+    },
+    {
+      "symbol": "zLINK",
+      "name": "ZeroToll LINK",
+      "logo": "🔗",
+      "address": "0x51f6c79e5cA4ACF086d0954AfAAf5c72Be56CBb1",
+      "decimals": 18,
+      "isNative": false,
+      "isGasless": true,
+      "permitType": "ERC2612",
+      "pythPriceId": "0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
     },
     {
       "symbol": "POL",
@@ -32,7 +70,11 @@
       "wrappedAddress": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
       "decimals": 18,
       "isNative": true,
-      "feeModes": ["NATIVE", "INPUT", "OUTPUT"]
+      "feeModes": [
+        "NATIVE",
+        "INPUT",
+        "OUTPUT"
+      ]
     },
     {
       "symbol": "WMATIC",
@@ -41,7 +83,11 @@
       "address": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
       "decimals": 18,
       "isNative": false,
-      "feeModes": ["INPUT", "OUTPUT"]
+      "permitType": "permit2",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
     },
     {
       "symbol": "USDC",
@@ -50,7 +96,12 @@
       "address": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
       "decimals": 6,
       "isNative": false,
-      "feeModes": ["INPUT", "OUTPUT", "STABLE"]
+      "permitType": "permit2",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT",
+        "STABLE"
+      ]
     },
     {
       "symbol": "LINK",
@@ -59,7 +110,12 @@
       "address": "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904",
       "decimals": 18,
       "isNative": false,
-      "feeModes": ["INPUT", "OUTPUT"]
+      "permitType": "permit2",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
     }
-  ]
+  ],
+  "zeroTollAdapter": "0x30bbFff2e090EF88A41C9e8909c197d4bdb47C87"
 }

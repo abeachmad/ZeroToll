@@ -63,6 +63,21 @@ const feeModes = [
   { id: 'STABLE', label: 'Stable', desc: 'Pay in stablecoins' }
 ];
 
+// Helper function to get permit type indicator
+const getPermitIndicator = (token) => {
+  if (token?.permitType === 'ERC2612') return '⚡';
+  if (token?.permitType === 'permit2') return '🔄';
+  if (token?.isNative) return '🪙';
+  return '⚠️';
+};
+
+const getPermitTooltip = (token) => {
+  if (token?.permitType === 'ERC2612') return 'ERC-2612 permit - fully gasless';
+  if (token?.permitType === 'permit2') return 'Permit2 - gasless after approval';
+  if (token?.isNative) return 'Native token';
+  return 'Requires approval tx';
+};
+
 const Swap = () => {
   const navigate = useNavigate();
   const { address, isConnected, chain } = useAccount();
@@ -730,8 +745,11 @@ const Swap = () => {
       return;
     }
 
-    if (!intentGasless.isGaslessToken(tokenIn.address)) {
-      toast.error(`${tokenIn.symbol} doesn't support Pimlico gasless. Use ZTA or ZTB tokens.`);
+    // Check permit type for the token
+    const permitType = intentGasless.getPermitType(tokenIn.address);
+    
+    if (permitType === 'none') {
+      toast.error(`${tokenIn.symbol} doesn't support gasless. Use zTokens (⚡) or Permit2 tokens (🔄).`);
       return;
     }
 
@@ -748,18 +766,34 @@ const Swap = () => {
         return;
       }
 
-      setPimlicoStatus('Sign Permit + Swap Intent in MetaMask (NO GAS!)...');
-      toast.info('⚡ Sign 2 messages in MetaMask - you pay ZERO gas!');
-
       const minOut = parseUnits((parseFloat(amountIn) * 0.95).toString(), tokenOut.decimals || 18);
-      
-      const result = await intentGasless.submitSwapWithPermit({
-        tokenIn: tokenIn.address,
-        tokenOut: tokenOut.address,
-        amountIn: amountWei.toString(),
-        minAmountOut: minOut.toString(),
-        deadlineMinutes: 30
-      });
+      let result;
+
+      if (permitType === 'erc2612') {
+        // ERC-2612 permit - fully gasless
+        setPimlicoStatus('Sign Permit + Swap Intent in MetaMask (NO GAS!)...');
+        toast.info('⚡ Sign 2 messages in MetaMask - you pay ZERO gas!');
+        
+        result = await intentGasless.submitSwapWithPermit({
+          tokenIn: tokenIn.address,
+          tokenOut: tokenOut.address,
+          amountIn: amountWei.toString(),
+          minAmountOut: minOut.toString(),
+          deadlineMinutes: 30
+        });
+      } else if (permitType === 'permit2') {
+        // Permit2 - gasless after one-time approval
+        setPimlicoStatus('Sign Permit2 + Swap Intent in MetaMask...');
+        toast.info('🔄 Sign 2 messages in MetaMask - gasless via Permit2!');
+        
+        result = await intentGasless.submitSwapWithPermit2({
+          tokenIn: tokenIn.address,
+          tokenOut: tokenOut.address,
+          amountIn: amountWei.toString(),
+          minAmountOut: minOut.toString(),
+          deadlineMinutes: 30
+        });
+      }
 
       setPimlicoStatus('Swap submitted! Waiting for confirmation...');
       toast.success(`🎉 Gasless swap submitted! Tx: ${result.txHash?.slice(0, 10)}...`);
@@ -788,9 +822,14 @@ const Swap = () => {
   };
 
   const handleExecute = async () => {
-    // If Pimlico gasless mode is enabled, use that
-    if (isPimlicoGasless && intentGasless.isGaslessToken(tokenIn.address)) {
-      return await handlePimlicoGasless();
+    // If Pimlico gasless mode is enabled, check if token supports gasless
+    if (isPimlicoGasless) {
+      const permitType = intentGasless.getPermitType(tokenIn.address);
+      if (permitType === 'erc2612' || permitType === 'permit2') {
+        return await handlePimlicoGasless();
+      }
+      // Token doesn't support gasless - show warning but continue with traditional
+      toast.warning(`${tokenIn.symbol} doesn't support gasless. Proceeding with traditional swap.`);
     }
 
     if (!quote) {
@@ -925,6 +964,12 @@ const Swap = () => {
             >
               History
             </button>
+            <button
+              onClick={() => navigate('/faucet')}
+              className="text-zt-paper/70 hover:text-zt-aqua transition-colors hidden md:block"
+            >
+              Faucet
+            </button>
             <ConnectButton />
           </div>
         </div>
@@ -933,7 +978,78 @@ const Swap = () => {
       <div className="max-w-2xl mx-auto px-6 py-12">
         <div className="glass-strong p-8 rounded-3xl">
           <h1 className="text-3xl font-bold mb-2 text-zt-paper">Gasless Cross-Chain Swap</h1>
-          <p className="text-zt-paper/60 mb-8">Pay fees in any token you swap—use input, skim from output (even native via wrapped), or stick to native gas. Fee capped on-chain, unused refunded.</p>
+          <p className="text-zt-paper/60 mb-6">Pay fees in any token you swap—use input, skim from output (even native via wrapped), or stick to native gas. Fee capped on-chain, unused refunded.</p>
+
+          {/* Gasless Mode Selector - Relayer / Pimlico (no selection = Traditional) */}
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-zt-paper/70 mb-3">
+              Gasless Mode <span className="text-zt-paper/40 font-normal">(optional - leave unselected for traditional swap)</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Relayer Mode */}
+              <button
+                onClick={() => {
+                  if (isGaslessMode && !isPimlicoGasless) {
+                    // Clicking again deselects
+                    setIsGaslessMode(false);
+                  } else {
+                    setIsGaslessMode(true);
+                    setIsPimlicoGasless(false);
+                  }
+                }}
+                className={`glass p-4 rounded-xl transition-all text-left ${
+                  isGaslessMode && !isPimlicoGasless
+                    ? 'border-2 border-green-500 bg-green-500/10'
+                    : 'border border-white/10 hover:border-white/30'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">🔄</span>
+                  {isGaslessMode && !isPimlicoGasless && <span className="text-green-400 text-xs">✓ Active</span>}
+                </div>
+                <div className={`font-semibold text-sm ${isGaslessMode && !isPimlicoGasless ? 'text-green-400' : 'text-zt-paper'}`}>Relayer</div>
+                <div className="text-xs text-zt-paper/50">Backend relayer pays gas</div>
+              </button>
+
+              {/* Pimlico Mode */}
+              <button
+                onClick={() => {
+                  if (isPimlicoGasless) {
+                    // Clicking again deselects
+                    setIsPimlicoGasless(false);
+                  } else {
+                    setIsGaslessMode(false);
+                    setIsPimlicoGasless(true);
+                  }
+                }}
+                className={`glass p-4 rounded-xl transition-all text-left ${
+                  isPimlicoGasless
+                    ? 'border-2 border-green-500 bg-green-500/10'
+                    : 'border border-white/10 hover:border-white/30'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">⚡</span>
+                  {isPimlicoGasless && <span className="text-green-400 text-xs">✓ Active</span>}
+                </div>
+                <div className={`font-semibold text-sm ${isPimlicoGasless ? 'text-green-400' : 'text-zt-paper'}`}>Pimlico</div>
+                <div className="text-xs text-zt-paper/50">ERC-4337 paymaster</div>
+              </button>
+            </div>
+
+            {/* Mode Description */}
+            <div className="mt-3 text-xs text-zt-paper/60">
+              {!isGaslessMode && !isPimlicoGasless && (
+                <span>💳 Traditional swap - you pay gas in native token (ETH/POL). Click a button above to enable gasless.</span>
+              )}
+              {isGaslessMode && !isPimlicoGasless && (
+                <span className="text-green-400">🔄 Relayer mode active - backend relayer pays gas, uses RouterHub system. Click again to disable.</span>
+              )}
+              {isPimlicoGasless && (
+                <span className="text-green-400">⚡ Pimlico mode active - fully gasless via ERC-4337 paymaster. Best with zTokens (⚡ ERC-2612 permit). Click again to disable.</span>
+              )}
+            </div>
+          </div>
 
           {/* Network Mismatch Warning Banner */}
           {showNetworkWarning && isConnected && (
@@ -967,9 +1083,12 @@ const Swap = () => {
                   onChange={(e) => setTokenIn(fromChain.tokens.find(t => t.symbol === e.target.value))}
                   className="bg-white/5 text-zt-paper font-semibold outline-none cursor-pointer px-3 py-1.5 rounded-lg border border-white/10 hover:border-zt-aqua/30 transition-colors"
                   data-testid="token-in-select"
+                  title={getPermitTooltip(tokenIn)}
                 >
                   {fromChain.tokens.map(token => (
-                    <option key={token.symbol} value={token.symbol} className="bg-zt-ink text-zt-paper">{token.logo} {token.symbol}</option>
+                    <option key={token.symbol} value={token.symbol} className="bg-zt-ink text-zt-paper">
+                      {token.logo} {token.symbol} {getPermitIndicator(token)}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -982,6 +1101,14 @@ const Swap = () => {
                 data-testid="amount-in-input"
               />
             </div>
+            {/* Permit Type Legend - Show when Pimlico mode is active */}
+            {isPimlicoGasless && (
+              <div className="mt-2 flex flex-wrap gap-3 text-xs text-zt-paper/60">
+                <span title="ERC-2612 permit - fully gasless">⚡ Fully gasless</span>
+                <span title="Permit2 - gasless after approval">🔄 Permit2</span>
+                <span title="Requires approval transaction">⚠️ Needs approval</span>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-center my-4">
@@ -1024,9 +1151,12 @@ const Swap = () => {
                   onChange={(e) => setTokenOut(toChain.tokens.find(t => t.symbol === e.target.value))}
                   className="bg-white/5 text-zt-paper font-semibold outline-none cursor-pointer px-3 py-1.5 rounded-lg border border-white/10 hover:border-zt-aqua/30 transition-colors"
                   data-testid="token-out-select"
+                  title={getPermitTooltip(tokenOut)}
                 >
                   {toChain.tokens.map(token => (
-                    <option key={token.symbol} value={token.symbol} className="bg-zt-ink text-zt-paper">{token.logo} {token.symbol}</option>
+                    <option key={token.symbol} value={token.symbol} className="bg-zt-ink text-zt-paper">
+                      {token.logo} {token.symbol} {getPermitIndicator(token)}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -1234,11 +1364,11 @@ const Swap = () => {
             </div>
           )}
 
-          {/* Gas Payment Mode Selector - Hidden when Pimlico gasless is on */}
-          {!isGaslessMode && !isPimlicoGasless && (
+          {/* Gas Payment Mode Selector - Only show in Relayer mode */}
+          {isGaslessMode && !isPimlicoGasless && (
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-3">
-              Gas Payment Mode
+              Fee Payment Mode
               <span className="ml-2 text-xs text-zt-aqua cursor-help" title="Choose how to pay transaction fees">ⓘ</span>
             </label>
             <div className="grid grid-cols-2 gap-3">
@@ -1289,8 +1419,8 @@ const Swap = () => {
           </div>
           )}
 
-          {/* Fee Cap - Only show in non-gasless mode */}
-          {!isGaslessMode && !isPimlicoGasless && (
+          {/* Fee Cap - Only show in Relayer mode */}
+          {isGaslessMode && !isPimlicoGasless && (
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-2">
               Max Fee Cap (
@@ -1313,8 +1443,8 @@ const Swap = () => {
           </div>
           )}
 
-          {/* Info Banners - Hidden when Pimlico gasless is on */}
-          {!isGaslessMode && !isPimlicoGasless && feeMode === 'OUTPUT' && isNativeOutput && (
+          {/* Info Banners - Only show in Relayer mode with OUTPUT fee */}
+          {isGaslessMode && !isPimlicoGasless && feeMode === 'OUTPUT' && isNativeOutput && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
               <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -1322,7 +1452,7 @@ const Swap = () => {
               </div>
             </div>
           )}
-          {!isGaslessMode && !isPimlicoGasless && feeMode === 'OUTPUT' && !isNativeOutput && (
+          {isGaslessMode && !isPimlicoGasless && feeMode === 'OUTPUT' && !isNativeOutput && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
               <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -1330,7 +1460,7 @@ const Swap = () => {
               </div>
             </div>
           )}
-          {!isPimlicoGasless && feeMode === 'INPUT' && (
+          {isGaslessMode && !isPimlicoGasless && feeMode === 'INPUT' && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-violet/30">
               <Info className="w-5 h-5 text-zt-violet flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">

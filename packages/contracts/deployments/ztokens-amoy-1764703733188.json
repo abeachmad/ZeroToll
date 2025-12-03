@@ -1,0 +1,33 @@
+{
+  "network": "amoy",
+  "timestamp": 1764703626027,
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "pyth": "0xff1a0f4744e8582DF1aE09D5611b887B6a12925C",
+  "tokens": {
+    "zUSDC": {
+      "address": "0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD",
+      "name": "ZeroToll USDC",
+      "decimals": 6,
+      "priceId": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"
+    },
+    "zETH": {
+      "address": "0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9",
+      "name": "ZeroToll ETH",
+      "decimals": 18,
+      "priceId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace"
+    },
+    "zPOL": {
+      "address": "0xB0A04aB21faAe4A5399938c07EDdfA0FB41d2B9d",
+      "name": "ZeroToll POL",
+      "decimals": 18,
+      "priceId": "0x5de33440f6c8ee7a2c3c3e5e8b5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e"
+    },
+    "zLINK": {
+      "address": "0x51f6c79e5cA4ACF086d0954AfAAf5c72Be56CBb1",
+      "name": "ZeroToll LINK",
+      "decimals": 18,
+      "priceId": "0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221"
+    }
+  },
+  "adapter": "0x30bbFff2e090EF88A41C9e8909c197d4bdb47C87"
+}

@@ -3,26 +3,64 @@
   "network": "sepolia",
   "tokens": [
     {
-      "symbol": "ZTA",
-      "name": "ZeroToll Token A",
-      "logo": "⚡",
-      "address": "0x4cF58E14DbC9614d7F6112f6256dE9062300C6Bf",
-      "decimals": 18,
+      "symbol": "zUSDC",
+      "name": "ZeroToll USDC",
+      "logo": "💵",
+      "address": "0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C",
+      "decimals": 6,
       "isNative": false,
       "isGasless": true,
       "permitType": "ERC2612",
-      "feeModes": ["INPUT", "OUTPUT"]
+      "pythPriceId": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
     },
     {
-      "symbol": "ZTB",
-      "name": "ZeroToll Token B",
-      "logo": "⚡",
-      "address": "0x8fb844251af76AF090B005643D966FC52852100a",
+      "symbol": "zETH",
+      "name": "ZeroToll ETH",
+      "logo": "💎",
+      "address": "0x8153FA09Be1689D44C343f119C829F6702A8720b",
       "decimals": 18,
       "isNative": false,
       "isGasless": true,
       "permitType": "ERC2612",
-      "feeModes": ["INPUT", "OUTPUT"]
+      "pythPriceId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
+    },
+    {
+      "symbol": "zPOL",
+      "name": "ZeroToll POL",
+      "logo": "🔷",
+      "address": "0x63c31C4247f6AA40B676478226d6FEB5707649D6",
+      "decimals": 18,
+      "isNative": false,
+      "isGasless": true,
+      "permitType": "ERC2612",
+      "pythPriceId": "0x5de33440f6c8ee7a2c3c3e5e8b5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
+    },
+    {
+      "symbol": "zLINK",
+      "name": "ZeroToll LINK",
+      "logo": "🔗",
+      "address": "0x4e2dbcCc07D8e5a8C9f420ea60d1e3aEc7B64D2C",
+      "decimals": 18,
+      "isNative": false,
+      "isGasless": true,
+      "permitType": "ERC2612",
+      "pythPriceId": "0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
     },
     {
       "symbol": "ETH",
@@ -32,7 +70,11 @@
       "wrappedAddress": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
       "decimals": 18,
       "isNative": true,
-      "feeModes": ["NATIVE", "INPUT", "OUTPUT"]
+      "feeModes": [
+        "NATIVE",
+        "INPUT",
+        "OUTPUT"
+      ]
     },
     {
       "symbol": "WETH",
@@ -41,7 +83,11 @@
       "address": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
       "decimals": 18,
       "isNative": false,
-      "feeModes": ["INPUT", "OUTPUT"]
+      "permitType": "permit2",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
     },
     {
       "symbol": "USDC",
@@ -50,16 +96,26 @@
       "address": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
       "decimals": 6,
       "isNative": false,
-      "feeModes": ["INPUT", "OUTPUT", "STABLE"]
+      "permitType": "permit2",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT",
+        "STABLE"
+      ]
     },
     {
       "symbol": "PYUSD",
       "name": "PayPal USD",
-      "logo": "�",
+      "logo": "💲",
       "address": "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9",
       "decimals": 6,
       "isNative": false,
-      "feeModes": ["INPUT", "OUTPUT", "STABLE"]
+      "permitType": "none",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT",
+        "STABLE"
+      ]
     },
     {
       "symbol": "LINK",
@@ -68,7 +124,12 @@
       "address": "0x779877A7B0D9E8603169DdBD7836e478b4624789",
       "decimals": 18,
       "isNative": false,
-      "feeModes": ["INPUT", "OUTPUT"]
+      "permitType": "permit2",
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
     }
-  ]
+  ],
+  "zeroTollAdapter": "0x4E6A591459F0724E19f9B06A584B26fFB724a2a3"
 }

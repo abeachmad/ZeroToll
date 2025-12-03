@@ -31,6 +31,12 @@ const Home = () => {
               Pool
             </button>
             <button
+              onClick={() => navigate('/faucet')}
+              className="text-zt-paper/70 hover:text-zt-aqua transition-colors"
+            >
+              Faucet
+            </button>
+            <button
               onClick={() => navigate('/swap')}
               className="btn-primary"
               data-testid="header-launch-btn"

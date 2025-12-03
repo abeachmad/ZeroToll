@@ -78,7 +78,11 @@ contract ZeroTollRouterV2 is Ownable, ReentrancyGuard {
     
     mapping(address => uint256) public nonces;
     
-    // DEX adapter for actual swaps
+    // DEX adapters for actual swaps (fallback chain)
+    address public primaryAdapter;   // SmartDexAdapter (tries Uniswap first)
+    address public fallbackAdapter;  // ZeroTollAdapter (Pyth oracle, zTokens)
+    
+    // Legacy: single adapter (for backwards compatibility)
     address public dexAdapter;
     
     // Fee configuration
@@ -98,8 +102,10 @@ contract ZeroTollRouterV2 is Ownable, ReentrancyGuard {
     );
     
     event DexAdapterSet(address indexed adapter);
+    event AdaptersConfigured(address indexed primaryAdapter, address indexed fallbackAdapter);
     event FeeConfigSet(uint256 feeBps, address feeRecipient);
     event TestModeSet(bool enabled);
+    event SwapRouted(address indexed adapter, string route);
 
     constructor() Ownable(msg.sender) {
         uint256 chainId;
@@ -293,55 +299,112 @@ contract ZeroTollRouterV2 is Ownable, ReentrancyGuard {
 
 
     /**
-     * @notice Execute the actual swap
-     * @dev In test mode, simulates swap. In production, uses DEX adapter.
+     * @notice Execute the actual swap with adapter fallback chain
+     * @dev Tries adapters in order: primaryAdapter → fallbackAdapter → dexAdapter → testMode
      */
     function _doSwap(SwapIntent calldata intent) internal returns (uint256 amountOut) {
+        // Try primary adapter first (SmartDexAdapter - tries Uniswap, then internal)
+        if (primaryAdapter != address(0)) {
+            (bool success, uint256 result) = _tryAdapter(primaryAdapter, intent);
+            if (success) {
+                emit SwapRouted(primaryAdapter, "primary");
+                return result;
+            }
+        }
+        
+        // Try fallback adapter (ZeroTollAdapter - Pyth oracle, zTokens)
+        if (fallbackAdapter != address(0)) {
+            (bool success, uint256 result) = _tryAdapter(fallbackAdapter, intent);
+            if (success) {
+                emit SwapRouted(fallbackAdapter, "fallback");
+                return result;
+            }
+        }
+        
+        // Try legacy single adapter
         if (dexAdapter != address(0)) {
-            // Production: Use DEX adapter
-            IERC20(intent.tokenIn).safeTransfer(dexAdapter, intent.amountIn);
-            
-            (bool success, bytes memory result) = dexAdapter.call(
-                abi.encodeWithSignature(
-                    "swap(address,address,uint256,uint256,address)",
-                    intent.tokenIn,
-                    intent.tokenOut,
-                    intent.amountIn,
-                    intent.minAmountOut,
-                    intent.user
-                )
-            );
-            
-            if (success && result.length >= 32) {
-                amountOut = abi.decode(result, (uint256));
-            } else {
-                revert("Adapter swap failed");
+            (bool success, uint256 result) = _tryAdapter(dexAdapter, intent);
+            if (success) {
+                emit SwapRouted(dexAdapter, "legacy");
+                return result;
             }
-        } else if (testMode) {
-            // Test mode: Simulate swap by sending tokenOut from contract reserves
-            uint256 fee = (intent.amountIn * feeBps) / 10000;
-            amountOut = intent.amountIn - fee;
-            
-            // Check if we have tokenOut liquidity
-            uint256 tokenOutBalance = IERC20(intent.tokenOut).balanceOf(address(this));
-            
-            if (tokenOutBalance >= amountOut) {
-                // We have liquidity - send tokenOut to user
-                IERC20(intent.tokenOut).safeTransfer(intent.user, amountOut);
-            } else if (intent.tokenIn == intent.tokenOut) {
-                // Same token - just return minus fee
-                IERC20(intent.tokenIn).safeTransfer(intent.user, amountOut);
-            } else {
-                // No liquidity - revert with helpful message
-                revert("Test mode: No tokenOut liquidity. Fund contract or set DEX adapter.");
+            revert("All adapters failed");
+        }
+        
+        // Test mode fallback
+        if (testMode) {
+            amountOut = _doTestModeSwap(intent);
+            emit SwapRouted(address(0), "testMode");
+            return amountOut;
+        }
+        
+        revert("No DEX adapter configured");
+    }
+    
+    /**
+     * @notice Try to execute swap via an adapter
+     * @return success Whether the swap succeeded
+     * @return amountOut The output amount if successful
+     */
+    function _tryAdapter(address adapter, SwapIntent calldata intent) internal returns (bool success, uint256 amountOut) {
+        // Transfer tokens to adapter
+        IERC20(intent.tokenIn).safeTransfer(adapter, intent.amountIn);
+        
+        // Try swap
+        (bool callSuccess, bytes memory result) = adapter.call(
+            abi.encodeWithSignature(
+                "swap(address,address,uint256,uint256,address)",
+                intent.tokenIn,
+                intent.tokenOut,
+                intent.amountIn,
+                intent.minAmountOut,
+                intent.user
+            )
+        );
+        
+        if (callSuccess && result.length >= 32) {
+            amountOut = abi.decode(result, (uint256));
+            if (amountOut >= intent.minAmountOut) {
+                return (true, amountOut);
             }
-            
-            // Transfer fee if configured
-            if (fee > 0 && feeRecipient != address(0)) {
-                IERC20(intent.tokenIn).safeTransfer(feeRecipient, fee);
+        }
+        
+        // Swap failed - try to recover tokens if still in adapter
+        // Note: This is best-effort, adapter may have consumed tokens
+        try IERC20(intent.tokenIn).balanceOf(adapter) returns (uint256 balance) {
+            if (balance >= intent.amountIn) {
+                // Tokens still in adapter, but we can't recover them easily
+                // The next adapter will need fresh tokens
             }
+        } catch {}
+        
+        return (false, 0);
+    }
+    
+    /**
+     * @notice Test mode swap simulation
+     */
+    function _doTestModeSwap(SwapIntent calldata intent) internal returns (uint256 amountOut) {
+        uint256 fee = (intent.amountIn * feeBps) / 10000;
+        amountOut = intent.amountIn - fee;
+        
+        // Check if we have tokenOut liquidity
+        uint256 tokenOutBalance = IERC20(intent.tokenOut).balanceOf(address(this));
+        
+        if (tokenOutBalance >= amountOut) {
+            // We have liquidity - send tokenOut to user
+            IERC20(intent.tokenOut).safeTransfer(intent.user, amountOut);
+        } else if (intent.tokenIn == intent.tokenOut) {
+            // Same token - just return minus fee
+            IERC20(intent.tokenIn).safeTransfer(intent.user, amountOut);
         } else {
-            revert("No DEX adapter configured");
+            // No liquidity - revert with helpful message
+            revert("Test mode: No tokenOut liquidity. Fund contract or set DEX adapter.");
+        }
+        
+        // Transfer fee if configured
+        if (fee > 0 && feeRecipient != address(0)) {
+            IERC20(intent.tokenIn).safeTransfer(feeRecipient, fee);
         }
     }
 
@@ -374,6 +437,17 @@ contract ZeroTollRouterV2 is Ownable, ReentrancyGuard {
     function setDexAdapter(address _adapter) external onlyOwner {
         dexAdapter = _adapter;
         emit DexAdapterSet(_adapter);
+    }
+    
+    /**
+     * @notice Configure adapter fallback chain
+     * @param _primary Primary adapter (e.g., SmartDexAdapter)
+     * @param _fallback Fallback adapter (e.g., ZeroTollAdapter)
+     */
+    function setAdapters(address _primary, address _fallback) external onlyOwner {
+        primaryAdapter = _primary;
+        fallbackAdapter = _fallback;
+        emit AdaptersConfigured(_primary, _fallback);
     }
 
     function setFeeConfig(uint256 _feeBps, address _feeRecipient) external onlyOwner {

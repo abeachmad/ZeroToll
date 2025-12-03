@@ -7,12 +7,12 @@ async function main() {
   console.log("Deployer:", deployer.address);
   console.log("Balance:", hre.ethers.formatEther(await hre.ethers.provider.getBalance(deployer.address)), "ETH");
 
-  const ZeroTollRouter = await hre.ethers.getContractFactory("ZeroTollRouter");
-  const router = await ZeroTollRouter.deploy();
+  const ZeroTollRouterV2 = await hre.ethers.getContractFactory("ZeroTollRouterV2");
+  const router = await ZeroTollRouterV2.deploy();
   await router.waitForDeployment();
 
   const routerAddress = await router.getAddress();
-  console.log("ZeroTollRouter deployed to:", routerAddress);
+  console.log("ZeroTollRouterV2 deployed to:", routerAddress);
 
   // Get chain info
   const chainId = (await hre.ethers.provider.getNetwork()).chainId;

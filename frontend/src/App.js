@@ -13,6 +13,7 @@ const LiquidityPool = lazy(() => import('@/pages/LiquidityPool'));
 const Docs = lazy(() => import('@/pages/Docs'));
 const TestMetaMask7702 = lazy(() => import('@/components/TestMetaMask7702'));
 const TestSmartAccount = lazy(() => import('@/components/TestSmartAccount'));
+const Faucet = lazy(() => import('@/pages/Faucet'));
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
               <Route path="/docs" element={<Docs />} />
               <Route path="/test-7702" element={<TestMetaMask7702 />} />
               <Route path="/test-smart-account" element={<TestSmartAccount />} />
+              <Route path="/faucet" element={<Faucet />} />
             </Routes>
           </Suspense>
         </BrowserRouter>
