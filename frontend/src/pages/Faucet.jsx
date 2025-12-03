@@ -325,9 +325,15 @@ const Faucet = () => {
           {/* Network Warning for Amoy */}
           {selectedChain.id === 80002 && isConnected && chain?.id === 80002 && (
             <div className="mb-6 glass p-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10">
-              <div className="text-sm text-zt-paper/80">
-                <strong className="text-yellow-400">💡 Tip:</strong> Make sure you have some testnet POL for gas fees. 
-                Get free POL from the <a href="https://faucet.polygon.technology/" target="_blank" rel="noopener noreferrer" className="text-zt-aqua hover:underline">Polygon Faucet</a>.
+              <div className="text-sm text-zt-paper/80 space-y-2">
+                <div>
+                  <strong className="text-yellow-400">💡 Tip:</strong> Make sure you have some testnet POL for gas fees. 
+                  Get free POL from the <a href="https://faucet.polygon.technology/" target="_blank" rel="noopener noreferrer" className="text-zt-aqua hover:underline">Polygon Faucet</a>.
+                </div>
+                <div>
+                  <strong className="text-yellow-400">⚠️ RPC Issues?</strong> If transactions fail, try changing MetaMask's RPC URL for Amoy to: 
+                  <code className="ml-1 bg-white/10 px-1 rounded text-xs">https://polygon-amoy.drpc.org</code>
+                </div>
               </div>
             </div>
           )}
