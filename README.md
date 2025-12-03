@@ -11,11 +11,19 @@
 
 ## ✨ What is ZeroToll?
 
-ZeroToll is a **next-generation gasless DEX** that eliminates the gas friction problem in DeFi through **intent-based signatures and paymaster sponsorship**:
+ZeroToll is a **next-generation gasless DEX** that eliminates the gas friction problem in DeFi through **intent-based signatures and paymaster sponsorship**.
+
+### Three Swap Modes
+
+| Mode | Description | User Pays Gas? |
+|------|-------------|----------------|
+| **Traditional** | User signs tx, pays gas | YES |
+| **EIP-7702 Gasless** | Smart Account + Paymaster | NO (Paymaster pays) |
+| **Pimlico Intent Gasless** | ERC-2612 Permit + Relayer | NO (Relayer pays) |
 
 ### 🎯 Core Innovation: ERC-4337 + EIP-712 + ERC-2612
 
-**How It Works:**
+**How Pimlico Intent Gasless Works:**
 1. User signs **ERC-2612 Permit** (approves token transfer) - NO GAS
 2. User signs **EIP-712 SwapIntent** (authorizes the swap) - NO GAS  
 3. Relayer's **Smart Account** (ERC-4337) bundles and executes the swap
@@ -38,10 +46,10 @@ User (EOA)                    Relayer (Smart Account)
 ### Key Features
 
 - ⚡ **True Gasless Swaps**: Sign 2 messages, pay ZERO gas - Pimlico sponsors everything
-- 🎫 **ERC-2612 Permit**: Gasless token approvals via signatures
+- 🎫 **ERC-2612 Permit**: Gasless token approvals via signatures (zTokens)
+- 🔄 **Permit2 Support**: Gasless approvals for standard tokens (USDC, WETH, LINK)
 - 📝 **EIP-712 Intents**: Typed structured data for secure swap authorization
 - 🤖 **ERC-4337 Smart Accounts**: Relayer executes on behalf of users
-- 💰 **Any-Token Fees**: Pay swap fees in USDC, DAI, WETH, or the token you're swapping
 - 🔮 **LIVE Oracle Prices**: Real-time Pyth Network integration (NO hardcoded values!)
 - 🌐 **Multi-Chain**: Polygon Amoy + Ethereum Sepolia testnets
 - 🔐 **Fully On-Chain**: All transactions verifiable on block explorers
@@ -52,13 +60,10 @@ User (EOA)                    Relayer (Smart Account)
 
 Traditional DeFi has a **gas friction problem** that blocks mass adoption:
 
-1. **Users need native tokens** (ETH, POL, MATIC) just to pay transaction fees
+1. **Users need native tokens** (ETH, POL) just to pay transaction fees
 2. **New users get stuck**: "I have USDC but can't swap it because I need ETH first"
 3. **Cross-chain is painful**: Need native tokens on EVERY chain you use
 4. **Poor UX**: Having to buy native tokens from centralized exchanges defeats DeFi's purpose
-
-**Real Example:**
-> "I want to swap 100 USDC to DAI on Polygon, but I need to buy MATIC from Coinbase first just to pay $0.50 in gas fees."
 
 **ZeroToll Solution:**
 > Sign 2 messages (Permit + SwapIntent) → Relayer executes swap → Pimlico pays gas → You pay $0!
@@ -80,14 +85,13 @@ Traditional DeFi has a **gas friction problem** that blocks mass adoption:
 ./stop-zerotoll.sh
 ```
 
-That's it! No complex setup needed. 🎉
-
 ### Available Pages
 
 | Page | URL | Description |
 |------|-----|-------------|
 | Home | http://localhost:3000 | Landing page with overview |
 | Swap | http://localhost:3000/swap | Gasless token swaps |
+| Faucet | http://localhost:3000/faucet | Get zTokens for testing |
 | Pool | http://localhost:3000/pool | Liquidity pool landing page |
 | Pool Dashboard | http://localhost:3000/pool/dashboard | Full pool management UI |
 | Docs | http://localhost:3000/docs | Architecture documentation |
@@ -96,6 +100,7 @@ That's it! No complex setup needed. 🎉
 
 ### Get Testnet Tokens
 
+- **zTokens (for gasless)**: Use the in-app Faucet at `/faucet`
 - **Amoy POL**: https://faucet.polygon.technology
 - **Sepolia ETH**: https://sepoliafaucet.com
 - **USDC**: https://faucet.circle.com
@@ -104,65 +109,54 @@ That's it! No complex setup needed. 🎉
 
 ## 📊 Deployed Contracts
 
-### Polygon Amoy (ChainID: 80002) - GASLESS WORKING ✅
+> **Authoritative Reference**: See [docs/CURRENT_CONTRACTS.md](./docs/CURRENT_CONTRACTS.md) for complete contract details.
+
+### Polygon Amoy (ChainID: 80002) ✅ GASLESS WORKING
 
 | Contract | Address | Explorer |
 |----------|---------|----------|
+| **ZeroTollRouterV2** | `0xc75df1943d6EFE04b422b9bB45509782609Fc67a` | [View](https://amoy.polygonscan.com/address/0xc75df1943d6EFE04b422b9bB45509782609Fc67a) |
 | RouterHub | `0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881` | [View](https://amoy.polygonscan.com/address/0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881) |
-| **ZeroTollRouterV2** | `0xa28aB456a0434335c6953fd3A32A15A5cB12FE1A` | [View](https://amoy.polygonscan.com/address/0xa28aB456a0434335c6953fd3A32A15A5cB12FE1A) |
-| **SmartDexAdapter** | `0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84` | [View](https://amoy.polygonscan.com/address/0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84) |
+| SmartDexAdapter | `0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84` | [View](https://amoy.polygonscan.com/address/0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84) |
+| ZeroTollAdapter | `0x30bbFff2e090EF88A41C9e8909c197d4bdb47C87` | [View](https://amoy.polygonscan.com/address/0x30bbFff2e090EF88A41C9e8909c197d4bdb47C87) |
 | MockDEXAdapter | `0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1` | [View](https://amoy.polygonscan.com/address/0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1) |
-| **ZTA (Gasless Token)** | `0x3Bead37cD9fB0E1621C8Cc2c58Ab0753085cF109` | [View](https://amoy.polygonscan.com/address/0x3Bead37cD9fB0E1621C8Cc2c58Ab0753085cF109) |
-| **ZTB (Gasless Token)** | `0x9e2eE39aDaE9A4985d1aC1Fbb55830e00F686668` | [View](https://amoy.polygonscan.com/address/0x9e2eE39aDaE9A4985d1aC1Fbb55830e00F686668) |
-| USDC | `0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582` | [View](https://amoy.polygonscan.com/address/0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582) |
-| WPOL | `0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9` | [View](https://amoy.polygonscan.com/address/0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9) |
 
-**Adapter Liquidity**: 100k ZTA + 100k ZTB (internal pool)
-
-### Ethereum Sepolia (ChainID: 11155111) - GASLESS WORKING ✅
+### Ethereum Sepolia (ChainID: 11155111) ✅ GASLESS WORKING
 
 | Contract | Address | Explorer |
 |----------|---------|----------|
+| **ZeroTollRouterV2** | `0x577560699EF88e99f15d04df57c9552056d2a10D` | [View](https://sepolia.etherscan.io/address/0x577560699EF88e99f15d04df57c9552056d2a10D) |
 | RouterHub | `0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84` | [View](https://sepolia.etherscan.io/address/0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84) |
-| **ZeroTollRouterV2** | `0xd475255Ae38C92404f9740A19F93B8D2526A684b` | [View](https://sepolia.etherscan.io/address/0xd475255Ae38C92404f9740A19F93B8D2526A684b) |
-| **SmartDexAdapter** | `0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa` | [View](https://sepolia.etherscan.io/address/0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa) |
+| SmartDexAdapter | `0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa` | [View](https://sepolia.etherscan.io/address/0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa) |
+| ZeroTollAdapter | `0x4E6A591459F0724E19f9B06A584B26fFB724a2a3` | [View](https://sepolia.etherscan.io/address/0x4E6A591459F0724E19f9B06A584B26fFB724a2a3) |
 | MockDEXAdapter | `0x86D1AA2228F3ce649d415F19fC71134264D0E84B` | [View](https://sepolia.etherscan.io/address/0x86D1AA2228F3ce649d415F19fC71134264D0E84B) |
-| USDC | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` | [View](https://sepolia.etherscan.io/address/0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238) |
-| WETH | `0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14` | [View](https://sepolia.etherscan.io/address/0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14) |
-| **ZTA (Gasless Token)** | `0x4cF58E14DbC9614d7F6112f6256dE9062300C6Bf` | [View](https://sepolia.etherscan.io/address/0x4cF58E14DbC9614d7F6112f6256dE9062300C6Bf) |
-| **ZTB (Gasless Token)** | `0x8fb844251af76AF090B005643D966FC52852100a` | [View](https://sepolia.etherscan.io/address/0x8fb844251af76AF090B005643D966FC52852100a) |
-| **Pimlico Smart Account** | `0x2caF80daf45581E017aaC929812b92Ad954Be2E8` | [View](https://sepolia.etherscan.io/address/0x2caF80daf45581E017aaC929812b92Ad954Be2E8) |
+| Smart Account | `0x2caF80daf45581E017aaC929812b92Ad954Be2E8` | [View](https://sepolia.etherscan.io/address/0x2caF80daf45581E017aaC929812b92Ad954Be2E8) |
 
-**Adapter Liquidity**: ~0.1 WETH + ~53 USDC
+### zTokens (ERC-2612 Permit - Best Gasless Experience)
 
-### Gasless Test Tokens (ERC-2612 Permit)
-
-**Ethereum Sepolia:**
-| Token | Address | Features |
-|-------|---------|----------|
-| **ZTA** | `0x4cF58E14DbC9614d7F6112f6256dE9062300C6Bf` | ERC-2612 Permit, Faucet (1000 tokens) |
-| **ZTB** | `0x8fb844251af76AF090B005643D966FC52852100a` | ERC-2612 Permit, Faucet (1000 tokens) |
-
-**Polygon Amoy:**
-| Token | Address | Features |
-|-------|---------|----------|
-| **ZTA** | `0x3Bead37cD9fB0E1621C8Cc2c58Ab0753085cF109` | ERC-2612 Permit, Faucet (1000 tokens) |
-| **ZTB** | `0x9e2eE39aDaE9A4985d1aC1Fbb55830e00F686668` | ERC-2612 Permit, Faucet (1000 tokens) |
+| Token | Sepolia | Amoy | Decimals |
+|-------|---------|------|----------|
+| **zUSDC** | `0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C` | `0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD` | 6 |
+| **zETH** | `0x8153FA09Be1689D44C343f119C829F6702A8720b` | `0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9` | 18 |
+| **zPOL** | `0x63c31C4247f6AA40B676478226d6FEB5707649D6` | `0xB0A04aB21faAe4A5399938c07EDdfA0FB41d2B9d` | 18 |
+| **zLINK** | `0x4e2dbcCc07D8e5a8C9f420ea60d1e3aEc7B64D2C` | `0x51f6c79e5cA4ACF086d0954AfAAf5c72Be56CBb1` | 18 |
 
 These tokens support **100% gasless swaps** - no approval transaction needed!
-
-### Cross-Chain Bridge Adapters
-
-| Network | MockLayerZeroAdapter | Explorer |
-|---------|---------------------|----------|
-| Polygon Amoy | `0x349436899Da2F3D5Fb2AD4059b5792C3FeE0bE50` | [View](https://amoy.polygonscan.com/address/0x349436899Da2F3D5Fb2AD4059b5792C3FeE0bE50) |
-| Ethereum Sepolia | `0x73F01527EB3f0ea4AA0d25BF12C6e28d48e46A4C` | [View](https://sepolia.etherscan.io/address/0x73F01527EB3f0ea4AA0d25BF12C6e28d48e46A4C) |
 
 ---
 
 ## ✅ Proven Gasless Transactions
 
-**ERC-4337 + EIP-712 + ERC-2612** gasless swaps are **WORKING** on Ethereum Sepolia!
+**All three swap modes are WORKING on both Sepolia and Amoy!**
+
+### Latest Verified Transactions
+
+| Network | Mode | Transaction |
+|---------|------|-------------|
+| **Sepolia** | Pimlico Intent Gasless | [0x4fd9d44...](https://sepolia.etherscan.io/tx/0x4fd9d44370ef3a1f532476b5d84480be1d461b9468173bbea9dd759459d70e19) ✅ |
+| **Amoy** | Pimlico Intent Gasless | [0x6db7e41...](https://amoy.polygonscan.com/tx/0x6db7e4162ee0a38ba0d3c4c211f6d4a29984d028ab5d1e2b230a027b087af148) ✅ |
+
+**Gas spent by user: ZERO** - All gas sponsored by Pimlico paymaster!
 
 ### Gasless Architecture
 
@@ -175,35 +169,10 @@ These tokens support **100% gasless swaps** - no approval transaction needed!
 
 ### How Users Experience It
 
-1. **Select ZTA or ZTB** token on Sepolia
+1. **Select a zToken** (zUSDC, zETH, zPOL, zLINK)
 2. **Toggle "Pimlico Gasless"** ON
 3. **Click Execute** - MetaMask asks for 2 signatures (NO gas prompts!)
 4. **Done** - Tokens swapped, user paid $0
-
-### Ethereum Sepolia (Intent-Based Gasless)
-
-| Swap | TX Hash | Explorer |
-|------|---------|----------|
-| ZTA → ZTB | Via Pimlico UserOperation | [View on Etherscan](https://sepolia.etherscan.io/) |
-
-**Gas spent by user: ZERO** - All gas sponsored by Pimlico paymaster!
-
-### Legacy Transactions (Polygon Amoy)
-
-| Swap | TX Hash | Explorer |
-|------|---------|----------|
-| 0.5 USDC → WPOL | `0xf1d28ea5d2fc1dd8fd6fed93df6dfa65d9d5e1daf4551696a3cd8eca83893e28` | [View](https://amoy.polygonscan.com/tx/0xf1d28ea5d2fc1dd8fd6fed93df6dfa65d9d5e1daf4551696a3cd8eca83893e28) |
-| 0.3 USDC → WPOL | `0x3cab5a0a0d66478689ee5d5c8c045ef837912b211e05987879608cda41bba891` | [View](https://amoy.polygonscan.com/tx/0x3cab5a0a0d66478689ee5d5c8c045ef837912b211e05987879608cda41bba891) |
-
-### Cross-Chain Gasless Swaps 🌉
-
-| Route | Source TX | Destination TX |
-|-------|-----------|----------------|
-| Amoy USDC → Sepolia USDC | [View](https://amoy.polygonscan.com/tx/0x80be9211adb9221404d0890553e39464f22b9047b26d419578ab622c033382af) | [View](https://sepolia.etherscan.io/tx/0x462f1ff9d7778f99e47605e3286dc46dc0ad73c9e9883c8a732eaaeacf73f1bb) |
-
-**Cross-chain architecture**: SushiXSwap-style with MockLayerZeroAdapter - gasless on source chain!
-
-See [EIP7702_GASLESS_SUCCESS.md](./EIP7702_GASLESS_SUCCESS.md) for full transaction list.
 
 ---
 
@@ -216,10 +185,12 @@ See [EIP7702_GASLESS_SUCCESS.md](./EIP7702_GASLESS_SUCCESS.md) for full transact
 **Features**:
 - ✅ Intent-based gasless swaps (ERC-4337 + EIP-712 + ERC-2612)
 - ✅ Gasless swaps via Pimlico paymaster
-- ✅ ZTA/ZTB test tokens with ERC-2612 Permit
+- ✅ zTokens (zUSDC, zETH, zPOL, zLINK) with ERC-2612 Permit
+- ✅ Permit2 support for standard tokens (USDC, WETH, LINK)
 - ✅ Regular swaps (user pays gas) as fallback
 - ✅ Multi-chain support (Amoy + Sepolia)
-- ✅ ZeroTollRouterV2 + SmartDexAdapter deployed
+- ✅ ZeroTollRouterV2 with adapter fallback chain
+- ✅ Pyth oracle integration for real-time pricing
 
 **Technical Stack**:
 - **ERC-4337**: Account Abstraction for Smart Accounts
@@ -260,6 +231,7 @@ See [EIP7702_GASLESS_SUCCESS.md](./EIP7702_GASLESS_SUCCESS.md) for full transact
 - Pimlico: $0.001 per UserOp → $1,000 for 1M swaps
 - Self-hosted: $50/month + gas → ~$500 for 1M swaps
 - **Savings: 50%** 💰
+
 ---
 
 ### Phase 3: Community Liquidity Pool 🔵 FUTURE
@@ -309,28 +281,6 @@ LP APR: 3,000% 🤯
 - ✅ **Sustainable** - Community funds itself
 - ✅ **Competitive moat** - First decentralized gasless DEX
 - ✅ **Token utility** - $ZEROTOLL for rewards
----
-
-## 💰 Why Adapters Need Funds
-
-**MockDEXAdapter** simulates a DEX for testnet purposes. It needs token reserves to:
-
-1. **Execute swaps** - When a user swaps USDC → POL, the adapter must have POL to send back
-2. **Provide liquidity** - Acts as a liquidity pool with token pairs
-3. **Simulate real DEX behavior** - In production, replaced by UniswapV2/V3 adapters
-
-### How to Fund Adapters
-
-**Option 1: Using Scripts**
-```bash
-cd packages/contracts
-npx hardhat run scripts/fund-from-relayer.js --network amoy
-npx hardhat run scripts/fund-from-relayer.js --network sepolia
-```
-
-**Option 2: Manual Transfer**
-- Send USDC to adapter address
-- Send WPOL/WETH to adapter address
 
 ---
 
@@ -338,30 +288,25 @@ npx hardhat run scripts/fund-from-relayer.js --network sepolia
 
 ### Smart Contracts (`packages/contracts/`)
 
-**Deployed & Working**:
+- **ZeroTollRouterV2**: Main router for gasless swaps with permit support
 - **RouterHub**: Multi-DEX routing engine with adapter whitelisting
-- **MockDEXAdapter**: Testnet DEX simulator with Pyth oracle integration
-- **MultiTokenPythOracle**: Real-time price feeds from Pyth Network
-
-**Contracts (Not Yet Deployed)**:
-- ZeroTollPaymaster - ERC-4337 paymaster (Phase 2)
-- FeeSink, FeeVault4626, FeeRebalancer - Fee infrastructure (Phase 3)
+- **SmartDexAdapter**: Primary adapter with Uniswap V3 + internal pool fallback
+- **ZeroTollAdapter**: Fallback adapter for zToken swaps with Pyth oracle
+- **MockDEXAdapter**: Testnet DEX simulator
+- **zTokens**: ERC-2612 compliant test tokens (zUSDC, zETH, zPOL, zLINK)
 
 ### Backend Services (`backend/`)
 
 - **FastAPI Server**: Quote generation, swap execution
 - **Pyth Price Integration**: Real-time oracle price feeds
-- **Pimlico Relayer**: ERC-4337 gasless transaction handling
-- **MongoDB**: Swap history persistence
+- **Pimlico Relayer**: ERC-4337 gasless transaction handling (`pimlico-v3-relayer.mjs`)
 
 ### Frontend (`frontend/`)
 
 - **Tech Stack**: React + Tailwind CSS + wagmi + viem + RainbowKit
-- **Pages**: Home, Swap, History, Market, Pool, Pool Dashboard, Docs
-- **Gasless Features**: Pimlico gasless toggle for ZTA/ZTB tokens
-- **Pool Landing**: Educational page explaining liquidity pools with CTA to dashboard
-- **Pool Dashboard**: Futuristic dark-mode UI with neon accents, APY stats, fee charts
-- **Docs Page**: Interactive architecture documentation with tabbed navigation
+- **Swap Modes**: Traditional, EIP-7702 Gasless, Pimlico Intent Gasless
+- **Token Indicators**: ⚡ ERC-2612 | 🔄 Permit2 | ⚠️ Requires approval
+- **Faucet Page**: Get zTokens for testing gasless swaps
 
 ---
 
@@ -372,22 +317,30 @@ ZeroToll/
 ├── packages/
 │   ├── contracts/          # Solidity smart contracts
 │   │   ├── contracts/
+│   │   │   ├── ZeroTollRouterV2.sol
 │   │   │   ├── RouterHub.sol
-│   │   │   ├── adapters/MockDEXAdapter.sol
-│   │   │   └── oracles/MultiTokenPythOracle.sol
+│   │   │   ├── adapters/
+│   │   │   │   ├── SmartDexAdapter.sol
+│   │   │   │   ├── ZeroTollAdapter.sol
+│   │   │   │   └── MockDEXAdapter.sol
+│   │   │   └── tokens/ZeroTollToken.sol
 │   │   └── scripts/
-│   ├── relayer/            # Route planning service
-│   └── subgraph/           # The Graph indexing (pending)
-├── backend/                # Python FastAPI server
+│   └── relayer/            # Route planning service
+├── backend/                # Python FastAPI + Node.js relayer
 │   ├── server.py
-│   ├── eip7702_routes.py
+│   ├── pimlico-v3-relayer.mjs
 │   └── pyth_oracle_service.py
 ├── frontend/               # React frontend
 │   ├── src/
 │   │   ├── pages/
-│   │   ├── components/
+│   │   │   ├── Swap.jsx
+│   │   │   └── Faucet.jsx
+│   │   ├── hooks/
+│   │   │   └── useIntentGasless.js
 │   │   └── providers/
-│   └── package.json
+├── docs/
+│   ├── CURRENT_CONTRACTS.md    # Authoritative contract reference
+│   └── GASLESS_SWAP_ARCHITECTURE.md
 ├── start-zerotoll.sh       # 🚀 START all services
 ├── stop-zerotoll.sh        # 🛑 STOP all services
 └── README.md
@@ -397,43 +350,14 @@ ZeroToll/
 
 ## 📖 Documentation
 
-### In-App Documentation
-
-Access interactive documentation directly in the app at **http://localhost:3000/docs**:
-- Overview & Key Features
-- System Architecture
-- How Gasless Swaps Work
-- Cross-Chain Architecture
-- Liquidity Pools
-- Security & Audits
-
-### Technical Documents
-
 | Document | Purpose |
 |----------|---------|
-| [EIP7702_GASLESS_SUCCESS.md](./EIP7702_GASLESS_SUCCESS.md) | Proof of working gasless swaps with TX hashes |
-| [CROSSCHAIN_GASLESS_SWAPS.md](./docs/CROSSCHAIN_GASLESS_SWAPS.md) | Cross-chain architecture documentation |
-| [SECURITY.md](./SECURITY.md) | Security policy and best practices |
-| [WHY_WRAPPED_TOKENS.md](./WHY_WRAPPED_TOKENS.md) | Why WETH/WPOL instead of native tokens |
-| [HOW_GASLESS_SWAPS_WORK.md](./HOW_GASLESS_SWAPS_WORK.md) | Technical explanation of gasless flow |
-| [CREDENTIALS_SETUP.md](./CREDENTIALS_SETUP.md) | Setup guide for API keys and wallets |
-| [SERVICE_MANAGEMENT.md](./SERVICE_MANAGEMENT.md) | Managing backend/frontend services |
-| [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) | Quick command reference |
-
----
-
-## 🚨 Known Limitations (Testnet)
-
-1. **MockDEXAdapter**: Simulates DEX behavior (mainnet would use Uniswap/QuickSwap)
-2. **Simplified Routing**: Single-path routing (mainnet would use multi-hop)
-3. **Testnet Liquidity**: Limited token availability on testnets
-4. **Pimlico Dependency**: Currently relies on Pimlico for gas sponsorship
-
-**Production deployment would include:**
-- Real DEX integrations (Uniswap V3, Curve, Balancer)
-- Multi-hop routing optimization
-- Self-hosted paymaster infrastructure
-- Real LayerZero/CCIP integration (currently using MockLayerZeroAdapter)
+| [docs/CURRENT_CONTRACTS.md](./docs/CURRENT_CONTRACTS.md) | **Authoritative contract addresses** |
+| [docs/GASLESS_SWAP_ARCHITECTURE.md](./docs/GASLESS_SWAP_ARCHITECTURE.md) | Complete architecture plan |
+| [EIP7702_GASLESS_SUCCESS.md](./EIP7702_GASLESS_SUCCESS.md) | Proof of working gasless swaps |
+| [HOW_GASLESS_SWAPS_WORK.md](./HOW_GASLESS_SWAPS_WORK.md) | Technical explanation |
+| [CREDENTIALS_SETUP.md](./CREDENTIALS_SETUP.md) | API keys and wallet setup |
+| [SERVICE_MANAGEMENT.md](./SERVICE_MANAGEMENT.md) | Managing services |
 
 ---
 
@@ -446,7 +370,7 @@ Access interactive documentation directly in the app at **http://localhost:3000/
 | Frontend | React 18, Tailwind CSS, wagmi, viem, RainbowKit |
 | Oracles | Pyth Network |
 | Account Abstraction | ERC-4337, Pimlico Bundler + Paymaster |
-| Signatures | EIP-712 (SwapIntent), ERC-2612 (Permit) |
+| Signatures | EIP-712 (SwapIntent), ERC-2612 (Permit), Permit2 |
 | Networks | Polygon Amoy, Ethereum Sepolia |
 
 ---
@@ -467,8 +391,6 @@ Access interactive documentation directly in the app at **http://localhost:3000/
 - ⏳ Third-party security audit
 - ⏳ Bug bounty program
 - ⏳ Multi-sig governance
-
-**Report Security Issues**: Please email security@zerotoll.xyz
 
 ---
 
@@ -503,16 +425,9 @@ MIT License - See [LICENSE](./LICENSE) file for details.
 - **Pimlico** - ERC-4337 bundler and paymaster services
 - **OpenZeppelin** - Secure smart contract libraries
 - **Pyth Network** - Real-time oracle price feeds
-- **Hardhat** - Ethereum development environment
 
 ---
 
 **Built with ❤️ for the Polygon Buildathon**
 
 *"Making DeFi accessible to everyone, one gasless swap at a time."*
-
----
-
-**⭐ If you find ZeroToll useful, please star this repository! ⭐**
-
-
