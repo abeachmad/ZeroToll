@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Droplets, Loader2, CheckCircle, Copy, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount } from 'wagmi';
+import { ethers } from 'ethers';
 import ConnectButton from '../components/ConnectButton';
 import contractsConfig from '../config/contracts.json';
 import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
@@ -74,12 +75,7 @@ const Faucet = () => {
   const [loading, setLoading] = useState(false);
   const [txHash, setTxHash] = useState(null);
   const [balances, setBalances] = useState({});
-
-  // Wagmi hooks for faucet
-  const { writeContract: callFaucet, data: faucetHash, isPending } = useWriteContract();
-  const { isSuccess: faucetSuccess, isLoading: faucetConfirming } = useWaitForTransactionReceipt({ 
-    hash: faucetHash 
-  });
+  const [isPending, setIsPending] = useState(false);
 
   // Update selected chain based on wallet
   useEffect(() => {
@@ -98,14 +94,7 @@ const Faucet = () => {
     }
   }, [selectedChain]);
 
-  // Handle faucet success
-  useEffect(() => {
-    if (faucetSuccess && faucetHash) {
-      setTxHash(faucetHash);
-      toast.success(`🎉 Received 1,000 ${selectedToken?.symbol}!`);
-      setLoading(false);
-    }
-  }, [faucetSuccess, faucetHash, selectedToken]);
+
 
   const handleFaucet = async (token) => {
     if (!isConnected) {
@@ -124,37 +113,49 @@ const Faucet = () => {
 
     try {
       toast.info(`🚰 Requesting ${token.symbol} from faucet...`);
+      setIsPending(true);
       
-      // Build transaction config
-      const txConfig = {
-        address: token.address,
-        abi: ZTOKEN_ABI,
-        functionName: 'faucet',
-        args: [],
-      };
-      
-      // Add gas settings for Amoy (Polygon testnet often needs explicit gas)
-      if (selectedChain.id === 80002) {
-        txConfig.gas = 150000n;
-        txConfig.maxFeePerGas = 50000000000n; // 50 gwei
-        txConfig.maxPriorityFeePerGas = 30000000000n; // 30 gwei
+      // Use ethers directly with MetaMask
+      if (!window.ethereum) {
+        throw new Error('MetaMask not found');
       }
       
-      await callFaucet(txConfig);
-
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      // Create contract instance
+      const contract = new ethers.Contract(
+        token.address,
+        ['function faucet() external'],
+        signer
+      );
+      
+      // Call faucet
+      const tx = await contract.faucet();
       toast.info('⏳ Transaction submitted, waiting for confirmation...');
+      
+      // Wait for confirmation
+      const receipt = await tx.wait();
+      
+      setTxHash(receipt.hash);
+      toast.success(`🎉 Received 1,000 ${token.symbol}!`);
+      setLoading(false);
+      setIsPending(false);
     } catch (error) {
       console.error('Faucet error:', error);
       setLoading(false);
+      setIsPending(false);
       
-      if (error.message?.includes('User rejected') || error.message?.includes('User denied')) {
+      const errorMsg = error.message || '';
+      
+      if (errorMsg.includes('user rejected') || errorMsg.includes('User denied')) {
         toast.error('❌ Transaction cancelled');
-      } else if (error.message?.includes('insufficient funds')) {
+      } else if (errorMsg.includes('insufficient funds')) {
         toast.error('❌ Insufficient POL for gas. Get testnet POL from a faucet first.');
-      } else if (error.message?.includes('execution reverted')) {
-        toast.error('❌ Transaction reverted. The contract may have an issue.');
+      } else if (errorMsg.includes('Internal JSON-RPC error') || errorMsg.includes('-32603')) {
+        toast.error('❌ RPC error. Try switching MetaMask RPC or refreshing the page.');
       } else {
-        toast.error(error.shortMessage || error.message || 'Faucet request failed');
+        toast.error(errorMsg.slice(0, 100) || 'Faucet request failed');
       }
     }
   };
@@ -279,17 +280,17 @@ const Faucet = () => {
 
                   <button
                     onClick={() => handleFaucet(token)}
-                    disabled={loading || isPending || faucetConfirming || !isConnected}
+                    disabled={loading || isPending || !isConnected}
                     className={`w-full py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-                      loading && selectedToken?.address === token.address
+                      (loading || isPending) && selectedToken?.address === token.address
                         ? 'bg-zt-violet/50 text-zt-paper/50 cursor-wait'
                         : 'bg-gradient-to-r from-zt-violet to-zt-aqua text-white hover:opacity-90'
                     }`}
                   >
-                    {loading && selectedToken?.address === token.address ? (
+                    {(loading || isPending) && selectedToken?.address === token.address ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        {faucetConfirming ? 'Confirming...' : 'Requesting...'}
+                        {isPending ? 'Confirming...' : 'Requesting...'}
                       </>
                     ) : (
                       <>
