@@ -1,7 +1,8 @@
 # Phase 2: Self-Hosted Paymaster Implementation Plan
 
 > **Created:** December 14, 2025  
-> **Status:** In Progress  
+> **Updated:** December 14, 2025  
+> **Status:** Steps 1-2, 5, 7 COMPLETE - Paymasters deployed and funded!  
 > **Goal:** Replace Pimlico with self-hosted bundler + paymaster to reduce costs by 50%
 
 ---
@@ -32,7 +33,7 @@ Replace Pimlico's bundler and paymaster with our own self-hosted stack while mai
 
 ## Implementation Steps
 
-### Step 1: Deploy VerifyingPaymaster Contract ⬜
+### Step 1: Deploy VerifyingPaymaster Contract ✅ DONE
 
 **Networks:** Sepolia + Amoy
 
@@ -43,10 +44,10 @@ Replace Pimlico's bundler and paymaster with our own self-hosted stack while mai
 **Tasks:**
 1. [x] Check if BasePaymaster.sol exists, create if needed ✅ EXISTS
 2. [x] Create deployment script `scripts/deploy-verifying-paymaster.js` ✅ CREATED
-3. [ ] Deploy to Sepolia
-4. [ ] Deploy to Amoy
-5. [ ] Verify contracts on block explorers
-6. [ ] Update `docs/CURRENT_CONTRACTS.md` with addresses
+3. [x] Deploy to Sepolia ✅ `0xB9F49b6d8e7af756dE755C254683B4aAAaCF27cF`
+4. [x] Deploy to Amoy ✅ `0xe28fdf6B360235B2195f73C756aE3E051A7fA1Ed`
+5. [ ] Verify contracts on block explorers (optional - no API key)
+6. [x] Update `docs/CURRENT_CONTRACTS.md` with addresses ✅
 
 **Deployment Parameters:**
 - `_entryPoint`: `0x0000000071727De22E5E9d8BAf0edAc6f37da032` (v0.7)
@@ -54,13 +55,13 @@ Replace Pimlico's bundler and paymaster with our own self-hosted stack while mai
 
 ---
 
-### Step 2: Fund Paymaster ⬜
+### Step 2: Fund Paymaster ✅ DONE
 
 **Tasks:**
-1. [ ] Send initial ETH to Sepolia paymaster (0.5 ETH)
-2. [ ] Send initial POL to Amoy paymaster (10 POL)
-3. [ ] Call `paymaster.deposit()` to deposit to EntryPoint
-4. [ ] Verify deposit via `entryPoint.balanceOf(paymaster)`
+1. [x] Send initial ETH to Sepolia paymaster ✅ 0.3 ETH deposited
+2. [x] Send initial POL to Amoy paymaster ✅ 5 POL deposited
+3. [x] Call `paymaster.deposit()` to deposit to EntryPoint ✅
+4. [x] Verify deposit via `entryPoint.balanceOf(paymaster)` ✅
 
 **Script:** `npx hardhat run scripts/fund-paymaster.js --network <network>` ✅ CREATED
 
@@ -234,16 +235,20 @@ async function checkAndRefill(network) {
 | `backend/policy-server/server.js` | Update | ⬜ Pending |
 | `bundler-infinitism/bundler.config.json` | Update | ⬜ Pending |
 | `frontend/src/hooks/useIntentGasless.js` | Update | ⬜ Pending |
-| `docs/CURRENT_CONTRACTS.md` | Update | ⬜ After deployment |
+| `docs/CURRENT_CONTRACTS.md` | Update | ✅ Updated |
+| `.env` | Create | ✅ Created with paymaster addresses |
+| `backend/check-balances.mjs` | Create | ✅ Created |
+| `backend/fund-sepolia-paymaster.mjs` | Create | ✅ Created |
 
 ---
 
-## Contract Addresses (To Be Filled)
+## Contract Addresses ✅ DEPLOYED
 
 | Contract | Sepolia | Amoy |
 |----------|---------|------|
-| VerifyingPaymaster | `TBD` | `TBD` |
-| Policy Signer | `TBD` | `TBD` |
+| VerifyingPaymaster | `0xB9F49b6d8e7af756dE755C254683B4aAAaCF27cF` | `0xe28fdf6B360235B2195f73C756aE3E051A7fA1Ed` |
+| Policy Signer | `0xf304eeD846d82a91d688d1bC1A4fA692051d1D7A` | `0xf304eeD846d82a91d688d1bC1A4fA692051d1D7A` |
+| Deposit | 0.3 ETH | 5 POL |
 
 ---
 

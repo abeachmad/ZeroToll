@@ -1,6 +1,6 @@
 # ZeroToll Current Contract Addresses
 
-> **Last Updated:** December 4, 2025  
+> **Last Updated:** December 14, 2025  
 > **Status:** All contracts verified and operational
 
 ---
@@ -91,6 +91,26 @@ Uses ZeroTollRouterV2, user only signs messages.
 | Smart Account (Amoy) | `0x43370460D26b10de805D4CdfE4d331aDb7219fFe` |
 
 > **Note**: Smart Account addresses are deterministically derived from the relayer's private key. The "execution reverted" message shown in block explorers for ERC-4337 transactions is normal - it refers to the EntryPoint's postOp phase, not the actual swap. If tokens were transferred correctly, the swap succeeded.
+
+---
+
+## PHASE 2: SELF-HOSTED PAYMASTER (Dec 14, 2025)
+
+VerifyingPaymaster contracts for self-hosted gasless swaps.
+
+| Network | Contract | Address | Deposit |
+|---------|----------|---------|---------|
+| Sepolia | VerifyingPaymaster | `0xB9F49b6d8e7af756dE755C254683B4aAAaCF27cF` | 0.3 ETH |
+| Amoy | VerifyingPaymaster | `0xe28fdf6B360235B2195f73C756aE3E051A7fA1Ed` | 5 POL |
+
+| Component | Address |
+|-----------|---------|
+| Policy Signer | `0xf304eeD846d82a91d688d1bC1A4fA692051d1D7A` |
+| EntryPoint v0.7 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+
+**Explorer Links:**
+- [Sepolia Paymaster](https://sepolia.etherscan.io/address/0xB9F49b6d8e7af756dE755C254683B4aAAaCF27cF)
+- [Amoy Paymaster](https://amoy.polygonscan.com/address/0xe28fdf6B360235B2195f73C756aE3E051A7fA1Ed)
 
 ---
 
