@@ -27,7 +27,9 @@ import {
 import { privateKeyToAccount, signMessage } from 'viem/accounts';
 import { sepolia, polygonAmoy } from 'viem/chains';
 
-config();
+// Load both .env and .env.credentials
+config({ path: '.env' });
+config({ path: '.env.credentials' });
 
 const app = express();
 app.use(cors());

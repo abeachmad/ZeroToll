@@ -2,7 +2,7 @@
 
 > **Created:** December 14, 2025  
 > **Updated:** December 14, 2025  
-> **Status:** Steps 1-2, 5, 7 COMPLETE - Paymasters deployed and funded!  
+> **Status:** Steps 1-3, 5, 7 COMPLETE - Bundler running, ready for testing!  
 > **Goal:** Replace Pimlico with self-hosted bundler + paymaster to reduce costs by 50%
 
 ---
@@ -71,16 +71,18 @@ Replace Pimlico's bundler and paymaster with our own self-hosted stack while mai
 
 ---
 
-### Step 3: Configure & Start Infinitism Bundler ⬜
+### Step 3: Configure & Start Infinitism Bundler ✅ DONE
 
 **Location:** `bundler-infinitism/`
 
 **Tasks:**
-1. [ ] Update `bundler.config.json` with correct settings
-2. [ ] Ensure bundler has funded wallet (`bundler.key`)
-3. [ ] Test bundler startup on Sepolia
+1. [x] Update `bundler.config.json` with correct settings ✅
+2. [x] Ensure bundler has funded wallet (`bundler.mnemonic`) ✅ 5.93 ETH on Sepolia
+3. [x] Test bundler startup on Sepolia ✅ Running on port 3000
 4. [ ] Test bundler startup on Amoy
 5. [ ] Create systemd service or PM2 config for production
+
+**Bundler Wallet:** `0xd4aB7C32fCe0d28882052a83De467b9BE2DBFC8e`
 
 **Config Updates Needed:**
 ```json
