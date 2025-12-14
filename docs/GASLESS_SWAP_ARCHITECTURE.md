@@ -307,8 +307,8 @@ bytes32 constant LINK_USD = 0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc0
 
 | Network | ZeroTollRouterV2 |
 |---------|------------------|
-| Sepolia | 0x3f260E97be2528D7568dE495F908e04BC8722ec5 |
-| Amoy | 0x8DABA829Fe6ACf7f3B9d98d52889beE5CcfEa3fD |
+| Sepolia | 0x577560699EF88e99f15d04df57c9552056d2a10D |
+| Amoy | 0xc75df1943d6EFE04b422b9bB45509782609Fc67a |
 
 **Adapter Fallback Chain:**
 1. SmartDexAdapter (tries Uniswap V3 → internal pool)
@@ -337,13 +337,44 @@ getPermitType(tokenAddress) // Returns: 'erc2612' | 'permit2' | 'none'
 | WMATIC | - | ✅ | Permit2 |
 | PYUSD | ✅ | - | None |
 
-### Phase 5: Testing & Polish ✅ COMPLETE
+### Phase 5: Backend Integration ✅ COMPLETE
 
+- [x] Update `token_registry.py` with `address_to_symbol()` function
+- [x] Update `server.py` quote endpoint to convert addresses to symbols for Pyth oracle
+- [x] Update `route_client.py` with ZeroTollAdapter routing for zTokens
+- [x] Add `is_ztoken()` helper function for zToken detection
+- [x] Add Permit2 endpoint to `pimlico-v3-relayer.mjs` (`/api/intents/swap-with-permit2`)
 - [x] Update Swap.jsx to use `getPermitType()` for permit detection
 - [x] Support both ERC-2612 and Permit2 in `handlePimlicoGasless()`
 - [x] Add fallback to traditional swap for unsupported tokens
 - [x] ZTA/ZTB tokens replaced by zTokens (zUSDC, zETH, zPOL, zLINK)
 - [x] Update documentation (this file)
+
+**Backend Quote API Flow:**
+```
+POST /api/quote
+     │
+     ▼
+address_to_symbol(tokenIn)  →  "ZUSDC" → normalize → "USDC"
+     │
+     ▼
+pyth_oracle.get_price("USDC")  →  $1.00 (LIVE from Pyth)
+     │
+     ▼
+Calculate output amount based on real prices
+     │
+     ▼
+Return quote with Pyth oracle source
+```
+
+**Route Client zToken Detection:**
+```python
+is_ztoken(token_address, chain_id)  # Returns True for zUSDC, zETH, zPOL, zLINK
+     │
+     ▼
+If zToken → Use ZeroTollAdapter
+Else → Use SmartDexAdapter (Uniswap fallback)
+```
 
 **Gasless Flow in Pimlico Mode:**
 ```

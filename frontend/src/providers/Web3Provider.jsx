@@ -6,20 +6,23 @@ import { injected, walletConnect } from 'wagmi/connectors';
 
 const projectId = process.env.REACT_APP_WALLETCONNECT_PROJECT_ID || 'demo-project-id';
 
-// Default RPC URLs (public endpoints)
-const AMOY_RPC = process.env.REACT_APP_RPC_AMOY || 'https://rpc-amoy.polygon.technology/';
-const SEPOLIA_RPC = process.env.REACT_APP_RPC_SEPOLIA || 'https://ethereum-sepolia-rpc.publicnode.com';
-
 const config = createConfig({
-  chains: [polygonAmoy, sepolia],
+  // Sepolia first - wagmi uses first chain as default
+  chains: [sepolia, polygonAmoy],
   connectors: [
-    injected({ shimDisconnect: true }),
+    injected({ 
+      shimDisconnect: true,
+      // Don't auto-switch chains
+      target: 'metaMask'
+    }),
     walletConnect({ projectId, showQrModal: true })
   ],
   transports: {
-    [polygonAmoy.id]: http(AMOY_RPC),
-    [sepolia.id]: http(SEPOLIA_RPC)
-  }
+    [sepolia.id]: http(process.env.REACT_APP_RPC_SEPOLIA),
+    [polygonAmoy.id]: http(process.env.REACT_APP_RPC_AMOY)
+  },
+  // Disable sync with URL to prevent chain switching issues
+  syncConnectedChain: true
 });
 
 const queryClient = new QueryClient();

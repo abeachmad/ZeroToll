@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -155,6 +156,10 @@ contract ZeroTollRouterV2 is Ownable, ReentrancyGuard {
     /**
      * @notice Execute swap with ERC-2612 Permit (for supported tokens)
      */
+    event PermitAttempt(address indexed token, address indexed owner, address indexed spender, uint256 value, uint256 deadline);
+    event PermitSuccess(address indexed token, address indexed owner);
+    event PermitFailed(address indexed token, address indexed owner, string reason);
+
     function executeSwapWithPermit(
         SwapIntent calldata intent,
         bytes calldata userSignature,
@@ -163,16 +168,29 @@ contract ZeroTollRouterV2 is Ownable, ReentrancyGuard {
         bytes32 permitR,
         bytes32 permitS
     ) external nonReentrant returns (uint256 amountOut) {
-        // Execute permit first
-        try IERC20Permit(intent.tokenIn).permit(
-            intent.user,
-            address(this),
-            intent.amountIn,
-            permitDeadline,
-            permitV,
-            permitR,
-            permitS
-        ) {} catch {}
+        emit PermitAttempt(intent.tokenIn, intent.user, address(this), intent.amountIn, permitDeadline);
+        
+        // Check current allowance before permit
+        uint256 currentAllowance = IERC20(intent.tokenIn).allowance(intent.user, address(this));
+        
+        // Only call permit if we don't already have sufficient allowance
+        if (currentAllowance < intent.amountIn) {
+            // Execute permit - MUST succeed or revert
+            IERC20Permit(intent.tokenIn).permit(
+                intent.user,
+                address(this),
+                intent.amountIn,
+                permitDeadline,
+                permitV,
+                permitR,
+                permitS
+            );
+            emit PermitSuccess(intent.tokenIn, intent.user);
+        }
+        
+        // Verify allowance is now sufficient
+        uint256 newAllowance = IERC20(intent.tokenIn).allowance(intent.user, address(this));
+        require(newAllowance >= intent.amountIn, "Permit failed: insufficient allowance");
 
         return _executeSwapInternal(intent, userSignature, false);
     }
@@ -383,10 +401,22 @@ contract ZeroTollRouterV2 is Ownable, ReentrancyGuard {
     
     /**
      * @notice Test mode swap simulation
+     * @dev Handles decimal conversion between tokens (e.g., 6 decimal USDC to 18 decimal ETH)
      */
     function _doTestModeSwap(SwapIntent calldata intent) internal returns (uint256 amountOut) {
         uint256 fee = (intent.amountIn * feeBps) / 10000;
-        amountOut = intent.amountIn - fee;
+        uint256 amountAfterFee = intent.amountIn - fee;
+        
+        // Get decimals for both tokens
+        uint8 decimalsIn = _getDecimals(intent.tokenIn);
+        uint8 decimalsOut = _getDecimals(intent.tokenOut);
+        
+        // Convert amount to output token decimals (1:1 rate for test mode)
+        if (decimalsOut >= decimalsIn) {
+            amountOut = amountAfterFee * (10 ** (decimalsOut - decimalsIn));
+        } else {
+            amountOut = amountAfterFee / (10 ** (decimalsIn - decimalsOut));
+        }
         
         // Check if we have tokenOut liquidity
         uint256 tokenOutBalance = IERC20(intent.tokenOut).balanceOf(address(this));
@@ -396,7 +426,8 @@ contract ZeroTollRouterV2 is Ownable, ReentrancyGuard {
             IERC20(intent.tokenOut).safeTransfer(intent.user, amountOut);
         } else if (intent.tokenIn == intent.tokenOut) {
             // Same token - just return minus fee
-            IERC20(intent.tokenIn).safeTransfer(intent.user, amountOut);
+            IERC20(intent.tokenIn).safeTransfer(intent.user, amountAfterFee);
+            amountOut = amountAfterFee;
         } else {
             // No liquidity - revert with helpful message
             revert("Test mode: No tokenOut liquidity. Fund contract or set DEX adapter.");
@@ -405,6 +436,17 @@ contract ZeroTollRouterV2 is Ownable, ReentrancyGuard {
         // Transfer fee if configured
         if (fee > 0 && feeRecipient != address(0)) {
             IERC20(intent.tokenIn).safeTransfer(feeRecipient, fee);
+        }
+    }
+    
+    /**
+     * @notice Get token decimals with fallback to 18
+     */
+    function _getDecimals(address token) internal view returns (uint8) {
+        try IERC20Metadata(token).decimals() returns (uint8 d) {
+            return d;
+        } catch {
+            return 18; // Default to 18 decimals
         }
     }
 

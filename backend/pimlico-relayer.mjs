@@ -49,7 +49,7 @@ if (!PIMLICO_API_KEY) {
 }
 
 // V2 Router with Permit2 support
-const ZEROTOLL_ROUTER_SEPOLIA = '0xd475255Ae38C92404f9740A19F93B8D2526A684b';
+const ZEROTOLL_ROUTER_SEPOLIA = '0x577560699EF88e99f15d04df57c9552056d2a10D';
 
 // Permit2 address (same on all chains)
 const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
@@ -64,7 +64,7 @@ const CHAINS = {
   80002: {
     chain: polygonAmoy,
     rpc: process.env.RPC_AMOY || 'https://rpc-amoy.polygon.technology',
-    routerAddress: '0x0000000000000000000000000000000000000000',
+    routerAddress: '0xc75df1943d6EFE04b422b9bB45509782609Fc67a',
     pimlicoUrl: `https://api.pimlico.io/v2/polygon-amoy/rpc?apikey=${PIMLICO_API_KEY}`
   }
 };

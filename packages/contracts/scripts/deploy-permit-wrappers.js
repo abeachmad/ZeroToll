@@ -4,8 +4,8 @@ async function main() {
   // Sepolia token addresses
   const WETH = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14";
   const USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
-  const ROUTER = "0xd475255Ae38C92404f9740A19F93B8D2526A684b";
-  const SMART_ADAPTER = "0xb9373FDB72128d01B5F3b6BD29F30B8921a85885";
+  const ROUTER = "0x577560699EF88e99f15d04df57c9552056d2a10D";
+  const SMART_ADAPTER = "0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa";
 
   console.log("Deploying Permit Wrappers...\n");
 

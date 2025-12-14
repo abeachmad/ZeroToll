@@ -1,80 +1,90 @@
 /**
- * Fund VerifyingPaymaster - Deposit to EntryPoint
+ * Fund VerifyingPaymaster - deposits native tokens to EntryPoint
+ * 
+ * Usage:
+ *   npx hardhat run scripts/fund-paymaster.js --network sepolia
+ *   npx hardhat run scripts/fund-paymaster.js --network amoy
+ * 
+ * Required ENV:
+ *   PRIVATE_KEY_DEPLOYER - Wallet with funds to deposit
+ *   SEPOLIA_VERIFYING_PAYMASTER or AMOY_VERIFYING_PAYMASTER - Paymaster address
  */
 
-const hre = require("hardhat");
-const { ethers } = require("hardhat");
+const hre = require('hardhat');
+
+// Funding amounts per network
+const FUNDING = {
+  sepolia: {
+    amount: '0.3',  // ETH
+    symbol: 'ETH',
+    minBalance: '0.1'
+  },
+  amoy: {
+    amount: '5',    // POL
+    symbol: 'POL',
+    minBalance: '2'
+  }
+};
 
 async function main() {
-  console.log("\n" + "=".repeat(80));
-  console.log("FUND VERIFYINGPAYMASTER - DEPOSIT TO ENTRYPOINT");
-  console.log("=".repeat(80));
-
-  const [deployer] = await ethers.getSigners();
-  console.log("\nDeployer:", deployer.address);
-
-  // Get network
-  const network = await ethers.provider.getNetwork();
-  const networkName = network.chainId === 80002n ? "Amoy" : 
-                      network.chainId === 11155111n ? "Sepolia" : "Unknown";
+  const [funder] = await hre.ethers.getSigners();
+  const network = hre.network.name;
+  const config = FUNDING[network];
   
-  console.log("Network:", networkName, `(${network.chainId})`);
-
-  // Paymaster addresses
-  const PAYMASTER_ADDRESSES = {
-    amoy: "0xC721582d25895956491436459df34cd817C6AB74",
-    sepolia: "0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9"
-  };
-
-  const paymasterAddress = network.chainId === 80002n ? 
-    PAYMASTER_ADDRESSES.amoy : PAYMASTER_ADDRESSES.sepolia;
-
-  console.log("Paymaster:", paymasterAddress);
-
-  // Check paymaster balance
-  const balance = await ethers.provider.getBalance(paymasterAddress);
-  console.log("\n💰 Current paymaster balance:", ethers.formatEther(balance), "ETH/MATIC");
-
-  if (balance === 0n) {
-    console.error("❌ Paymaster has no balance! Please send native tokens first.");
-    process.exit(1);
+  if (!config) {
+    throw new Error(`Unsupported network: ${network}`);
   }
 
-  // Get paymaster contract
-  const VerifyingPaymaster = await ethers.getContractFactory("VerifyingPaymaster");
-  const paymaster = VerifyingPaymaster.attach(paymasterAddress);
+  // Get paymaster address from env
+  const envKey = `${network.toUpperCase()}_VERIFYING_PAYMASTER`;
+  const paymasterAddress = process.env[envKey];
+  if (!paymasterAddress) {
+    throw new Error(`${envKey} not set in environment`);
+  }
 
-  // Check current EntryPoint deposit
-  const currentDeposit = await paymaster.getDeposit();
-  console.log("📊 Current EntryPoint deposit:", ethers.formatEther(currentDeposit), "ETH/MATIC");
-
-  // Deposit amount (use 0.5 of the balance, keep some for contract operations)
-  const depositAmount = balance / 2n;
-  console.log("\n💸 Depositing:", ethers.formatEther(depositAmount), "ETH/MATIC to EntryPoint");
-
-  // Deposit to EntryPoint
-  const tx = await paymaster.deposit({ value: depositAmount });
-  console.log("TX:", tx.hash);
+  console.log('\n' + '='.repeat(60));
+  console.log('  FUNDING VERIFYING PAYMASTER');
+  console.log('='.repeat(60));
+  console.log(`Network:   ${network}`);
+  console.log(`Funder:    ${funder.address}`);
+  console.log(`Paymaster: ${paymasterAddress}`);
   
-  const receipt = await tx.wait();
-  console.log("✅ Deposited in block:", receipt.blockNumber);
+  const funderBalance = await hre.ethers.provider.getBalance(funder.address);
+  console.log(`Funder Balance: ${hre.ethers.formatEther(funderBalance)} ${config.symbol}`);
 
-  // Check new deposit
+  // Connect to paymaster
+  const paymaster = await hre.ethers.getContractAt('VerifyingPaymaster', paymasterAddress);
+  
+  // Check current deposit
+  const currentDeposit = await paymaster.getDeposit();
+  console.log(`Current Deposit: ${hre.ethers.formatEther(currentDeposit)} ${config.symbol}`);
+  
+  const minBalance = hre.ethers.parseEther(config.minBalance);
+  if (currentDeposit >= minBalance) {
+    console.log(`\n✅ Paymaster already has sufficient deposit (>= ${config.minBalance} ${config.symbol})`);
+    console.log('   No funding needed.');
+    return;
+  }
+
+  // Fund the paymaster
+  const fundAmount = hre.ethers.parseEther(config.amount);
+  console.log(`\nDepositing ${config.amount} ${config.symbol} to paymaster...`);
+  
+  const tx = await paymaster.deposit({ value: fundAmount });
+  console.log(`Transaction: ${tx.hash}`);
+  await tx.wait();
+  console.log('✅ Deposit confirmed!');
+
+  // Verify new deposit
   const newDeposit = await paymaster.getDeposit();
-  console.log("\n📊 New EntryPoint deposit:", ethers.formatEther(newDeposit), "ETH/MATIC");
+  console.log(`\nNew Deposit: ${hre.ethers.formatEther(newDeposit)} ${config.symbol}`);
 
-  const newBalance = await ethers.provider.getBalance(paymasterAddress);
-  console.log("💰 Remaining paymaster balance:", ethers.formatEther(newBalance), "ETH/MATIC");
-
-  console.log("\n" + "=".repeat(80));
-  console.log("✅ SUCCESS - Paymaster funded and ready to sponsor UserOps!");
-  console.log("=".repeat(80));
-  console.log("\nSummary:");
-  console.log("  Paymaster:", paymasterAddress);
-  console.log("  EntryPoint Deposit:", ethers.formatEther(newDeposit), "ETH/MATIC");
-  console.log("  Available for sponsorship: ~", Math.floor(Number(ethers.formatEther(newDeposit)) / 0.01), "UserOps");
-  console.log("  (assuming ~0.01 ETH/MATIC per UserOp)");
-  console.log("=".repeat(80) + "\n");
+  console.log('\n' + '='.repeat(60));
+  console.log('  FUNDING COMPLETE');
+  console.log('='.repeat(60));
+  console.log(`Paymaster: ${paymasterAddress}`);
+  console.log(`Deposit:   ${hre.ethers.formatEther(newDeposit)} ${config.symbol}`);
+  console.log('='.repeat(60) + '\n');
 }
 
 main()

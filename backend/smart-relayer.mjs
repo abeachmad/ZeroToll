@@ -36,7 +36,7 @@ if (!RELAYER_PRIVATE_KEY) {
   process.exit(1);
 }
 
-const ZEROTOLL_ROUTER = '0xd475255Ae38C92404f9740A19F93B8D2526A684b';
+const ZEROTOLL_ROUTER = '0x577560699EF88e99f15d04df57c9552056d2a10D';
 const SMART_ADAPTER = '0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa';
 const PIMLICO_URL = PIMLICO_API_KEY ? `https://api.pimlico.io/v2/sepolia/rpc?apikey=${PIMLICO_API_KEY}` : null;
 

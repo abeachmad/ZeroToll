@@ -88,7 +88,7 @@ This report documents the implementation of a gasless token swap system for Zero
 
 | Contract | Address | Purpose |
 |----------|---------|---------|
-| ZeroTollRouterV2 | `0xd475255Ae38C92404f9740A19F93B8D2526A684b` | Main swap router with signature verification |
+| ZeroTollRouterV2 | `0x577560699EF88e99f15d04df57c9552056d2a10D` | Main swap router with signature verification |
 | SmartDexAdapter | `0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa` | DEX routing (Uniswap + internal) |
 | ZTA (ZeroToll Token A) | `0x4cF58E14DbC9614d7F6112f6256dE9062300C6Bf` | Test token with ERC-2612 Permit |
 | ZTB (ZeroToll Token B) | `0x8fb844251af76AF090B005643D966FC52852100a` | Test token with ERC-2612 Permit |
@@ -471,7 +471,7 @@ DOMAIN_SEPARATOR = keccak256(
         keccak256(bytes("ZeroTollRouter")),
         keccak256(bytes("1")),
         11155111, // Sepolia
-        0xd475255Ae38C92404f9740A19F93B8D2526A684b
+        0x577560699EF88e99f15d04df57c9552056d2a10D
     )
 );
 ```

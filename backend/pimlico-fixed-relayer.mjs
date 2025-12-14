@@ -48,7 +48,7 @@ if (!PIMLICO_API_KEY) {
   process.exit(1);
 }
 
-const ZEROTOLL_ROUTER = '0xd475255Ae38C92404f9740A19F93B8D2526A684b';
+const ZEROTOLL_ROUTER = '0x577560699EF88e99f15d04df57c9552056d2a10D';
 const PIMLICO_URL = `https://api.pimlico.io/v2/sepolia/rpc?apikey=${PIMLICO_API_KEY}`;
 
 const SWAP_INTENT_TYPES = {

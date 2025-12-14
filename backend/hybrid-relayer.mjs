@@ -36,14 +36,20 @@ if (!RELAYER_PRIVATE_KEY) {
   process.exit(1);
 }
 
-const ZEROTOLL_ROUTER = '0xd475255Ae38C92404f9740A19F93B8D2526A684b';
 const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
 
 const CHAINS = {
   11155111: {
     chain: sepolia,
     rpc: 'https://ethereum-sepolia-rpc.publicnode.com',
-    routerAddress: ZEROTOLL_ROUTER
+    routerAddress: '0x577560699EF88e99f15d04df57c9552056d2a10D', // Sepolia ZeroTollRouterV2
+    explorer: 'https://sepolia.etherscan.io'
+  },
+  80002: {
+    chain: polygonAmoy,
+    rpc: 'https://rpc-amoy.polygon.technology',
+    routerAddress: '0xc75df1943d6EFE04b422b9bB45509782609Fc67a', // Amoy ZeroTollRouterV2
+    explorer: 'https://amoy.polygonscan.com'
   }
 };
 
@@ -146,7 +152,7 @@ app.post('/api/intents/swap', async (req, res) => {
       success: true,
       requestId,
       txHash,
-      explorerUrl: `https://sepolia.etherscan.io/tx/${txHash}`,
+      explorerUrl: `${chainConfig.explorer}/tx/${txHash}`,
       message: 'Swap submitted - relayer paid gas for you!'
     });
 
@@ -229,7 +235,7 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
       success: true,
       requestId,
       txHash,
-      explorerUrl: `https://sepolia.etherscan.io/tx/${txHash}`,
+      explorerUrl: `${chainConfig.explorer}/tx/${txHash}`,
       message: 'Fully gasless swap submitted via ERC-2612 Permit!'
     });
 
@@ -319,7 +325,7 @@ app.post('/api/intents/swap-with-permit2', async (req, res) => {
       success: true,
       requestId,
       txHash,
-      explorerUrl: `https://sepolia.etherscan.io/tx/${txHash}`,
+      explorerUrl: `${chainConfig.explorer}/tx/${txHash}`,
       message: 'Fully gasless swap submitted!'
     });
 
@@ -352,7 +358,7 @@ app.get('/api/intents/:id/status', async (req, res) => {
     requestId: req.params.id,
     status: data.status,
     txHash: data.txHash,
-    explorerUrl: `https://sepolia.etherscan.io/tx/${data.txHash}`
+    explorerUrl: `${chainConfig.explorer}/tx/${data.txHash}`
   });
 });
 

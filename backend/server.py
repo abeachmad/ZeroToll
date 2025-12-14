@@ -16,7 +16,7 @@ import re
 from dex_swap_service import DEXSwapService
 from route_client import get_best_route_for_intent
 from web3_tx_builder import execute_intent_on_chain
-from token_registry import get_token_address
+from token_registry import get_token_address, address_to_symbol
 from pyth_rest_oracle import pyth_oracle  # NEW: LIVE prices from Pyth REST API (off-chain)
 
 ROOT_DIR = Path(__file__).parent
@@ -194,9 +194,15 @@ async def get_quote(request: QuoteRequest, req: Request):
         src_chain_id = intent.srcChainId
         dst_chain_id = intent.dstChainId
         
+        # Convert token addresses to symbols for Pyth oracle lookup
+        token_in_symbol = address_to_symbol(intent.tokenIn, src_chain_id)
+        token_out_symbol = address_to_symbol(intent.tokenOut, dst_chain_id)
+        
+        logger.info(f"📊 Quote request: {token_in_symbol} → {token_out_symbol} on chain {src_chain_id}")
+        
         # ✅ Query Pyth REST API for REAL-TIME prices (LIVE, off-chain)
-        price_in_data = pyth_oracle.get_price(intent.tokenIn, src_chain_id)
-        price_out_data = pyth_oracle.get_price(intent.tokenOut, dst_chain_id)
+        price_in_data = pyth_oracle.get_price(token_in_symbol, src_chain_id)
+        price_out_data = pyth_oracle.get_price(token_out_symbol, dst_chain_id)
         
         # Check if prices available (fail-closed)
         if not price_in_data["available"] or not price_out_data["available"]:
@@ -227,11 +233,11 @@ async def get_quote(request: QuoteRequest, req: Request):
         # TODO: Query on-chain oracle directly for accurate quotes
         net_out = output_amount * 0.60
         
-        # Determine fee token based on mode
+        # Determine fee token based on mode (convert address to symbol if needed)
         if intent.feeMode == 'INPUT':
-            fee_token = intent.tokenIn
+            fee_token = token_in_symbol  # Already converted to symbol
         elif intent.feeMode == 'OUTPUT':
-            fee_token = intent.tokenOut
+            fee_token = token_out_symbol  # Already converted to symbol
         elif intent.feeMode == 'STABLE':
             fee_token = 'USDC'
         else:

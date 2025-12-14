@@ -217,6 +217,10 @@ class PythRestOracle:
             WETH -> ETH (same price)
             WPOL -> POL (same price)
             WMATIC -> POL (MATIC rebranded to POL)
+            zUSDC -> USDC (ZeroToll test token mirrors USDC price)
+            zETH -> ETH (ZeroToll test token mirrors ETH price)
+            zPOL -> POL (ZeroToll test token mirrors POL price)
+            zLINK -> LINK (ZeroToll test token mirrors LINK price)
         """
         symbol_upper = symbol.upper()
         
@@ -227,6 +231,15 @@ class PythRestOracle:
             return "POL"
         elif symbol_upper in ["WBTC", "BTC"]:
             return "BTC"
+        # Handle ZeroToll zTokens (mirror real asset prices)
+        elif symbol_upper == "ZUSDC":
+            return "USDC"
+        elif symbol_upper == "ZETH":
+            return "ETH"
+        elif symbol_upper == "ZPOL":
+            return "POL"
+        elif symbol_upper == "ZLINK":
+            return "LINK"
         else:
             return symbol_upper
     

@@ -77,6 +77,8 @@ pkill -f "craco start" 2>/dev/null
 pkill -f "node.*frontend" 2>/dev/null
 pkill -f "node.*react" 2>/dev/null
 pkill -f "pimlico-v3-relayer" 2>/dev/null
+pkill -f "pimlico-relayer" 2>/dev/null
+pkill -f "pimlico-v2-relayer" 2>/dev/null
 
 # Force kill ports if still in use
 sleep 1
@@ -114,4 +116,8 @@ echo "============================================"
 echo ""
 echo "📄 Logs preserved in: $SCRIPT_DIR/.pids/"
 echo "🚀 Restart: ./start-zerotoll.sh"
+echo ""
+echo "📋 Current Contract Addresses:"
+echo "   Sepolia Router: 0x577560699EF88e99f15d04df57c9552056d2a10D"
+echo "   Amoy Router:    0xc75df1943d6EFE04b422b9bB45509782609Fc67a"
 echo ""

@@ -10,10 +10,10 @@ const hre = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
-// Contract addresses from deployments (updated Dec 3, 2025 - V2 with adapter fallback)
+// Contract addresses from deployments (updated Dec 4, 2025 - V2 with decimal conversion fix)
 const ROUTER_ADDRESSES = {
-  sepolia: "0x3f260E97be2528D7568dE495F908e04BC8722ec5",
-  amoy: "0x8DABA829Fe6ACf7f3B9d98d52889beE5CcfEa3fD"
+  sepolia: "0x577560699EF88e99f15d04df57c9552056d2a10D",
+  amoy: "0xc75df1943d6EFE04b422b9bB45509782609Fc67a"
 };
 
 const SMART_DEX_ADAPTER = {

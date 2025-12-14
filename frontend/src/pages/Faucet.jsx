@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Droplets, Loader2, CheckCircle, Copy, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAccount } from 'wagmi';
-import { ethers } from 'ethers';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import ConnectButton from '../components/ConnectButton';
 import contractsConfig from '../config/contracts.json';
 import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
@@ -75,7 +74,12 @@ const Faucet = () => {
   const [loading, setLoading] = useState(false);
   const [txHash, setTxHash] = useState(null);
   const [balances, setBalances] = useState({});
-  const [isPending, setIsPending] = useState(false);
+
+  // Wagmi hooks for faucet
+  const { writeContract: callFaucet, data: faucetHash, isPending } = useWriteContract();
+  const { isSuccess: faucetSuccess, isLoading: faucetConfirming } = useWaitForTransactionReceipt({ 
+    hash: faucetHash 
+  });
 
   // Update selected chain based on wallet
   useEffect(() => {
@@ -94,7 +98,14 @@ const Faucet = () => {
     }
   }, [selectedChain]);
 
-
+  // Handle faucet success
+  useEffect(() => {
+    if (faucetSuccess && faucetHash) {
+      setTxHash(faucetHash);
+      toast.success(`🎉 Received 1,000 ${selectedToken?.symbol}!`);
+      setLoading(false);
+    }
+  }, [faucetSuccess, faucetHash, selectedToken]);
 
   const handleFaucet = async (token) => {
     if (!isConnected) {
@@ -113,49 +124,23 @@ const Faucet = () => {
 
     try {
       toast.info(`🚰 Requesting ${token.symbol} from faucet...`);
-      setIsPending(true);
       
-      // Use ethers directly with MetaMask
-      if (!window.ethereum) {
-        throw new Error('MetaMask not found');
-      }
-      
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      
-      // Create contract instance
-      const contract = new ethers.Contract(
-        token.address,
-        ['function faucet() external'],
-        signer
-      );
-      
-      // Call faucet
-      const tx = await contract.faucet();
+      await callFaucet({
+        address: token.address,
+        abi: ZTOKEN_ABI,
+        functionName: 'faucet',
+        args: [],
+      });
+
       toast.info('⏳ Transaction submitted, waiting for confirmation...');
-      
-      // Wait for confirmation
-      const receipt = await tx.wait();
-      
-      setTxHash(receipt.hash);
-      toast.success(`🎉 Received 1,000 ${token.symbol}!`);
-      setLoading(false);
-      setIsPending(false);
     } catch (error) {
       console.error('Faucet error:', error);
       setLoading(false);
-      setIsPending(false);
       
-      const errorMsg = error.message || '';
-      
-      if (errorMsg.includes('user rejected') || errorMsg.includes('User denied')) {
+      if (error.message?.includes('User rejected') || error.message?.includes('User denied')) {
         toast.error('❌ Transaction cancelled');
-      } else if (errorMsg.includes('insufficient funds')) {
-        toast.error('❌ Insufficient POL for gas. Get testnet POL from a faucet first.');
-      } else if (errorMsg.includes('Internal JSON-RPC error') || errorMsg.includes('-32603')) {
-        toast.error('❌ RPC error. Try switching MetaMask RPC or refreshing the page.');
       } else {
-        toast.error(errorMsg.slice(0, 100) || 'Faucet request failed');
+        toast.error(error.shortMessage || error.message || 'Faucet request failed');
       }
     }
   };
@@ -280,17 +265,17 @@ const Faucet = () => {
 
                   <button
                     onClick={() => handleFaucet(token)}
-                    disabled={loading || isPending || !isConnected}
+                    disabled={loading || isPending || faucetConfirming || !isConnected}
                     className={`w-full py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-                      (loading || isPending) && selectedToken?.address === token.address
+                      loading && selectedToken?.address === token.address
                         ? 'bg-zt-violet/50 text-zt-paper/50 cursor-wait'
                         : 'bg-gradient-to-r from-zt-violet to-zt-aqua text-white hover:opacity-90'
                     }`}
                   >
-                    {(loading || isPending) && selectedToken?.address === token.address ? (
+                    {loading && selectedToken?.address === token.address ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        {isPending ? 'Confirming...' : 'Requesting...'}
+                        {faucetConfirming ? 'Confirming...' : 'Requesting...'}
                       </>
                     ) : (
                       <>
@@ -319,22 +304,6 @@ const Faucet = () => {
               >
                 View transaction <ExternalLink className="w-4 h-4" />
               </a>
-            </div>
-          )}
-
-          {/* Network Warning for Amoy */}
-          {selectedChain.id === 80002 && isConnected && chain?.id === 80002 && (
-            <div className="mb-6 glass p-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10">
-              <div className="text-sm text-zt-paper/80 space-y-2">
-                <div>
-                  <strong className="text-yellow-400">💡 Tip:</strong> Make sure you have some testnet POL for gas fees. 
-                  Get free POL from the <a href="https://faucet.polygon.technology/" target="_blank" rel="noopener noreferrer" className="text-zt-aqua hover:underline">Polygon Faucet</a>.
-                </div>
-                <div>
-                  <strong className="text-yellow-400">⚠️ RPC Issues?</strong> If transactions fail, try changing MetaMask's RPC URL for Amoy to: 
-                  <code className="ml-1 bg-white/10 px-1 rounded text-xs">https://polygon-amoy.drpc.org</code>
-                </div>
-              </div>
             </div>
           )}
 

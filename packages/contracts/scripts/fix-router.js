@@ -1,7 +1,7 @@
 const hre = require("hardhat");
 
 async function main() {
-  const ROUTER = "0xd475255Ae38C92404f9740A19F93B8D2526A684b";
+  const ROUTER = "0x577560699EF88e99f15d04df57c9552056d2a10D";
 
   console.log("Checking router state...");
   

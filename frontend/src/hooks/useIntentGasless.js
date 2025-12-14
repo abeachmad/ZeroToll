@@ -14,10 +14,10 @@ import { useAccount, useChainId, useWalletClient } from 'wagmi';
 
 const RELAYER_URL = process.env.REACT_APP_RELAYER_URL || 'http://localhost:3001';
 
-// ZeroToll Router addresses per chain (updated Dec 3, 2025)
+// ZeroToll Router addresses per chain (ZeroTollRouterV2)
 const ZEROTOLL_ROUTERS = {
-  11155111: '0x3f260E97be2528D7568dE495F908e04BC8722ec5', // Sepolia
-  80002: '0x8DABA829Fe6ACf7f3B9d98d52889beE5CcfEa3fD', // Amoy
+  11155111: '0x577560699EF88e99f15d04df57c9552056d2a10D', // Sepolia (decimal fix)
+  80002: '0xc75df1943d6EFE04b422b9bB45509782609Fc67a', // Amoy (decimal fix)
 };
 
 // Permit2 contract address (same on all chains)
@@ -199,7 +199,7 @@ export function useIntentGasless() {
   const signPermit = useCallback(async (tokenAddress, spender, value, deadline) => {
     if (!address || !chainId || !walletClient) throw new Error('Not connected');
 
-    // Get token name
+    // Get token name using proper ABI decoding
     const nameData = await walletClient.request({
       method: 'eth_call',
       params: [{ to: tokenAddress, data: '0x06fdde03' }, 'latest']
@@ -207,9 +207,16 @@ export function useIntentGasless() {
     
     let tokenName = 'Token';
     try {
-      const hex = nameData.slice(130);
+      // ABI decode string: skip 0x (2 chars) + offset (64 chars) + length (64 chars) = 130 chars
+      // Then read the actual string bytes
+      const lengthHex = nameData.slice(66, 130);
+      const length = parseInt(lengthHex, 16);
+      const hex = nameData.slice(130, 130 + length * 2);
       tokenName = hex.match(/.{2}/g).map(h => parseInt(h, 16)).filter(c => c > 0).map(c => String.fromCharCode(c)).join('');
-    } catch {}
+      console.log('📝 Permit token name:', tokenName, 'for', tokenAddress);
+    } catch (e) {
+      console.warn('⚠️ Failed to parse token name, using default:', e);
+    }
 
     // Get permit nonce
     const nonceData = `0x7ecebe00000000000000000000000000${address.slice(2)}`;
@@ -218,6 +225,7 @@ export function useIntentGasless() {
       params: [{ to: tokenAddress, data: nonceData }, 'latest']
     });
     const permitNonce = parseInt(nonceResult, 16);
+    console.log('📝 Permit nonce:', permitNonce, 'for', address);
 
     const typedData = {
       types: {
@@ -251,14 +259,42 @@ export function useIntentGasless() {
       }
     };
 
+    console.log('📝 Permit params:', {
+      owner: address,
+      spender,
+      value: value.toString(),
+      nonce: permitNonce,
+      deadline,
+      tokenName,
+      chainId,
+      chainIdType: typeof chainId,
+      tokenAddress
+    });
+
     const signature = await walletClient.request({
       method: 'eth_signTypedData_v4',
       params: [address, JSON.stringify(typedData)]
     });
 
+    console.log('📝 Raw permit signature:', signature);
+    console.log('📝 Signature length:', signature.length);
+
     const r = signature.slice(0, 66);
     const s = '0x' + signature.slice(66, 130);
-    const v = parseInt(signature.slice(130, 132), 16);
+    let v = parseInt(signature.slice(130, 132), 16);
+    
+    // Normalize v value (some wallets return 0/1 instead of 27/28)
+    if (v < 27) {
+      v += 27;
+    }
+
+    console.log('📝 Permit signature components:', { 
+      v, 
+      r, 
+      s,
+      rLength: r.length,
+      sLength: s.length
+    });
 
     return { v, r, s, deadline };
   }, [address, chainId, walletClient]);
@@ -320,7 +356,9 @@ export function useIntentGasless() {
 
 
   // Submit gasless swap with permit (for ZTA/ZTB - 100% gasless)
-  const submitSwapWithPermit = useCallback(async ({ tokenIn, tokenOut, amountIn, minAmountOut, deadlineMinutes = 30 }) => {
+  // mode: 'pimlico' (default) = Pimlico paymaster pays gas
+  // mode: 'relayer' = Relayer EOA pays gas
+  const submitSwapWithPermit = useCallback(async ({ tokenIn, tokenOut, amountIn, minAmountOut, deadlineMinutes = 30, mode = 'pimlico' }) => {
     if (!address || !chainId || !routerAddress || !walletClient) {
       throw new Error('Not connected or chain not supported');
     }
@@ -375,11 +413,19 @@ export function useIntentGasless() {
       });
 
       // Step 3: Submit to relayer
-      console.log('Submitting to relayer...');
+      console.log(`Submitting to relayer (mode: ${mode})...`);
+      console.log('📤 Permit being sent:', {
+        v: permit.v,
+        r: permit.r,
+        s: permit.s,
+        deadline: permit.deadline,
+        rLength: permit.r?.length,
+        sLength: permit.s?.length
+      });
       const response = await fetch(`${RELAYER_URL}/api/intents/swap-with-permit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chainId, intent, userSignature: signature, permit })
+        body: JSON.stringify({ chainId, intent, userSignature: signature, permit, mode })
       });
 
       const result = await response.json();
@@ -401,7 +447,9 @@ export function useIntentGasless() {
   }, []);
 
   // Submit gasless swap with Permit2 (for USDC, WETH, LINK, etc.)
-  const submitSwapWithPermit2 = useCallback(async ({ tokenIn, tokenOut, amountIn, minAmountOut, deadlineMinutes = 30 }) => {
+  // mode: 'pimlico' (default) = Pimlico paymaster pays gas
+  // mode: 'relayer' = Relayer EOA pays gas
+  const submitSwapWithPermit2 = useCallback(async ({ tokenIn, tokenOut, amountIn, minAmountOut, deadlineMinutes = 30, mode = 'pimlico' }) => {
     if (!address || !chainId || !routerAddress || !walletClient) {
       throw new Error('Not connected or chain not supported');
     }
@@ -461,7 +509,7 @@ export function useIntentGasless() {
       });
 
       // Step 3: Submit to relayer
-      console.log('Submitting to relayer...');
+      console.log(`Submitting to relayer (mode: ${mode})...`);
       const response = await fetch(`${RELAYER_URL}/api/intents/swap-with-permit2`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -470,7 +518,8 @@ export function useIntentGasless() {
           intent, 
           userSignature, 
           permitSingle, 
-          permit2Signature 
+          permit2Signature,
+          mode
         })
       });
 

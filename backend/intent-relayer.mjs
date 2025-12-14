@@ -38,7 +38,7 @@ if (!RELAYER_PRIVATE_KEY) {
 }
 
 // NEW ZeroTollRouter contract with Permit support
-const ZEROTOLL_ROUTER_SEPOLIA = '0x7065681d02601004e48C6e8Ac1F82B44cc6b36e6';
+const ZEROTOLL_ROUTER_SEPOLIA = '0x577560699EF88e99f15d04df57c9552056d2a10D';
 
 const CHAINS = {
   11155111: {
@@ -49,7 +49,7 @@ const CHAINS = {
   80002: {
     chain: polygonAmoy,
     rpc: process.env.RPC_AMOY || 'https://rpc-amoy.polygon.technology',
-    routerAddress: '0x0000000000000000000000000000000000000000' // Deploy later
+    routerAddress: '0xc75df1943d6EFE04b422b9bB45509782609Fc67a'
   }
 };
 

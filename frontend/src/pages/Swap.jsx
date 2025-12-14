@@ -50,8 +50,8 @@ const ERC20_ABI = [
 ];
 
 const chains = [
-  { id: 80002, name: 'Polygon Amoy', logo: '🔷', tokens: amoyTokens.tokens },
   { id: 11155111, name: 'Ethereum Sepolia', logo: '⭐', tokens: sepoliaTokens.tokens },
+  { id: 80002, name: 'Polygon Amoy', logo: '🔷', tokens: amoyTokens.tokens },
   { id: 421614, name: 'Arbitrum Sepolia', logo: '🔵', tokens: arbitrumSepoliaTokens.tokens },
   { id: 11155420, name: 'Optimism Sepolia', logo: '🔴', tokens: optimismSepoliaTokens.tokens }
 ];
@@ -82,8 +82,9 @@ const Swap = () => {
   const navigate = useNavigate();
   const { address, isConnected, chain } = useAccount();
   
-  const [fromChain, setFromChain] = useState(chains[0]);
-  const [toChain, setToChain] = useState(chains[1]);
+  // Initialize fromChain - Sepolia is now chains[0]
+  const [fromChain, setFromChain] = useState(chains[0]); // Sepolia
+  const [toChain, setToChain] = useState(chains[1]); // Amoy
   const [tokenIn, setTokenIn] = useState(fromChain.tokens[0]);
   const [tokenOut, setTokenOut] = useState(toChain.tokens[0]);
   const [amountIn, setAmountIn] = useState('');
@@ -121,7 +122,13 @@ const Swap = () => {
   // Wagmi hooks for approval
   const { writeContract: approveToken, data: approveHash } = useWriteContract();
   const { isSuccess: approveSuccess } = useWaitForTransactionReceipt({ hash: approveHash });
-  const { switchChain } = useSwitchChain();
+  const { switchChain: _switchChain } = useSwitchChain();
+  
+  // Wrap switchChain with logging to debug auto-switching issue
+  const switchChain = _switchChain ? async (params) => {
+    console.log('🔄 switchChain called with:', params, new Error().stack);
+    return _switchChain(params);
+  } : null;
   
   // Check allowance
   const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
@@ -146,50 +153,29 @@ const Swap = () => {
     }
   }, [tokenIn, feeMode]);
   
-  // AUTO-SWITCH NETWORK when chain mismatch detected
+  // Just show warning when wallet chain doesn't match selected fromChain
+  // DO NOT auto-switch anything - let user control both wallet and UI
   useEffect(() => {
-    if (!isConnected || !chain || !fromChain) {
+    console.log('🔗 Chain changed detected:', { 
+      walletChain: chain?.id, 
+      walletChainName: chain?.name,
+      fromChainId: fromChain.id,
+      fromChainName: fromChain.name,
+      isConnected 
+    });
+    
+    if (!isConnected || !chain) {
       setShowNetworkWarning(false);
       return;
     }
     
-    // Check if wallet network matches selected source chain
+    // Show warning if wallet is on different chain than selected fromChain
     if (chain.id !== fromChain.id) {
       setShowNetworkWarning(true);
-      
-      // Auto-trigger network switch
-      const autoSwitch = async () => {
-        try {
-          toast.info(`🔁 Switching to ${fromChain.name}... Please approve in MetaMask`);
-          
-          if (switchChain) {
-            await switchChain({ chainId: fromChain.id });
-          } else if (window.ethereum) {
-            await window.ethereum.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: `0x${fromChain.id.toString(16)}` }]
-            });
-          }
-          
-          toast.success(`✅ Network switched to ${fromChain.name}!`);
-          setShowNetworkWarning(false);
-        } catch (err) {
-          console.error('Auto network switch failed:', err);
-          if (err.code === 4001) {
-            toast.error('❌ Network switch rejected. Please switch manually in MetaMask.');
-          } else {
-            toast.error('⚠️ Failed to switch network. Please switch manually in MetaMask.');
-          }
-        }
-      };
-      
-      // Trigger auto-switch after short delay
-      const timer = setTimeout(autoSwitch, 500);
-      return () => clearTimeout(timer);
     } else {
       setShowNetworkWarning(false);
     }
-  }, [chain, fromChain, isConnected, switchChain]);
+  }, [chain?.id, isConnected, fromChain.id]);
   
   // Check if approval is needed when amount or allowance changes
   useEffect(() => {
@@ -578,42 +564,9 @@ const Swap = () => {
   };
 
   const handleGaslessExecute = async () => {
+    // Relayer mode now uses the same backend relayer as Pimlico mode
+    // Both modes achieve TRUE gasless swaps via the backend Smart Account + Pimlico paymaster
     try {
-      // IMPORTANT: Check if we're on a chain that supports EIP-7702
-      // MetaMask only supports EIP-7702 on Gnosis (100) and Base (8453), NOT testnets!
-      const isGaslessSupportedChain = EIP7702_SUPPORTED_CHAINS.includes(chain?.id);
-      
-      if (!isGaslessSupportedChain) {
-        // Show clear warning about testnet limitations
-        console.log('⚠️ Chain', chain?.id, 'does not support EIP-7702 gasless');
-        toast.warning(
-          `⚠️ MetaMask does not support gasless on ${chain?.name || 'this network'}.\n` +
-          'Using batch mode instead (you will pay gas, but approve+swap in one tx).'
-        );
-      }
-      
-      // Check working gasless availability (uses the new hook)
-      const workingAvailability = await workingGasless.checkAvailability();
-      console.log('🔍 Working Gasless availability:', workingAvailability);
-      
-      // If on a gasless-supported chain with smart account, use true gasless
-      if (isGaslessSupportedChain && workingAvailability.gaslessAvailable) {
-        console.log('🎉 Using TRUE GASLESS on', chain?.name);
-        toast.info('🎉 TRUE GASLESS - You pay $0 in gas!');
-      } else if (workingAvailability.batchAvailable) {
-        console.log('⚡ Using BATCH mode on', chain?.name);
-        // Don't show another toast, we already showed the warning above
-      }
-      
-      // Fall back to batch mode (still requires gas on testnets)
-      const availability = await gaslessSwap.checkAvailability();
-      console.log('🔍 Batch mode availability:', availability);
-      
-      if (!availability.available) {
-        toast.error(`Batch mode not available: ${availability.reason}`);
-        return;
-      }
-
       // Native tokens (POL/ETH) don't work with gasless swaps - need wrapped version
       if (tokenIn.isNative) {
         toast.error('❌ Native tokens (POL/ETH) cannot be used with gasless swaps. Please use WPOL/WETH instead.');
@@ -629,111 +582,86 @@ const Swap = () => {
         toast.error('❌ Invalid output token address. Please select a different token.');
         return;
       }
+
+      // Check permit type for the token
+      const permitType = intentGasless.getPermitType(tokenIn.address);
       
-      // Show appropriate message based on Smart Account status
-      if (availability.isSmartAccount) {
-        toast.info(`✅ Smart Account active - executing batch swap on ${availability.chain}...`);
-      } else {
-        toast.info(`⚡ First time on ${availability.chain} - MetaMask will prompt to enable Smart Account...`);
+      if (permitType === 'none') {
+        toast.error(`${tokenIn.symbol} doesn't support gasless. Use zTokens (⚡) or Permit2 tokens (🔄).`);
+        return;
       }
+
+      // Use the same backend relayer as Pimlico mode
+      toast.info('🔄 Relayer mode - submitting gasless swap via backend relayer...');
       
       const decimals = tokenIn.decimals || 6;
       const amountWei = parseUnits(amountIn, decimals);
-      // Use 50% of quoted amount as minOut to account for price differences
-      // between backend (Pyth) and on-chain oracle (can differ 30%+ on testnet)
-      const minAmountOut = parseUnits((parseFloat(amountOut) * 0.50).toString(), tokenOut.decimals || 6);
       
-      // Build swap callData using ethers
-      const routerHubInterface = new ethers.Interface([
-        "function executeRoute(tuple(address user, address tokenIn, uint256 amtIn, address tokenOut, uint256 minOut, uint64 dstChainId, uint64 deadline, address feeToken, uint8 feeMode, uint256 feeCapToken, bytes routeHint, uint256 nonce) intent, address adapter, bytes routeData) external returns (uint256)"
-      ]);
+      // Calculate minAmountOut with proper decimal conversion (same as Pimlico mode)
+      const decimalsOut = tokenOut.decimals || 18;
+      const slippageTolerance = 0.90; // 10% slippage tolerance
       
-      // Build intent struct
-      const intent = {
-        user: address,
-        tokenIn: tokenIn.address,
-        amtIn: amountWei,
-        tokenOut: tokenOut.address,
-        minOut: minAmountOut,
-        dstChainId: toChain.id,
-        deadline: Math.floor(Date.now() / 1000) + 600, // 10 minutes
-        feeToken: tokenIn.address,
-        feeMode: 1, // TOKEN_INPUT_SOURCE
-        feeCapToken: parseUnits(feeCap, 18),
-        routeHint: '0x',
-        nonce: BigInt(Date.now())
-      };
-
-      console.log('📋 Intent struct:', {
-        user: intent.user,
-        tokenIn: intent.tokenIn,
-        amtIn: intent.amtIn.toString(),
-        tokenOut: intent.tokenOut,
-        minOut: intent.minOut.toString(),
-        dstChainId: intent.dstChainId,
-      });
-      
-      // Get adapter address from config
-      const mockAdapter = fromChain.id === 80002 
-        ? '0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1'  // Amoy MockDEXAdapter
-        : '0x86D1AA2228F3ce649d415F19fC71134264D0E84B'; // Sepolia MockDEXAdapter
-      
-      // Build routeData - this is the encoded call to the adapter's swap function
-      // MockDEXAdapter.swap(tokenIn, tokenOut, amountIn, minAmountOut, recipient, deadline)
-      const adapterInterface = new ethers.Interface([
-        "function swap(address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, address recipient, uint256 deadline) external payable returns (uint256 amountOut)"
-      ]);
-      
-      const routeData = adapterInterface.encodeFunctionData("swap", [
-        tokenIn.address,           // tokenIn
-        tokenOut.address,          // tokenOut
-        amountWei,                 // amountIn
-        minAmountOut,              // minAmountOut
-        routerHubAddress,          // recipient (RouterHub receives output, then transfers to user)
-        intent.deadline            // deadline
-      ]);
-
-      console.log('📋 Route data for adapter:', {
-        tokenIn: tokenIn.address,
-        tokenOut: tokenOut.address,
-        amountIn: amountWei.toString(),
-        minAmountOut: minAmountOut.toString(),
-        recipient: routerHubAddress,
-        deadline: intent.deadline
-      });
-      
-      const swapCallData = routerHubInterface.encodeFunctionData("executeRoute", [
-        intent,
-        mockAdapter,
-        routeData
-      ]);
-      
-      // Use BATCH execution (approve + swap in one transaction) - the main benefit of EIP-7702!
-      // This combines approval and swap into a single atomic transaction
-      if (needsApproval && !tokenIn.isNative) {
-        console.log('📦 Using batch execution (approve + swap)');
-        await gaslessSwap.executeBatch({
-          tokenAddress: tokenIn.address,
-          spender: routerHubAddress,
-          amount: amountWei.toString(),
-          routerHub: routerHubAddress,
-          swapCallData,
-          targetChainId: fromChain.id
-        });
-        toast.success('🎉 Batch transaction submitted (approve + swap)!');
+      const amountAfterFeeWei = amountWei * 995n / 1000n;
+      let expectedOutputWei;
+      if (decimalsOut >= decimals) {
+        expectedOutputWei = amountAfterFeeWei * BigInt(10 ** (decimalsOut - decimals));
       } else {
-        // No approval needed, just execute swap
-        console.log('📤 Executing swap only (already approved)');
-        await gaslessSwap.executeSwap({
-          routerHub: routerHubAddress,
-          swapCallData,
-          targetChainId: fromChain.id
-        });
-        toast.success('🎉 Swap submitted! Waiting for confirmation...');
+        expectedOutputWei = amountAfterFeeWei / BigInt(10 ** (decimals - decimalsOut));
       }
+      const minOut = expectedOutputWei * 90n / 100n;
+
+      let result;
+      if (permitType === 'erc2612') {
+        // ERC-2612 permit - fully gasless (relayer pays)
+        setPimlicoStatus('Sign Permit + Swap Intent in MetaMask (NO GAS!)...');
+        toast.info('⚡ Sign 2 messages in MetaMask - relayer pays gas for you!');
+        
+        result = await intentGasless.submitSwapWithPermit({
+          tokenIn: tokenIn.address,
+          tokenOut: tokenOut.address,
+          amountIn: amountWei.toString(),
+          minAmountOut: minOut.toString(),
+          deadlineMinutes: 30,
+          mode: 'relayer'  // Use relayer EOA to pay gas
+        });
+      } else if (permitType === 'permit2') {
+        // Permit2 - gasless (relayer pays)
+        setPimlicoStatus('Sign Permit2 + Swap Intent in MetaMask...');
+        toast.info('🔄 Sign 2 messages in MetaMask - relayer pays gas for you!');
+        
+        result = await intentGasless.submitSwapWithPermit2({
+          tokenIn: tokenIn.address,
+          tokenOut: tokenOut.address,
+          amountIn: amountWei.toString(),
+          minAmountOut: minOut.toString(),
+          deadlineMinutes: 30,
+          mode: 'relayer'  // Use relayer EOA to pay gas
+        });
+      }
+
+      setPimlicoStatus('Swap submitted! Waiting for confirmation...');
+      toast.success(`🎉 Gasless swap submitted! Tx: ${result.txHash?.slice(0, 10)}...`);
+      setTxHash(result.txHash);
+
+      // Poll for confirmation
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const status = await intentGasless.checkStatus(result.requestId);
+        if (status.status === 'confirmed') {
+          setPimlicoStatus('✓ Swap confirmed! You paid ZERO gas!');
+          toast.success('🎉 Gasless swap confirmed! You paid $0 in gas!');
+          return;
+        } else if (status.status === 'failed') {
+          setPimlicoStatus('Swap failed on-chain');
+          toast.error('Swap failed on-chain');
+          return;
+        }
+      }
+      setPimlicoStatus('Check explorer for status');
       
     } catch (error) {
       console.error('Gasless swap error:', error);
+      setPimlicoStatus('');
       toast.error(error.message || 'Gasless swap failed');
     }
   };
@@ -766,7 +694,31 @@ const Swap = () => {
         return;
       }
 
-      const minOut = parseUnits((parseFloat(amountIn) * 0.95).toString(), tokenOut.decimals || 18);
+      // Calculate minAmountOut with proper decimal conversion
+      // Router test mode formula:
+      //   fee = amountIn * 0.5%
+      //   amountAfterFee = amountIn - fee
+      //   if decimalsOut >= decimalsIn: amountOut = amountAfterFee * 10^(decimalsOut - decimalsIn)
+      //   if decimalsOut < decimalsIn:  amountOut = amountAfterFee / 10^(decimalsIn - decimalsOut)
+      const decimalsOut = tokenOut.decimals || 18;
+      const slippageTolerance = 0.90; // 10% slippage tolerance for test mode
+      
+      // amountWei is already in input token's smallest unit (wei)
+      // Router takes 0.5% fee
+      const amountAfterFeeWei = amountWei * 995n / 1000n;
+      
+      // Apply decimal conversion (same as router)
+      let expectedOutputWei;
+      if (decimalsOut >= decimals) {
+        // Output has more decimals - multiply
+        expectedOutputWei = amountAfterFeeWei * BigInt(10 ** (decimalsOut - decimals));
+      } else {
+        // Output has fewer decimals - divide
+        expectedOutputWei = amountAfterFeeWei / BigInt(10 ** (decimals - decimalsOut));
+      }
+      
+      // Apply slippage tolerance (multiply by 90, divide by 100)
+      const minOut = expectedOutputWei * 90n / 100n;
       let result;
 
       if (permitType === 'erc2612') {
@@ -1008,7 +960,7 @@ const Swap = () => {
                   {isGaslessMode && !isPimlicoGasless && <span className="text-green-400 text-xs">✓ Active</span>}
                 </div>
                 <div className={`font-semibold text-sm ${isGaslessMode && !isPimlicoGasless ? 'text-green-400' : 'text-zt-paper'}`}>Relayer</div>
-                <div className="text-xs text-zt-paper/50">Backend relayer pays gas</div>
+                <div className="text-xs text-zt-paper/50">Our relayer pays gas</div>
               </button>
 
               {/* Pimlico Mode */}
@@ -1043,7 +995,7 @@ const Swap = () => {
                 <span>💳 Traditional swap - you pay gas in native token (ETH/POL). Click a button above to enable gasless.</span>
               )}
               {isGaslessMode && !isPimlicoGasless && (
-                <span className="text-green-400">🔄 Relayer mode active - backend relayer pays gas, uses RouterHub system. Click again to disable.</span>
+                <span className="text-green-400">🔄 Relayer mode active - our backend relayer pays gas from its own wallet. You pay ZERO gas! Click again to disable.</span>
               )}
               {isPimlicoGasless && (
                 <span className="text-green-400">⚡ Pimlico mode active - fully gasless via ERC-4337 paymaster. Best with zTokens (⚡ ERC-2612 permit). Click again to disable.</span>
@@ -1070,7 +1022,23 @@ const Swap = () => {
               <div className="flex justify-between mb-3">
                 <select
                   value={fromChain.id}
-                  onChange={(e) => setFromChain(chains.find(c => c.id === parseInt(e.target.value)))}
+                  onChange={async (e) => {
+                    const newChainId = parseInt(e.target.value);
+                    const newChain = chains.find(c => c.id === newChainId);
+                    if (newChain) {
+                      // First update UI state
+                      setFromChain(newChain);
+                      // Then switch wallet if connected and on different chain
+                      if (isConnected && chain?.id !== newChainId && switchChain) {
+                        try {
+                          await switchChain({ chainId: newChainId });
+                        } catch (err) {
+                          console.error('Failed to switch chain:', err);
+                          toast.error('Please switch network in your wallet');
+                        }
+                      }
+                    }
+                  }}
                   className="bg-white/5 text-zt-paper font-semibold outline-none cursor-pointer px-3 py-1.5 rounded-lg border border-white/10 hover:border-zt-aqua/30 transition-colors"
                   data-testid="from-chain-select"
                 >
@@ -1113,7 +1081,7 @@ const Swap = () => {
 
           <div className="flex justify-center my-4">
             <button
-              onClick={() => {
+              onClick={async () => {
                 // Swap chains and tokens
                 const tempChain = fromChain;
                 const tempToken = tokenIn;
@@ -1123,6 +1091,15 @@ const Swap = () => {
                 setTokenOut(tempToken);
                 setAmountOut('');
                 setQuote(null);
+                // Switch wallet to new fromChain (which was toChain)
+                if (isConnected && chain?.id !== toChain.id && switchChain) {
+                  try {
+                    await switchChain({ chainId: toChain.id });
+                  } catch (err) {
+                    console.error('Failed to switch chain:', err);
+                    toast.error('Please switch network in your wallet');
+                  }
+                }
               }}
               className="w-12 h-12 rounded-full bg-zt-violet hover:bg-zt-violet/80 flex items-center justify-center transition-all hover:rotate-180 cursor-pointer"
               title="Swap tokens"

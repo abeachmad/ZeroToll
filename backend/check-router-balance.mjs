@@ -1,7 +1,7 @@
 import { createPublicClient, http, parseAbi } from 'viem';
 import { sepolia } from 'viem/chains';
 
-const ROUTER_V2 = '0xd475255Ae38C92404f9740A19F93B8D2526A684b';
+const ROUTER_V2 = '0x577560699EF88e99f15d04df57c9552056d2a10D';
 const TOKENS = {
   WETH: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14',
   USDC: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',

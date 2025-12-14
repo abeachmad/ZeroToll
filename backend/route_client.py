@@ -20,10 +20,12 @@ DEX_ADAPTERS = {
         "uniswapV2": os.getenv("SEPOLIA_UNISWAPV2_ADAPTER"),
         "uniswapV3": os.getenv("SEPOLIA_UNISWAPV3_ADAPTER"),
         "mockDex": os.getenv("SEPOLIA_MOCKDEX_ADAPTER"),
+        "zeroToll": os.getenv("SEPOLIA_ZEROTOLL_ADAPTER", "0x4E6A591459F0724E19f9B06A584B26fFB724a2a3"),
     },
     80002: {  # Amoy
         "quickswapV2": os.getenv("AMOY_QUICKSWAP_ADAPTER"),
         "mockDex": os.getenv("AMOY_MOCKDEX_ADAPTER"),
+        "zeroToll": os.getenv("AMOY_ZEROTOLL_ADAPTER", "0x30bbFff2e090EF88A41C9e8909c197d4bdb47C87"),
     },
     421614: {  # Arbitrum Sepolia
         "uniswapV3": os.getenv("ARB_SEPOLIA_UNISWAPV3_ADAPTER"),
@@ -34,6 +36,27 @@ DEX_ADAPTERS = {
         "mockDex": os.getenv("OP_SEPOLIA_MOCKDEX_ADAPTER"),
     },
 }
+
+# zToken addresses (for routing to ZeroTollAdapter)
+ZTOKEN_ADDRESSES = {
+    11155111: {  # Sepolia
+        "0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C".lower(): "zUSDC",
+        "0x8153FA09Be1689D44C343f119C829F6702A8720b".lower(): "zETH",
+        "0x63c31C4247f6AA40B676478226d6FEB5707649D6".lower(): "zPOL",
+        "0x4e2dbcCc07D8e5a8C9f420ea60d1e3aEc7B64D2C".lower(): "zLINK",
+    },
+    80002: {  # Amoy
+        "0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD".lower(): "zUSDC",
+        "0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9".lower(): "zETH",
+        "0xB0A04aB21faAe4A5399938c07EDdfA0FB41d2B9d".lower(): "zPOL",
+        "0x51f6c79e5cA4ACF086d0954AfAAf5c72Be56CBb1".lower(): "zLINK",
+    },
+}
+
+def is_ztoken(token_address: str, chain_id: int) -> bool:
+    """Check if token is a zToken"""
+    chain_ztokens = ZTOKEN_ADDRESSES.get(chain_id, {})
+    return token_address.lower() in chain_ztokens
 
 # Bridge adapters
 BRIDGE_ADAPTERS = {
@@ -169,10 +192,15 @@ class RoutePlannerClient:
     def _fallback_routing(self, intent: Dict[str, Any]) -> List[RouteCandidate]:
         """
         Fallback routing when route service is unavailable
-        Creates a simple mock route using deployed MockDEXAdapter
+        Creates a simple mock route using deployed MockDEXAdapter or ZeroTollAdapter for zTokens
         """
         src_chain = intent["srcChainId"]
         dst_chain = intent["dstChainId"]
+        token_in = intent["tokenIn"]
+        token_out = intent["tokenOut"]
+        
+        # Check if either token is a zToken - use ZeroTollAdapter
+        use_zerotoll = is_ztoken(token_in, src_chain) or is_ztoken(token_out, src_chain)
         
         # Use deployed MockDEXAdapter addresses - Load from .env (BEST PRACTICE)
         # Nov 8, 2025: Updated to use Pyth Oracle (REAL-TIME prices, NO HARDCODE!)
@@ -183,28 +211,35 @@ class RoutePlannerClient:
             421614: os.getenv("ARB_SEPOLIA_MOCKDEX_ADAPTER"),
             11155420: os.getenv("OP_SEPOLIA_MOCKDEX_ADAPTER"),
         }
-        mock_adapter = adapter_addresses.get(src_chain, "0x0000000000000000000000000000000000000001")
+        
+        # Select adapter based on token type
+        if use_zerotoll:
+            zerotoll_adapters = DEX_ADAPTERS.get(src_chain, {})
+            adapter = zerotoll_adapters.get("zeroToll", "0x0000000000000000000000000000000000000001")
+            protocol_name = "ZeroTollAdapter"
+            logger.info(f"✓ Using ZeroTollAdapter for zToken swap on chain {src_chain}")
+        else:
+            adapter = adapter_addresses.get(src_chain, "0x0000000000000000000000000000000000000001")
+            protocol_name = "UniswapV2" if src_chain == 11155111 else "QuickswapV2"
         
         if src_chain == dst_chain:
             # Same-chain swap
-            protocol_name = "UniswapV2" if src_chain == 11155111 else "QuickswapV2"
-            
             route = {
                 "routeId": f"fallback-{src_chain}-same-chain",
                 "type": "same-chain",
                 "srcChainId": src_chain,
                 "dstChainId": dst_chain,
-                "tokenIn": intent["tokenIn"],
-                "tokenOut": intent["tokenOut"],
+                "tokenIn": token_in,
+                "tokenOut": token_out,
                 "amountIn": intent["amtIn"],
                 "expectedOut": intent["minOut"],  # Use minOut as estimate
                 "steps": [
                     {
                         "type": "swap",
                         "protocol": protocol_name,
-                        "adapterAddress": mock_adapter,
-                        "tokenIn": intent["tokenIn"],
-                        "tokenOut": intent["tokenOut"],
+                        "adapterAddress": adapter,
+                        "tokenIn": token_in,
+                        "tokenOut": token_out,
                         "chainId": src_chain,
                         "estimatedGas": 150000,
                     }
@@ -213,29 +248,30 @@ class RoutePlannerClient:
                 "pythFee": "1000000000000000",  # 0.001 ETH
                 "netUserOutput": intent["minOut"],
                 "score": 100,
-                "explain": f"Mock route via {protocol_name} (testing mode)",
+                "explain": f"Route via {protocol_name}" + (" (zToken swap)" if use_zerotoll else " (testing mode)"),
             }
-            logger.info(f"✓ Created fallback same-chain route for {src_chain}")
+            logger.info(f"✓ Created fallback same-chain route for {src_chain} using {protocol_name}")
             return [RouteCandidate(route)]
         
         else:
             # Cross-chain swap
+            bridge_adapter = adapter_addresses.get(src_chain, "0x0000000000000000000000000000000000000001")
             route = {
                 "routeId": f"fallback-bridge-{src_chain}-{dst_chain}",
                 "type": "cross-chain",
                 "srcChainId": src_chain,
                 "dstChainId": dst_chain,
-                "tokenIn": intent["tokenIn"],
-                "tokenOut": intent["tokenOut"],
+                "tokenIn": token_in,
+                "tokenOut": token_out,
                 "amountIn": intent["amtIn"],
                 "expectedOut": intent["minOut"],
                 "steps": [
                     {
                         "type": "bridge",
                         "protocol": "MockBridge",
-                        "adapterAddress": mock_adapter,
-                        "tokenIn": intent["tokenIn"],
-                        "tokenOut": intent["tokenOut"],
+                        "adapterAddress": bridge_adapter,
+                        "tokenIn": token_in,
+                        "tokenOut": token_out,
                         "chainId": src_chain,
                         "estimatedGas": 200000,
                     }
