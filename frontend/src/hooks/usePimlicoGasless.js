@@ -24,8 +24,8 @@ const ERC20_ABI = parseAbi([
   'function transfer(address to, uint256 amount) returns (bool)'
 ]);
 
-// Pimlico API Key
-const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY || 'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+// Pimlico API Key (must be set in environment)
+const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY;
 
 // Chain configurations
 const CHAIN_CONFIG = {

@@ -21,8 +21,8 @@ const SMART_ACCOUNT_STATUS = {
   CHECKING: 'CHECKING'
 };
 
-// Pimlico API Key
-const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY || 'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+// Pimlico API Key (must be set in environment)
+const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY;
 
 const SUPPORTED_CHAINS = {
   80002: { 

@@ -15,8 +15,11 @@ const PAYMASTER_ADDRESSES = {
   11155111: "0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9"  // Sepolia
 };
 
-// Pimlico API key (fallback to demo key)
-const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY || 'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+// Pimlico API key (must be set in environment)
+const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY;
+if (!PIMLICO_API_KEY) {
+  console.warn('REACT_APP_PIMLICO_API_KEY not set - Pimlico features will not work');
+}
 
 // Use Pimlico bundler instead of local - supports both Amoy (80002) and Sepolia (11155111)
 const getPimlicoBundlerUrl = (chainId = 80002) => 

@@ -36,8 +36,8 @@ const SMART_ACCOUNT_STATUS = {
   CHECKING: 'CHECKING'
 };
 
-// Pimlico API Key for paymaster
-const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY || 'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+// Pimlico API Key for paymaster (must be set in environment)
+const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY;
 
 // Supported chains for EIP-7702
 const SUPPORTED_CHAINS = {

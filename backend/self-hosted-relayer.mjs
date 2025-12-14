@@ -180,7 +180,8 @@ function calculateSmartAccountAddress(owner, salt) {
   ).slice(-40);
 }
 
-// Build UserOperation for ERC-4337 v0.7
+// Build UserOperation for ERC-4337 v0.7 (Infinitism bundler format)
+// The bundler expects PackedUserOperation with paymasterAndData as a single bytes field
 async function buildUserOperation(chainId, callData) {
   const clients = await getChainClients(chainId);
   const { publicClient, smartAccountAddress, chainConfig } = clients;
@@ -213,15 +214,15 @@ async function buildUserOperation(chainId, callData) {
   const code = await publicClient.getCode({ address: smartAccountAddress });
   const accountExists = code && code !== '0x';
 
-  // Init code (only if account doesn't exist)
+  // initCode for v0.7 PackedUserOperation (factory + factoryData concatenated)
   let initCode = '0x';
   if (!accountExists) {
-    const factoryCallData = encodeFunctionData({
+    const factoryData = encodeFunctionData({
       abi: SIMPLE_ACCOUNT_FACTORY_ABI,
       functionName: 'createAccount',
       args: [relayerAccount.address, 0n]
     });
-    initCode = concat([SIMPLE_ACCOUNT_FACTORY, factoryCallData]);
+    initCode = concat([SIMPLE_ACCOUNT_FACTORY, factoryData]);
   }
 
   // Get gas prices
@@ -229,39 +230,73 @@ async function buildUserOperation(chainId, callData) {
   const maxFeePerGas = feeData.maxFeePerGas || 50000000000n;
   const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || 2000000000n;
 
-  // Build UserOp (v0.7 format)
+  // Pack gas limits for v0.7
+  // accountGasLimits = verificationGasLimit (high 128) | callGasLimit (low 128)
+  const verificationGasLimit = 500000n;
+  const callGasLimit = 500000n;
+  const accountGasLimits = pad(toHex((verificationGasLimit << 128n) | callGasLimit), { size: 32 });
+
+  // gasFees = maxPriorityFeePerGas (high 128) | maxFeePerGas (low 128)
+  const gasFees = pad(toHex((maxPriorityFeePerGas << 128n) | maxFeePerGas), { size: 32 });
+
+  // paymasterAndData for v0.7:
+  // paymaster (20 bytes) + verificationGasLimit (16 bytes) + postOpGasLimit (16 bytes) + paymasterData
+  // We'll set paymasterData (signature) later
+  const paymasterVerificationGasLimit = 100000n;
+  const paymasterPostOpGasLimit = 50000n;
+
+  // Build UserOp in PackedUserOperation format for Infinitism bundler
   const userOp = {
     sender: smartAccountAddress,
     nonce: toHex(nonce),
     initCode: initCode,
     callData: executeCallData,
-    callGasLimit: toHex(500000n),
-    verificationGasLimit: toHex(500000n),
+    accountGasLimits: accountGasLimits,
     preVerificationGas: toHex(100000n),
-    maxFeePerGas: toHex(maxFeePerGas),
-    maxPriorityFeePerGas: toHex(maxPriorityFeePerGas),
-    paymasterAndData: chainConfig.paymaster, // Will be updated with signature
-    signature: '0x' // Will be filled after signing
+    gasFees: gasFees,
+    paymasterAndData: '0x', // Will be set after signing
+    signature: '0x', // Will be filled after signing
+    // Store these for building paymasterAndData later
+    _paymaster: chainConfig.paymaster,
+    _paymasterVerificationGasLimit: paymasterVerificationGasLimit,
+    _paymasterPostOpGasLimit: paymasterPostOpGasLimit
   };
 
   return userOp;
 }
 
-// Calculate UserOp hash for signing
+// Build paymasterAndData with signature
+function buildPaymasterAndData(paymaster, verificationGasLimit, postOpGasLimit, signature) {
+  // v0.7 format: paymaster (20) + verificationGasLimit (16) + postOpGasLimit (16) + signature
+  const verificationGasBytes = pad(toHex(verificationGasLimit), { size: 16 });
+  const postOpGasBytes = pad(toHex(postOpGasLimit), { size: 16 });
+  return concat([paymaster, verificationGasBytes, postOpGasBytes, signature]);
+}
+
+// Paymaster ABI for getHash
+const PAYMASTER_ABI = parseAbi([
+  'function getHash((address sender, uint256 nonce, bytes initCode, bytes callData, bytes32 accountGasLimits, uint256 preVerificationGas, bytes32 gasFees, bytes paymasterAndData, bytes signature) userOp) view returns (bytes32)'
+]);
+
+// Calculate UserOp hash for signing (v0.7 PackedUserOperation format)
 function getUserOpHash(userOp, chainId) {
+  // For hash calculation, we need to use the paymasterAndData that will be in the final UserOp
+  // But we don't have the signature yet, so we hash with empty paymasterData
+  const paymasterAndDataForHash = userOp._paymaster 
+    ? buildPaymasterAndData(userOp._paymaster, userOp._paymasterVerificationGasLimit, userOp._paymasterPostOpGasLimit, '0x')
+    : '0x';
+
   const packed = encodeAbiParameters(
-    parseAbiParameters('address, uint256, bytes32, bytes32, uint256, uint256, uint256, uint256, uint256, bytes32'),
+    parseAbiParameters('address, uint256, bytes32, bytes32, bytes32, uint256, bytes32, bytes32'),
     [
       userOp.sender,
       BigInt(userOp.nonce),
-      keccak256(userOp.initCode),
+      keccak256(userOp.initCode || '0x'),
       keccak256(userOp.callData),
-      BigInt(userOp.callGasLimit),
-      BigInt(userOp.verificationGasLimit),
+      userOp.accountGasLimits,
       BigInt(userOp.preVerificationGas),
-      BigInt(userOp.maxFeePerGas),
-      BigInt(userOp.maxPriorityFeePerGas),
-      keccak256(userOp.paymasterAndData)
+      userOp.gasFees,
+      keccak256(paymasterAndDataForHash)
     ]
   );
 
@@ -277,9 +312,34 @@ function getUserOpHash(userOp, chainId) {
 }
 
 // Sign UserOp with relayer's key (for Smart Account)
+// This signs the final UserOp hash including the paymasterAndData
 async function signUserOp(userOp, chainId) {
-  const hash = getUserOpHash(userOp, chainId);
-  const signature = await relayerAccount.signMessage({ message: { raw: hash } });
+  // Calculate hash of the final UserOp (with paymasterAndData set)
+  const packed = encodeAbiParameters(
+    parseAbiParameters('address, uint256, bytes32, bytes32, bytes32, uint256, bytes32, bytes32'),
+    [
+      userOp.sender,
+      BigInt(userOp.nonce),
+      keccak256(userOp.initCode || '0x'),
+      keccak256(userOp.callData),
+      userOp.accountGasLimits,
+      BigInt(userOp.preVerificationGas),
+      userOp.gasFees,
+      keccak256(userOp.paymasterAndData || '0x')
+    ]
+  );
+
+  const userOpHash = keccak256(packed);
+  
+  // Final hash includes entrypoint and chainId
+  const finalHash = keccak256(
+    encodeAbiParameters(
+      parseAbiParameters('bytes32, address, uint256'),
+      [userOpHash, ENTRYPOINT_V07, BigInt(chainId)]
+    )
+  );
+  
+  const signature = await relayerAccount.signMessage({ message: { raw: finalHash } });
   return signature;
 }
 
@@ -410,15 +470,25 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
     console.log('Building UserOp...');
     const userOp = await buildUserOperation(chainId, routerCallData);
 
-    // Calculate UserOp hash
+    // Calculate UserOp hash (with empty paymasterData for now)
     const userOpHash = getUserOpHash(userOp, chainId);
     console.log('UserOp hash:', userOpHash);
 
     // Get paymaster signature
     const paymasterSig = await getPaymasterSignature(userOpHash);
     
-    // Update paymasterAndData with signature (paymaster address + signature)
-    userOp.paymasterAndData = concat([chainConfig.paymaster, paymasterSig]);
+    // Build full paymasterAndData with signature (v0.7 format)
+    userOp.paymasterAndData = buildPaymasterAndData(
+      userOp._paymaster,
+      userOp._paymasterVerificationGasLimit,
+      userOp._paymasterPostOpGasLimit,
+      paymasterSig
+    );
+    
+    // Clean up internal fields before sending
+    delete userOp._paymaster;
+    delete userOp._paymasterVerificationGasLimit;
+    delete userOp._paymasterPostOpGasLimit;
 
     // Sign UserOp with relayer key
     userOp.signature = await signUserOp(userOp, chainId);
@@ -520,7 +590,19 @@ app.post('/api/intents/swap', async (req, res) => {
     const userOpHash = getUserOpHash(userOp, chainId);
     const paymasterSig = await getPaymasterSignature(userOpHash);
     
-    userOp.paymasterAndData = concat([chainConfig.paymaster, paymasterSig]);
+    // Build full paymasterAndData with signature (v0.7 format)
+    userOp.paymasterAndData = buildPaymasterAndData(
+      userOp._paymaster,
+      userOp._paymasterVerificationGasLimit,
+      userOp._paymasterPostOpGasLimit,
+      paymasterSig
+    );
+    
+    // Clean up internal fields
+    delete userOp._paymaster;
+    delete userOp._paymasterVerificationGasLimit;
+    delete userOp._paymasterPostOpGasLimit;
+    
     userOp.signature = await signUserOp(userOp, chainId);
 
     const opHash = await sendUserOpToBundler(userOp, chainId);

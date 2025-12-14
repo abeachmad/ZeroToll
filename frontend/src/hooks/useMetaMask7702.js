@@ -137,7 +137,7 @@ export function useMetaMask7702() {
 
       // MetaMask requires version 2.0.0 and atomicRequired as boolean
       // Add paymasterService for TRUE GASLESS
-      const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY || 'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+      const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY;
       const paymasterUrl = `https://api.pimlico.io/v2/${chain.id}/rpc?apikey=${PIMLICO_API_KEY}`;
       
       console.log('🎯 Attempting TRUE GASLESS with paymaster:', paymasterUrl);

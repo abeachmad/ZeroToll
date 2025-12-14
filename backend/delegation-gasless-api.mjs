@@ -41,10 +41,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PIMLICO_API_KEY = process.env.PIMLICO_API_KEY || 'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+const PIMLICO_API_KEY = process.env.PIMLICO_API_KEY;
+if (!PIMLICO_API_KEY) {
+  console.error('Missing PIMLICO_API_KEY in environment');
+  process.exit(1);
+}
 
 // Backend's delegate account - this account will execute on behalf of users
-const DELEGATE_PRIVATE_KEY = process.env.DELEGATE_PRIVATE_KEY || '0x5e80527e137f6704c8096b025a1b75bfe8b73b206745b47bf724c39ce1883a04';
+const DELEGATE_PRIVATE_KEY = process.env.DELEGATE_PRIVATE_KEY || process.env.RELAYER_PRIVATE_KEY;
+if (!DELEGATE_PRIVATE_KEY) {
+  console.error('Missing DELEGATE_PRIVATE_KEY or RELAYER_PRIVATE_KEY in environment');
+  process.exit(1);
+}
 
 const CHAINS = {
   80002: {

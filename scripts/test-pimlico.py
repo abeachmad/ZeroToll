@@ -5,8 +5,16 @@ Test Pimlico API connection for EIP-7702 gasless swaps.
 
 import httpx
 import json
+import os
+from dotenv import load_dotenv
 
-PIMLICO_API_KEY = "pim_SBVmcVZ3jZgcvmDWUSE6QR"
+load_dotenv()
+load_dotenv('.env.credentials')
+
+PIMLICO_API_KEY = os.getenv("PIMLICO_API_KEY")
+if not PIMLICO_API_KEY:
+    print("ERROR: Missing PIMLICO_API_KEY in environment")
+    exit(1)
 
 CHAINS = {
     80002: "Polygon Amoy",

@@ -20,7 +20,7 @@ const ERC20_ABI = parseAbi([
   'function approve(address spender, uint256 amount) returns (bool)',
 ]);
 
-const PIMLICO_API_KEY = import.meta.env.VITE_PIMLICO_API_KEY || 'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+const PIMLICO_API_KEY = import.meta.env.VITE_PIMLICO_API_KEY;
 const METAMASK_DELEGATOR = '0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B';
 
 const CHAIN_CONFIG = {

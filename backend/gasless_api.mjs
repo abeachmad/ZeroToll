@@ -39,7 +39,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PIMLICO_API_KEY = process.env.PIMLICO_API_KEY || 'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+const PIMLICO_API_KEY = process.env.PIMLICO_API_KEY;
+if (!PIMLICO_API_KEY) {
+  console.error('Missing PIMLICO_API_KEY in environment');
+  process.exit(1);
+}
 
 const CHAINS = {
   80002: {

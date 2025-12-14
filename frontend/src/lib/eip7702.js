@@ -25,8 +25,7 @@ export const ENTRY_POINT_V07 = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 
 // Pimlico configuration
 const PIMLICO_API_KEY = import.meta.env?.VITE_PIMLICO_API_KEY || 
-                        process.env.REACT_APP_PIMLICO_API_KEY || 
-                        'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+                        process.env.REACT_APP_PIMLICO_API_KEY;
 
 /**
  * Get Pimlico bundler URL for a chain

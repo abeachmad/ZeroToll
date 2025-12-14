@@ -115,3 +115,20 @@ Thumbs.db
 # Temporary
 *.tmp
 backend/venv/
+
+# Mnemonic files - NEVER COMMIT
+**/mnemonic.txt
+**/mnemonicfile.txt
+*.mnemonic
+
+# Backup/broken folders (may contain test keys)
+frontend-nextjs-broken/
+frontend-cra-backup/
+
+# Test scripts with potential hardcoded keys
+**/test-*.mjs
+**/test-*.js
+!**/test-*.test.js
+!**/test-*.spec.js
+**/fund-*.mjs
+**/verify-*.mjs

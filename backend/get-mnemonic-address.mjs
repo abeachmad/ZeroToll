@@ -1,12 +1,21 @@
 import { mnemonicToAccount } from 'viem/accounts';
 import { createPublicClient, http, formatEther } from 'viem';
 import { sepolia, polygonAmoy } from 'viem/chains';
+import { config } from 'dotenv';
 
-const mnemonic = 'story object decorate advance fitness wrestle delay entire next crater test toddler';
+config({ path: '.env' });
+config({ path: '.env.credentials' });
+
+const mnemonic = process.env.BUNDLER_MNEMONIC;
+if (!mnemonic) {
+  console.error('Missing BUNDLER_MNEMONIC in .env or .env.credentials');
+  process.exit(1);
+}
+
 const account = mnemonicToAccount(mnemonic);
 
 console.log('=== BUNDLER WALLET FROM MNEMONIC ===');
-console.log('Mnemonic:', mnemonic);
+console.log('Mnemonic: [HIDDEN]');
 console.log('Address:', account.address);
 
 // Check balances

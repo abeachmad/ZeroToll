@@ -22,8 +22,8 @@ const ERC20_ABI = parseAbi([
   'function transfer(address to, uint256 amount) returns (bool)'
 ]);
 
-// Pimlico API Key
-const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY || 'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+// Pimlico API Key (must be set in environment)
+const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY;
 
 // EntryPoint v0.7 address (same on all chains)
 const ENTRYPOINT_ADDRESS_V07 = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';

@@ -15,8 +15,7 @@ import { createPimlicoClient } from 'permissionless/clients/pimlico';
 // Pimlico configuration
 const PIMLICO_API_KEY =
   import.meta.env?.VITE_PIMLICO_API_KEY ||
-  process.env.REACT_APP_PIMLICO_API_KEY ||
-  'pim_SBVmcVZ3jZgcvmDWUSE6QR';
+  process.env.REACT_APP_PIMLICO_API_KEY;
 
 // Supported chains
 export const SUPPORTED_CHAINS = {
