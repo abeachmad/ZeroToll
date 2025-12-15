@@ -45,25 +45,31 @@ if (!RELAYER_PRIVATE_KEY || !PIMLICO_API_KEY) {
 const ENTRYPOINT_V07 = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 const SIMPLE_ACCOUNT_FACTORY = '0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985';
 
-// Chain config
+// Chain config - Phase 2B with RouterV3 and fee support
 const CHAIN_CONFIG = {
   11155111: {
     name: 'sepolia',
     chain: sepolia,
-    router: '0x577560699EF88e99f15d04df57c9552056d2a10D',
+    router: '0x577560699EF88e99f15d04df57c9552056d2a10D', // V2 (V3 pending deployment)
+    routerV3: null, // TBD - need Sepolia ETH
+    treasury: null, // TBD
     paymaster: process.env.SEPOLIA_VERIFYING_PAYMASTER || '0xaf7e002447b790f212ea435f9387509cd1ef0054',
     pimlicoUrl: `https://api.pimlico.io/v2/sepolia/rpc?apikey=${PIMLICO_API_KEY}`,
     rpc: 'https://ethereum-sepolia-rpc.publicnode.com',
-    explorer: 'https://sepolia.etherscan.io/tx/'
+    explorer: 'https://sepolia.etherscan.io/tx/',
+    nativeSymbol: 'ETH'
   },
   80002: {
     name: 'polygon-amoy',
     chain: polygonAmoy,
-    router: '0xc75df1943d6EFE04b422b9bB45509782609Fc67a',
+    router: '0xD83D377E4698317731b2953854c01d39C60815d7', // V3 with fee support
+    routerV3: '0xD83D377E4698317731b2953854c01d39C60815d7',
+    treasury: '0xD6a7294445F34d0F7244b2072696106904ea807B',
     paymaster: process.env.AMOY_VERIFYING_PAYMASTER || '0xaad1211a722ee04b6980724586b6b5b7b0c86fee',
     pimlicoUrl: `https://api.pimlico.io/v2/polygon-amoy/rpc?apikey=${PIMLICO_API_KEY}`,
     rpc: 'https://rpc-amoy.polygon.technology',
-    explorer: 'https://amoy.polygonscan.com/tx/'
+    explorer: 'https://amoy.polygonscan.com/tx/',
+    nativeSymbol: 'POL'
   }
 };
 
@@ -72,6 +78,14 @@ const ROUTER_ABI = parseAbi([
   'function executeSwapWithPermit((address user, address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline, uint256 nonce, uint256 chainId) intent, bytes userSignature, uint256 permitDeadline, uint8 permitV, bytes32 permitR, bytes32 permitS) external returns (uint256)',
   'function executeSwap((address user, address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline, uint256 nonce, uint256 chainId) intent, bytes userSignature) external returns (uint256)',
   'function nonces(address user) view returns (uint256)'
+]);
+
+// RouterV3 ABI with fee support
+const ROUTER_V3_ABI = parseAbi([
+  'function executeSwapWithPermitAndFee((address user, address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline, uint256 nonce, uint256 chainId) intent, bytes userSignature, uint256 permitDeadline, uint8 permitV, bytes32 permitR, bytes32 permitS, uint256 gaslessFee) external returns (uint256)',
+  'function executeSwapWithPermit((address user, address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline, uint256 nonce, uint256 chainId) intent, bytes userSignature, uint256 permitDeadline, uint8 permitV, bytes32 permitR, bytes32 permitS) external returns (uint256)',
+  'function nonces(address user) view returns (uint256)',
+  'function getNonce(address user) view returns (uint256)'
 ]);
 
 const SIMPLE_ACCOUNT_FACTORY_ABI = parseAbi([
@@ -144,6 +158,131 @@ const TOKEN_SYMBOLS = {
 // Get token symbol from address
 function getTokenSymbol(address) {
   return TOKEN_SYMBOLS[address?.toLowerCase()] || address?.slice(0, 10) + '...';
+}
+
+// Token decimals
+const TOKEN_DECIMALS = {
+  'zUSDC': 6,
+  'zETH': 18,
+  'zPOL': 18,
+  'zLINK': 18,
+};
+
+function getTokenDecimals(tokenAddress) {
+  const symbol = getTokenSymbol(tokenAddress);
+  return TOKEN_DECIMALS[symbol] || 18;
+}
+
+// Pyth price feed IDs
+const PYTH_PRICE_IDS = {
+  'ETH': '0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace',
+  'POL': '0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68571f7c0d6f0d7e5e3e7e1e1e', // MATIC/POL
+  'USDC': '0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a',
+  'LINK': '0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221',
+};
+
+// Fetch price from Pyth
+async function getPythPrice(symbol) {
+  try {
+    // Map zTokens to base symbols
+    const baseSymbol = symbol.replace(/^z/, '').toUpperCase();
+    const priceId = PYTH_PRICE_IDS[baseSymbol];
+    
+    if (!priceId) {
+      console.log(`⚠️ No Pyth price ID for ${symbol}, using fallback`);
+      return getFallbackPrice(baseSymbol);
+    }
+    
+    const response = await fetch(`https://hermes.pyth.network/v2/updates/price/latest?ids[]=${priceId}`);
+    const data = await response.json();
+    
+    if (data.parsed && data.parsed[0]) {
+      const priceData = data.parsed[0].price;
+      const price = Number(priceData.price) * Math.pow(10, priceData.expo);
+      console.log(`📊 Pyth price for ${symbol}: $${price.toFixed(4)}`);
+      return price;
+    }
+    
+    return getFallbackPrice(baseSymbol);
+  } catch (e) {
+    console.log(`⚠️ Pyth fetch failed for ${symbol}:`, e.message);
+    return getFallbackPrice(symbol);
+  }
+}
+
+// Fallback prices (testnet approximations)
+function getFallbackPrice(symbol) {
+  const fallbackPrices = {
+    'ETH': 3500,
+    'POL': 0.50,
+    'MATIC': 0.50,
+    'USDC': 1.0,
+    'LINK': 15,
+  };
+  return fallbackPrices[symbol.toUpperCase()] || 1.0;
+}
+
+// Calculate gasless fee (2x gas cost)
+async function calculateGaslessFee(chainId, tokenIn) {
+  const chainConfig = CHAIN_CONFIG[chainId];
+  
+  try {
+    // 1. Get gas price from Pimlico
+    const gasPriceResponse = await fetch(chainConfig.pimlicoUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'pimlico_getUserOperationGasPrice',
+        params: []
+      })
+    });
+    const gasPriceResult = await gasPriceResponse.json();
+    const maxFeePerGas = BigInt(gasPriceResult.result?.fast?.maxFeePerGas || '50000000000');
+    
+    // 2. Estimate gas used (~300,000 for swap with permit + fee)
+    const estimatedGas = 300000n;
+    const gasCostWei = maxFeePerGas * estimatedGas;
+    
+    // 3. Get native token price in USD
+    const nativePrice = await getPythPrice(chainConfig.nativeSymbol);
+    const gasCostUSD = Number(gasCostWei) / 1e18 * nativePrice;
+    
+    // 4. Apply 2x multiplier
+    const feeUSD = gasCostUSD * 2;
+    
+    // 5. Get input token price in USD
+    const tokenSymbol = getTokenSymbol(tokenIn);
+    const tokenPrice = await getPythPrice(tokenSymbol);
+    
+    // 6. Convert fee to input token amount
+    const tokenDecimals = getTokenDecimals(tokenIn);
+    const feeInToken = BigInt(Math.ceil(feeUSD / tokenPrice * (10 ** tokenDecimals)));
+    
+    console.log(`💰 Fee calculation: gas=$${gasCostUSD.toFixed(6)}, fee=$${feeUSD.toFixed(6)}, ${feeInToken} ${tokenSymbol}`);
+    
+    return {
+      feeUSD,
+      feeInToken,
+      gasCostUSD,
+      gasCostWei: gasCostWei.toString(),
+      tokenSymbol,
+      tokenDecimals
+    };
+  } catch (e) {
+    console.error('Fee calculation error:', e);
+    // Return minimal fee on error
+    const tokenDecimals = getTokenDecimals(tokenIn);
+    return {
+      feeUSD: 0.01,
+      feeInToken: BigInt(Math.ceil(0.01 * (10 ** tokenDecimals))),
+      gasCostUSD: 0.005,
+      gasCostWei: '0',
+      tokenSymbol: getTokenSymbol(tokenIn),
+      tokenDecimals
+    };
+  }
 }
 
 // Save swap history to Python backend's MongoDB
@@ -423,7 +562,39 @@ async function waitForReceipt(userOpHash, chainId, timeout = 60000) {
 }
 
 // ============================================
-// Swap with Permit Endpoint
+// Fee Estimation Endpoint
+// ============================================
+app.get('/api/fee-estimate/:chainId/:tokenIn', async (req, res) => {
+  try {
+    const chainId = parseInt(req.params.chainId);
+    const tokenIn = req.params.tokenIn;
+    
+    const chainConfig = CHAIN_CONFIG[chainId];
+    if (!chainConfig) {
+      return res.status(400).json({ error: `Chain ${chainId} not supported` });
+    }
+    
+    const feeData = await calculateGaslessFee(chainId, tokenIn);
+    
+    res.json({
+      success: true,
+      chainId,
+      tokenIn,
+      feeUSD: feeData.feeUSD,
+      feeInToken: feeData.feeInToken.toString(),
+      gasCostUSD: feeData.gasCostUSD,
+      multiplier: '2x',
+      tokenSymbol: feeData.tokenSymbol,
+      message: 'Fee = 2x estimated gas cost',
+      treasury: chainConfig.treasury
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================
+// Swap with Permit Endpoint (with fee support)
 // ============================================
 app.post('/api/intents/swap-with-permit', async (req, res) => {
   try {
@@ -443,6 +614,7 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
     }
 
     const routerAddress = chainConfig.router;
+    const useV3 = chainConfig.routerV3 !== null;
 
     // Verify intent signature
     const message = {
@@ -470,12 +642,29 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
     }
     console.log('✓ Verified swap intent from:', intent.user);
 
-    // Encode router call
-    const routerCallData = encodeFunctionData({
-      abi: ROUTER_ABI,
-      functionName: 'executeSwapWithPermit',
-      args: [message, userSignature, BigInt(permit.deadline), permit.v, permit.r, permit.s]
-    });
+    // Calculate fee for V3 router
+    let feeData = null;
+    let routerCallData;
+    
+    if (useV3) {
+      // Calculate 2x gas fee
+      feeData = await calculateGaslessFee(chainId, intent.tokenIn);
+      console.log(`💰 Gasless fee: ${feeData.feeInToken} (${feeData.tokenSymbol}) = $${feeData.feeUSD.toFixed(4)}`);
+      
+      // Encode RouterV3 call with fee
+      routerCallData = encodeFunctionData({
+        abi: ROUTER_V3_ABI,
+        functionName: 'executeSwapWithPermitAndFee',
+        args: [message, userSignature, BigInt(permit.deadline), permit.v, permit.r, permit.s, feeData.feeInToken]
+      });
+    } else {
+      // Legacy V2 router (no fee)
+      routerCallData = encodeFunctionData({
+        abi: ROUTER_ABI,
+        functionName: 'executeSwapWithPermit',
+        args: [message, userSignature, BigInt(permit.deadline), permit.v, permit.r, permit.s]
+      });
+    }
 
     // Build and send UserOp
     console.log('Building and sending UserOp...');
@@ -487,9 +676,14 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
       userOpHash, 
       status: 'pending', 
       chainId,
-      smartAccount: smartAccountAddress
+      smartAccount: smartAccountAddress,
+      feeData: feeData // Store fee data for history
     });
 
+    // Store intent data for history (closure-safe)
+    const intentData = { ...intent };
+    const storedFeeData = feeData;
+    
     // Wait for receipt (non-blocking) and save history
     waitForReceipt(userOpHash, chainId, 30000)
       .then(receipt => {
@@ -499,30 +693,38 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
           data.status = receipt.success ? 'confirmed' : 'failed';
           intents.set(requestId, data);
           
-          // Save to history with token symbols
-          const tokenInSymbol = getTokenSymbol(intent.tokenIn);
-          const tokenOutSymbol = getTokenSymbol(intent.tokenOut);
+          // Save to history with token symbols and fee info
+          const tokenInSymbol = getTokenSymbol(intentData.tokenIn);
+          const tokenOutSymbol = getTokenSymbol(intentData.tokenOut);
           const decimalsIn = tokenInSymbol.includes('USDC') ? 6 : 18;
           const decimalsOut = tokenOutSymbol.includes('USDC') ? 6 : 18;
-          const amountInFormatted = (Number(intent.amountIn) / Math.pow(10, decimalsIn)).toFixed(4);
-          const amountOutFormatted = (Number(intent.minAmountOut) / Math.pow(10, decimalsOut)).toFixed(4);
+          const amountInFormatted = (Number(intentData.amountIn) / Math.pow(10, decimalsIn)).toFixed(4);
+          const amountOutFormatted = (Number(intentData.minAmountOut) / Math.pow(10, decimalsOut)).toFixed(4);
+          
+          // Calculate fee info for history
+          const feeFormatted = storedFeeData 
+            ? (Number(storedFeeData.feeInToken) / Math.pow(10, storedFeeData.tokenDecimals)).toFixed(6)
+            : '0';
+          const feeUSDFormatted = storedFeeData ? storedFeeData.feeUSD.toFixed(4) : '0';
           
           saveSwapHistory({
-            user: intent.user,
+            user: intentData.user,
             fromChain: chainConfig.name === 'polygon-amoy' ? 'Polygon Amoy' : 'Sepolia',
             toChain: chainConfig.name === 'polygon-amoy' ? 'Polygon Amoy' : 'Sepolia',
             tokenIn: tokenInSymbol,
             tokenOut: tokenOutSymbol,
             amountIn: amountInFormatted,
             amountOut: amountOutFormatted,
-            feeMode: 'GASLESS',
-            feePaid: '0',
-            feeToken: 'SPONSORED',
+            feeMode: storedFeeData ? 'GASLESS_FEE' : 'GASLESS',
+            feePaid: feeFormatted,
+            feeToken: storedFeeData ? tokenInSymbol : 'SPONSORED',
+            feeUSD: feeUSDFormatted,
             status: receipt.success ? 'success' : 'failed',
             txHash: data.txHash,
             userOpHash: userOpHash,
             explorerUrl: `${chainConfig.explorer}${data.txHash}`,
-            sponsor: 'ZeroToll Paymaster'
+            sponsor: 'ZeroToll Paymaster',
+            treasury: chainConfig.treasury
           });
         }
       })
@@ -534,8 +736,16 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
       userOpHash,
       smartAccount: smartAccountAddress,
       explorerUrl: `${chainConfig.explorer}${userOpHash}`,
-      sponsor: 'ZeroToll Paymaster (Phase 2)',
-      message: 'Gas sponsored by ZeroToll!'
+      sponsor: 'ZeroToll Paymaster (Phase 2B)',
+      message: feeData 
+        ? `Gas sponsored! Service fee: $${feeData.feeUSD.toFixed(4)} (${feeData.feeInToken} ${feeData.tokenSymbol})`
+        : 'Gas sponsored by ZeroToll!',
+      fee: feeData ? {
+        usd: feeData.feeUSD,
+        amount: feeData.feeInToken.toString(),
+        token: feeData.tokenSymbol,
+        treasury: chainConfig.treasury
+      } : null
     });
 
   } catch (error) {
