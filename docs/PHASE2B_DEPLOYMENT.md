@@ -39,7 +39,7 @@ Deployment pending - need Sepolia ETH for gas.
 1. ✅ Deploy Treasury + RouterV3 on Amoy
 2. ⏳ Deploy Treasury + RouterV3 on Sepolia (need ETH)
 3. ✅ Update phase2-relayer with RouterV3 address and fee calculation
-4. ⏳ Fund RouterV3 with zToken liquidity
+4. ✅ Fund RouterV3 with zToken liquidity (500 each: zUSDC, zETH, zPOL, zLINK)
 5. ⏳ Test gasless swap with fee collection
 6. ⏳ Update frontend to display fees
 
