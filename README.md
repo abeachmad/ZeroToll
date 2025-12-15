@@ -19,7 +19,7 @@ ZeroToll is a **gasless DEX** that eliminates gas friction in DeFi through **int
 |---------|-------------|
 | **Fee** | 2x gas cost, paid from INPUT token |
 | **Transparency** | Fee shown upfront before swap |
-| **Treasury** | Fees collected for LP rewards (Phase 3) |
+| **Treasury** | Fees collected for LP rewards (Phase 4) |
 | **Oracle** | Real-time Pyth Network prices |
 
 ### 🎯 Core Innovation: Self-Hosted ERC-4337 Paymaster
@@ -48,7 +48,7 @@ User (EOA)                    ZeroToll Relayer (port 3002)
 
 ---
 
-## � Ecocnomic Model
+## 💰 Economic Model
 
 ### Why Self-Hosted Paymaster?
 
@@ -75,7 +75,7 @@ Monthly fee revenue:   $18,000
 Monthly profit:        $9,000
 ```
 
-### Phase 3 Fee Distribution (Planned)
+### Phase 4 Fee Distribution (Planned)
 
 | Allocation | Percentage | Purpose |
 |------------|------------|---------|
@@ -190,119 +190,153 @@ Monthly profit:        $9,000
 - **Pyth Oracle** for real-time price feeds
 - Full control over gas sponsorship (no third-party fees)
 
-### Phase 3: Community Pool 🔵 PLANNED
+### Phase 3: EIP-7702 Integration 🔵 P
 
-**Goal**: Fully decentralized, sustainable, community-owned paymaster
+**Goal**: Simpler gasless flow with EIP-7702 EOA delegation
+
+| A|
+|--------|-------------------|----------|
+| Gas cost | ~300,000 | ~150,000 (50% savin
+| Infrastructure | Bundler + EntryPoint + Per |
+| User experience | "Upgrade to Smart Accoible |
+| Native token output | Complex | Built-in |
+
+**Key Features**:
+- EOA temporarily delegates to ZeroTollDelt
+- No permanent smart account upgrade needed
+- Native token output (ERC20 → ETH/POL) built-in
+- 50% gas savings vs ERC-4337
 
 ```
-┌─────────────────────────────────────────┐
-│ Community Paymaster Liquidity Pool      │
+User signs: 7702 auth + permit + intent (NOAS)
+     ↓
+t
+        ↓
+EOAet
+        ↓
+Fee deducted from it token
+```
+
+**Network Supportia
+
+d)
+
+NNED
+
+
+
+
+┌─────────────────────┐
+│ Community Paymaster │
 ├─────────────────────────────────────────┤
 │ 1. PaymasterVault (ERC-4626)           │
 │    - LPs deposit POL/ETH                │
 │    - Earn yield from swap fees          │
-│                                         │
-│ 2. Treasury                            │
-│    - Collects swap fees (2x gas)        │
-│    - Distributes 80% to LPs             │
-│                                         │
+│
+│ 2. Treasury         │
+     │
+│    - Distributes 80% to LP  │
+│                             │
 │ 3. GasRefiller (Automation)            │
 │    - Auto-refills paymaster deposit     │
 └─────────────────────────────────────────┘
+``
+
+)**:
 ```
 
-**LP Economics (Projected)**:
-```
-Pool Size: $10,000
-Daily Swaps: 10,000
-Daily Fees: $60
+Dai0
+Daily Fee0
 Monthly LP Rewards (80%): $1,440
-Annual APR: ~173%
+Annual APR: %
 ```
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Arure
 
 ### Smart Contracts
 
 | Contract | Purpose |
-|----------|---------|
-| **VerifyingPaymasterV07** | Self-hosted paymaster for gas sponsorship |
-| **ZeroTollRouterV3** | Router with fee support |
-| **ZeroTollTreasury** | Fee collection for LP rewards |
-| **zTokens** | ERC-2612 compliant test tokens |
+|----------|-
+| *|
+upport |
+| * |
+
+| **zTokens** |  |
 
 ### Backend Services
 
 | Service | File | Purpose |
 |---------|------|---------|
-| API Server | `backend/server.py` | Quotes, history, stats |
-| ZeroToll Relayer | `backend/phase2-relayer.mjs` | Self-hosted paymaster + fee calculation |
-| Pyth Oracle | `backend/pyth_rest_oracle.py` | Real-time price feeds |
+| API Server | `backend/server.py` | Quotes, histo
+| ZeroToll Relayer | `backlation |
+| Pyth Oracle | `backend/pyth_rest_oracle.py` feeds |
 
 ---
 
 ## 📁 Project Structure
 
 ```
-ZeroToll/
-├── packages/contracts/        # Solidity smart contracts
-├── backend/
-│   ├── server.py             # Python API server
-│   ├── phase2-relayer.mjs    # Self-hosted paymaster relayer
+oll/
+├── packages/ctracts
+
+│   ├── server.py             # Python A
+│   ├── phase2-relayer.mjs    # Self-hosted paymastr
 │   └── pyth_rest_oracle.py   # Pyth price feeds
-├── frontend/                  # React frontend
+├── frontend/                  # Reac
 ├── docs/
-│   ├── INFRASTRUCTURE_REPORT.md
-│   └── HOW_GASLESS_SWAPS_WORK.md
-├── start-zerotoll.sh         # 🚀 Start all services
-├── stop-zerotoll.sh          # 🛑 Stop all services
+.md
+│  _PLAN.md
+
+├── start-zerervices
+s
 └── README.md
-```
 
----
 
-## 🎨 Tech Stack
+
+
+
 
 | Layer | Technology |
 |-------|------------|
-| Smart Contracts | Solidity 0.8.24, Hardhat, OpenZeppelin v5.0 |
-| Backend | FastAPI (Python), Node.js (Relayer) |
-| Frontend | React 18, Tailwind CSS, wagmi, viem |
+in v5.0 |
+| Blayer) |
+
 | Database | MongoDB 7.0 |
-| Oracles | Pyth Network (real-time prices) |
-| Account Abstraction | ERC-4337, VerifyingPaymasterV07 |
-| Bundler | Pimlico (infrastructure only) |
-| Signatures | EIP-712 (SwapIntent), ERC-2612 (Permit) |
-| Networks | Polygon Amoy, Ethereum Sepolia |
+s) |
+| Account Abstraction | ERC-4337, EIP-7702 (Phase 3) |
+me."*
+swap at a tiss e gasle, onryoneto evesible eFi acces D
+
+*"Makingn**ildathoygon Bue Pol❤️ for thith uilt w---
+
+**Betwork/
+
+yth.nttps://prk**: hetwo N
+- **Pyth.io/etherscan//sepolia.tps:lorer**: htlia Expthereum Sepo
+- **Em/copolygonscan.//amoy.*: https:er*plormoy Ex A
+- **Polygoninks
+
+
+## 🔗 Ls.
+
+---e for detaililLICENSE) fNSE](./LICE - See [nseMIT Licee
+
+# 📜 Licens
+#on
 
 ---
-
-## 🔒 Security
-
-- ✅ OpenZeppelin battle-tested contracts
-- ✅ ReentrancyGuard on all state-changing functions
-- ✅ Policy signer validation for paymaster
-- ✅ SafeERC20 for all token transfers
-- ✅ Input validation and slippage protection
-
+tecti proand slippageion  validat
+- ✅ Inputnsfersen tra tokRC20 for all ✅ SafeE
+-rr paymastefoidation valsigner ✅ Policy ions
+- ng functngil state-chayGuard on alncReentracts
+- ✅ ted contrae-tespelin battlep ✅ OpenZ
+-
+# 🔒 Security
 ---
 
-## 📜 License
-
-MIT License - See [LICENSE](./LICENSE) file for details.
-
----
-
-## 🔗 Links
-
-- **Polygon Amoy Explorer**: https://amoy.polygonscan.com/
-- **Ethereum Sepolia Explorer**: https://sepolia.etherscan.io/
-- **Pyth Network**: https://pyth.network/
-
----
-
-**Built with ❤️ for the Polygon Buildathon**
-
-*"Making DeFi accessible to everyone, one gasless swap at a time."*
+#olia |
+ereum Sepoy, Eth Ams | Polygontwork
+| Nermit) |2 (PeC-261, ERpIntent)12 (Swares | EIP-7 Signatunly) |
+|structure oco (inframliler | Pi| Bund
