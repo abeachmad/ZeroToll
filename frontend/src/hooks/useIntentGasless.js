@@ -1,8 +1,8 @@
 /**
- * useIntentGasless - Intent-based gasless swaps via Pimlico
+ * useIntentGasless - Intent-based gasless swaps via ZeroToll
  * 
  * This hook enables TRUE gasless swaps where users pay ZERO gas.
- * Uses EIP-712 signatures + Pimlico paymaster sponsorship.
+ * Uses EIP-712 signatures + ZeroToll paymaster sponsorship.
  * 
  * Supports:
  * - zTokens (zUSDC, zETH, zPOL, zLINK): 100% gasless (ERC-2612 Permit built-in)
@@ -12,11 +12,9 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useChainId, useWalletClient } from 'wagmi';
 
-// Relayer URLs
-// Phase 1: Original relayer (port 3001) - uses Pimlico's paymaster
-// Phase 2: Self-hosted paymaster (port 3002) - uses our VerifyingPaymasterV07
-const RELAYER_URL = process.env.REACT_APP_RELAYER_URL || 'http://localhost:3001';
-const PHASE2_RELAYER_URL = process.env.REACT_APP_PHASE2_RELAYER_URL || 'http://localhost:3002';
+// Relayer URL - Self-hosted paymaster (port 3002) using our VerifyingPaymasterV07
+// This is the ONLY relayer we use - no Pimlico fallback
+const RELAYER_URL = process.env.REACT_APP_RELAYER_URL || 'http://localhost:3002';
 
 // ZeroToll Router addresses per chain (ZeroTollRouterV2)
 const ZEROTOLL_ROUTERS = {
@@ -359,11 +357,9 @@ export function useIntentGasless() {
   }, [address, chainId, walletClient, getPermit2Allowance]);
 
 
-  // Submit gasless swap with permit (for ZTA/ZTB - 100% gasless)
-  // mode: 'pimlico' (default) = Phase 2 self-hosted paymaster (our VerifyingPaymasterV07)
-  // mode: 'phase2' = Same as 'pimlico' - uses our paymaster
-  // mode: 'relayer' = Relayer EOA pays gas directly
-  const submitSwapWithPermit = useCallback(async ({ tokenIn, tokenOut, amountIn, minAmountOut, deadlineMinutes = 30, mode = 'pimlico' }) => {
+  // Submit gasless swap with permit (for zTokens - 100% gasless)
+  // Uses our self-hosted VerifyingPaymasterV07 paymaster
+  const submitSwapWithPermit = useCallback(async ({ tokenIn, tokenOut, amountIn, minAmountOut, deadlineMinutes = 30 }) => {
     if (!address || !chainId || !routerAddress || !walletClient) {
       throw new Error('Not connected or chain not supported');
     }
@@ -374,13 +370,10 @@ export function useIntentGasless() {
     try {
       const deadline = Math.floor(Date.now() / 1000) + (deadlineMinutes * 60);
       
-      // Use Phase 2 relayer for pimlico/phase2 mode, original relayer for 'relayer' mode
-      const relayerUrl = (mode === 'pimlico' || mode === 'phase2') ? PHASE2_RELAYER_URL : RELAYER_URL;
-      
-      // Get nonce from the appropriate relayer
+      // Get nonce from relayer
       let nonce = 0;
       try {
-        const res = await fetch(`${relayerUrl}/api/nonce/${chainId}/${address}`);
+        const res = await fetch(`${RELAYER_URL}/api/nonce/${chainId}/${address}`);
         const data = await res.json();
         nonce = parseInt(data.nonce || '0', 10);
       } catch {
@@ -429,8 +422,8 @@ export function useIntentGasless() {
         params: [address, JSON.stringify(typedData)]
       });
 
-      // Step 3: Submit to relayer
-      console.log(`Submitting to ${mode === 'relayer' ? 'original' : 'Phase 2'} relayer (mode: ${mode})...`);
+      // Step 3: Submit to ZeroToll relayer (self-hosted paymaster)
+      console.log('📤 Submitting to ZeroToll relayer...');
       console.log('📤 Permit being sent:', {
         v: permit.v,
         r: permit.r,
@@ -439,10 +432,10 @@ export function useIntentGasless() {
         rLength: permit.r?.length,
         sLength: permit.s?.length
       });
-      const response = await fetch(`${relayerUrl}/api/intents/swap-with-permit`, {
+      const response = await fetch(`${RELAYER_URL}/api/intents/swap-with-permit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chainId, intent, userSignature: signature, permit, mode })
+        body: JSON.stringify({ chainId, intent, userSignature: signature, permit })
       });
 
       const result = await response.json();
@@ -458,18 +451,14 @@ export function useIntentGasless() {
   }, [address, chainId, routerAddress, walletClient, signPermit]);
 
   // Check swap status
-  // Determines relayer URL based on requestId prefix (phase2_ = Phase 2 relayer)
   const checkStatus = useCallback(async (requestId) => {
-    const relayerUrl = requestId?.startsWith('phase2_') ? PHASE2_RELAYER_URL : RELAYER_URL;
-    const response = await fetch(`${relayerUrl}/api/intents/${requestId}/status`);
+    const response = await fetch(`${RELAYER_URL}/api/intents/${requestId}/status`);
     return response.json();
   }, []);
 
   // Submit gasless swap with Permit2 (for USDC, WETH, LINK, etc.)
-  // mode: 'pimlico' (default) = Phase 2 self-hosted paymaster (our VerifyingPaymasterV07)
-  // mode: 'phase2' = Same as 'pimlico' - uses our paymaster
-  // mode: 'relayer' = Relayer EOA pays gas directly
-  const submitSwapWithPermit2 = useCallback(async ({ tokenIn, tokenOut, amountIn, minAmountOut, deadlineMinutes = 30, mode = 'pimlico' }) => {
+  // Uses our self-hosted VerifyingPaymasterV07 paymaster
+  const submitSwapWithPermit2 = useCallback(async ({ tokenIn, tokenOut, amountIn, minAmountOut, deadlineMinutes = 30 }) => {
     if (!address || !chainId || !routerAddress || !walletClient) {
       throw new Error('Not connected or chain not supported');
     }
@@ -480,13 +469,10 @@ export function useIntentGasless() {
     try {
       const deadline = Math.floor(Date.now() / 1000) + (deadlineMinutes * 60);
       
-      // Use Phase 2 relayer for pimlico/phase2 mode, original relayer for 'relayer' mode
-      const relayerUrl = (mode === 'pimlico' || mode === 'phase2') ? PHASE2_RELAYER_URL : RELAYER_URL;
-      
-      // Get nonce from the appropriate relayer
+      // Get nonce from relayer
       let nonce = 0;
       try {
-        const res = await fetch(`${relayerUrl}/api/nonce/${chainId}/${address}`);
+        const res = await fetch(`${RELAYER_URL}/api/nonce/${chainId}/${address}`);
         const data = await res.json();
         nonce = parseInt(data.nonce || '0', 10);
       } catch {
@@ -540,9 +526,9 @@ export function useIntentGasless() {
         params: [address, JSON.stringify(typedData)]
       });
 
-      // Step 3: Submit to relayer
-      console.log(`Submitting to ${mode === 'relayer' ? 'original' : 'Phase 2'} relayer (mode: ${mode})...`);
-      const response = await fetch(`${relayerUrl}/api/intents/swap-with-permit2`, {
+      // Step 3: Submit to ZeroToll relayer (self-hosted paymaster)
+      console.log('📤 Submitting to ZeroToll relayer...');
+      const response = await fetch(`${RELAYER_URL}/api/intents/swap-with-permit2`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -550,8 +536,7 @@ export function useIntentGasless() {
           intent, 
           userSignature, 
           permitSingle, 
-          permit2Signature,
-          mode
+          permit2Signature
         })
       });
 

@@ -124,6 +124,44 @@ console.log('Policy Signer:', policySignerAccount.address);
 const intents = new Map();
 const chainClients = {};
 
+// Python backend URL for history saving
+const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || 'http://localhost:8000';
+
+// Token address to symbol mapping
+const TOKEN_SYMBOLS = {
+  // Amoy (80002)
+  '0x257fb36cd940d1f6a0a4659e8245d3c3fcecb8bd': 'zUSDC',
+  '0xfae5fb760917682d67bc2082667c2c5e55a193f9': 'zETH',
+  '0xb0a04ab21faae4a5399938c07eddfA0fb41d2b9d': 'zPOL',
+  '0x51f6c79e5ca4acf086d0954afaaf5c72be56cbb1': 'zLINK',
+  // Sepolia (11155111)
+  '0x5f43d1fc4faad0dfe097fc3bb32d66a9864c730c': 'zUSDC',
+  '0x8153fa09be1689d44c343f119c829f6702a8720b': 'zETH',
+  '0x63c31c4247f6aa40b676478226d6feb5707649d6': 'zPOL',
+  '0x4e2dbcc07d8e5a8c9f420ea60d1e3aec7b64d2c': 'zLINK',
+};
+
+// Get token symbol from address
+function getTokenSymbol(address) {
+  return TOKEN_SYMBOLS[address?.toLowerCase()] || address?.slice(0, 10) + '...';
+}
+
+// Save swap history to Python backend's MongoDB
+async function saveSwapHistory(data) {
+  try {
+    const response = await fetch(`${PYTHON_BACKEND_URL}/api/gasless-history`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (response.ok) {
+      console.log('💾 Saved gasless swap to history');
+    }
+  } catch (e) {
+    console.log('⚠️ Could not save to history:', e.message);
+  }
+}
+
 // Initialize chain clients
 async function getChainClients(chainId) {
   if (chainClients[chainId]) {
@@ -452,7 +490,7 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
       smartAccount: smartAccountAddress
     });
 
-    // Wait for receipt (non-blocking)
+    // Wait for receipt (non-blocking) and save history
     waitForReceipt(userOpHash, chainId, 30000)
       .then(receipt => {
         const data = intents.get(requestId);
@@ -460,6 +498,32 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
           data.txHash = receipt.receipt?.transactionHash;
           data.status = receipt.success ? 'confirmed' : 'failed';
           intents.set(requestId, data);
+          
+          // Save to history with token symbols
+          const tokenInSymbol = getTokenSymbol(intent.tokenIn);
+          const tokenOutSymbol = getTokenSymbol(intent.tokenOut);
+          const decimalsIn = tokenInSymbol.includes('USDC') ? 6 : 18;
+          const decimalsOut = tokenOutSymbol.includes('USDC') ? 6 : 18;
+          const amountInFormatted = (Number(intent.amountIn) / Math.pow(10, decimalsIn)).toFixed(4);
+          const amountOutFormatted = (Number(intent.minAmountOut) / Math.pow(10, decimalsOut)).toFixed(4);
+          
+          saveSwapHistory({
+            user: intent.user,
+            fromChain: chainConfig.name === 'polygon-amoy' ? 'Polygon Amoy' : 'Sepolia',
+            toChain: chainConfig.name === 'polygon-amoy' ? 'Polygon Amoy' : 'Sepolia',
+            tokenIn: tokenInSymbol,
+            tokenOut: tokenOutSymbol,
+            amountIn: amountInFormatted,
+            amountOut: amountOutFormatted,
+            feeMode: 'GASLESS',
+            feePaid: '0',
+            feeToken: 'SPONSORED',
+            status: receipt.success ? 'success' : 'failed',
+            txHash: data.txHash,
+            userOpHash: userOpHash,
+            explorerUrl: `${chainConfig.explorer}${data.txHash}`,
+            sponsor: 'ZeroToll Paymaster'
+          });
         }
       })
       .catch(e => console.log('Receipt fetch failed:', e.message));

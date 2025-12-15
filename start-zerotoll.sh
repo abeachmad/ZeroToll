@@ -1,7 +1,7 @@
 #!/bin/bash
 
-echo "🚀 Starting ZeroToll (Gasless Swaps with Pimlico)"
-echo "==================================================="
+echo "🚀 Starting ZeroToll (Self-Hosted Paymaster - Gasless Swaps)"
+echo "============================================================="
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,7 +11,7 @@ cd "$SCRIPT_DIR"
 echo "🧹 Cleaning up existing processes..."
 pkill -f "uvicorn server:app" 2>/dev/null
 pkill -f "node.*relayer" 2>/dev/null
-pkill -f "node gasless_api.mjs" 2>/dev/null
+pkill -f "node phase2-relayer.mjs" 2>/dev/null
 pkill -f "node delegation-gasless-api.mjs" 2>/dev/null
 pkill -f "react-scripts start" 2>/dev/null
 pkill -f "craco start" 2>/dev/null
@@ -19,7 +19,6 @@ tmux kill-session -t zerotoll 2>/dev/null
 tmux kill-session -t frontend 2>/dev/null
 fuser -k 8000/tcp 2>/dev/null
 fuser -k 3000/tcp 2>/dev/null
-fuser -k 3001/tcp 2>/dev/null
 fuser -k 3002/tcp 2>/dev/null
 fuser -k 3003/tcp 2>/dev/null
 sleep 2
@@ -40,26 +39,17 @@ echo "🔍 Checking environment..."
 if [ -f "$SCRIPT_DIR/.env.credentials" ]; then
     echo "   ✅ .env.credentials found"
     if grep -q "PIMLICO_API_KEY" "$SCRIPT_DIR/.env.credentials"; then
-        echo "      - PIMLICO_API_KEY: ✅ Set"
+        echo "      - PIMLICO_API_KEY: ✅ Set (for bundler)"
     else
-        echo "      - PIMLICO_API_KEY: ⚠️ Missing"
+        echo "      - PIMLICO_API_KEY: ⚠️ Missing (needed for bundler)"
     fi
     if grep -q "RELAYER_PRIVATE_KEY" "$SCRIPT_DIR/.env.credentials"; then
         echo "      - RELAYER_PRIVATE_KEY: ✅ Set"
     else
         echo "      - RELAYER_PRIVATE_KEY: ⚠️ Missing"
     fi
-    if grep -q "ZEROTOLL_ROUTER_SEPOLIA" "$SCRIPT_DIR/.env.credentials"; then
-        ROUTER=$(grep "ZEROTOLL_ROUTER_SEPOLIA" "$SCRIPT_DIR/.env.credentials" | cut -d'=' -f2)
-        echo "      - Router (Sepolia): $ROUTER"
-    fi
 else
     echo "   ⚠️  .env.credentials missing - copy from .env.example"
-fi
-
-# Also check backend .env for legacy support
-if [ -f "$SCRIPT_DIR/backend/.env" ]; then
-    echo "   ✅ Backend .env found (legacy)"
 fi
 
 # Start Python Backend (API server)
@@ -92,12 +82,8 @@ for i in {1..30}; do
     sleep 1
 done
 
-# Start Pimlico Relayer (Node.js - ERC-4337 gasless)
-echo ""
-echo "⚡ Starting Pimlico Relayer (port 3001)..."
-cd "$SCRIPT_DIR/backend"
-
 # Check if node_modules exists
+cd "$SCRIPT_DIR/backend"
 if [ ! -d "node_modules" ]; then
     echo "   📦 Installing Node.js dependencies..."
     npm install > /dev/null 2>&1
@@ -111,45 +97,29 @@ if [ -f "$SCRIPT_DIR/.env.credentials" ]; then
     set +a
 fi
 
+# Start ZeroToll Relayer (Self-Hosted Paymaster - port 3002)
+echo ""
+echo "💎 Starting ZeroToll Relayer (port 3002) - SELF-HOSTED PAYMASTER..."
+cd "$SCRIPT_DIR/backend"
+
 # Use tmux to keep the relayer running
-tmux new-session -d -s zerotoll "cd $SCRIPT_DIR && set -a && source .env.credentials && set +a && cd backend && node pimlico-v3-relayer.mjs 2>&1 | tee $SCRIPT_DIR/.pids/relayer.log"
+tmux new-session -d -s zerotoll "cd $SCRIPT_DIR && set -a && source .env.credentials && set +a && cd backend && node phase2-relayer.mjs 2>&1 | tee $SCRIPT_DIR/.pids/relayer.log"
 
 # Wait for relayer
-echo "⏳ Waiting for Pimlico Relayer..."
+echo "⏳ Waiting for ZeroToll Relayer..."
 for i in {1..20}; do
-    if curl -s http://localhost:3001/health > /dev/null 2>&1; then
-        RELAYER_STATUS=$(curl -s http://localhost:3001/health)
-        echo "✅ Pimlico Relayer ready"
-        SMART_ACCOUNT=$(echo $RELAYER_STATUS | python3 -c "import sys,json; print(json.load(sys.stdin).get('chains',[{}])[0].get('smartAccount','N/A'))" 2>/dev/null || echo "N/A")
+    if curl -s http://localhost:3002/health > /dev/null 2>&1; then
+        echo "✅ ZeroToll Relayer ready"
+        PAYMASTER_SEP=$(curl -s http://localhost:3002/health | python3 -c "import sys,json; d=json.load(sys.stdin); print([c['paymaster'] for c in d.get('chains',[]) if c['chainId']==11155111][0])" 2>/dev/null || echo "N/A")
+        PAYMASTER_AMOY=$(curl -s http://localhost:3002/health | python3 -c "import sys,json; d=json.load(sys.stdin); print([c['paymaster'] for c in d.get('chains',[]) if c['chainId']==80002][0])" 2>/dev/null || echo "N/A")
+        SMART_ACCOUNT=$(curl -s http://localhost:3002/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('chains',[{}])[0].get('smartAccount','N/A'))" 2>/dev/null || echo "N/A")
         echo "   Smart Account: $SMART_ACCOUNT"
-        ROUTER=$(curl -s http://localhost:3001/api/config/11155111 | python3 -c "import sys,json; print(json.load(sys.stdin).get('routerAddress','N/A'))" 2>/dev/null || echo "N/A")
-        echo "   Router (Sepolia): $ROUTER"
+        echo "   Paymaster (Sepolia): $PAYMASTER_SEP"
+        echo "   Paymaster (Amoy): $PAYMASTER_AMOY"
         break
     fi
     if [ $i -eq 20 ]; then
-        echo "⚠️  Pimlico Relayer may still be starting... check logs"
-    fi
-    sleep 1
-done
-
-# Start Gasless API (Node.js - legacy)
-echo ""
-echo "⛽ Starting Gasless API (port 3002)..."
-cd "$SCRIPT_DIR/backend"
-
-setsid node gasless_api.mjs > "$SCRIPT_DIR/.pids/gasless.log" 2>&1 &
-GASLESS_PID=$!
-echo $GASLESS_PID > "$SCRIPT_DIR/.pids/gasless.pid"
-
-# Wait for gasless API
-echo "⏳ Waiting for Gasless API..."
-for i in {1..15}; do
-    if curl -s http://localhost:3002/api/gasless/check/0x0000000000000000000000000000000000000000/80002 > /dev/null 2>&1; then
-        echo "✅ Gasless API ready (PID: $GASLESS_PID)"
-        break
-    fi
-    if [ $i -eq 15 ]; then
-        echo "⚠️  Gasless API may still be starting... check logs"
+        echo "⚠️  ZeroToll Relayer may still be starting... check logs"
     fi
     sleep 1
 done
@@ -204,16 +174,19 @@ for i in {1..45}; do
 done
 
 echo ""
-echo "==================================================="
-echo "✅ ZeroToll Started!"
-echo "==================================================="
+echo "============================================================="
+echo "✅ ZeroToll Started! (Self-Hosted Paymaster)"
+echo "============================================================="
 echo ""
 echo "📊 Services:"
-echo "   • Python Backend:   http://localhost:8000"
-echo "   • Pimlico Relayer:  http://localhost:3001  ⚡ GASLESS"
-echo "   • Gasless API:      http://localhost:3002"
-echo "   • Delegation API:   http://localhost:3003"
-echo "   • Frontend:         http://localhost:3000"
+echo "   • Python Backend:    http://localhost:8000"
+echo "   • ZeroToll Relayer:  http://localhost:3002  💎 SELF-HOSTED PAYMASTER"
+echo "   • Delegation API:    http://localhost:3003"
+echo "   • Frontend:          http://localhost:3000"
+echo ""
+echo "💎 Self-Hosted Paymasters (VerifyingPaymasterV07):"
+echo "   • Sepolia:  0xaf7e002447b790f212ea435f9387509cd1ef0054"
+echo "   • Amoy:     0xaad1211a722ee04b6980724586b6b5b7b0c86fee"
 echo ""
 echo "📝 Contracts (Sepolia - chainId 11155111):"
 echo "   • Router:     0x577560699EF88e99f15d04df57c9552056d2a10D"
@@ -232,23 +205,19 @@ echo ""
 echo "📝 Logs:"
 echo "   tail -f $SCRIPT_DIR/.pids/backend.log"
 echo "   tail -f $SCRIPT_DIR/.pids/relayer.log"
-echo "   tail -f $SCRIPT_DIR/.pids/gasless.log"
 echo "   tail -f $SCRIPT_DIR/.pids/delegation.log"
 echo "   tail -f $SCRIPT_DIR/.pids/frontend.log"
 echo ""
-echo "🧪 Testing Pimlico Gasless Swaps:"
+echo "🧪 Testing ZeroToll Gasless Swaps:"
 echo "   1. Open http://localhost:3000/swap"
 echo "   2. Connect MetaMask (Sepolia or Polygon Amoy)"
 echo "   3. Select zUSDC, zETH, zPOL, or zLINK token"
-echo "   4. Toggle 'Pimlico Gasless' ON"
+echo "   4. Enable 'ZeroToll Gasless' toggle"
 echo "   5. Execute swap - YOU PAY \$0 IN GAS!"
 echo ""
 echo "🚰 Get Test Tokens (call faucet() on any zToken):"
-echo "   Sepolia:"
-echo "   • zUSDC: 0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C"
-echo "   Amoy:"
-echo "   • zUSDC: 0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD"
-echo "   • zETH:  0x8153FA09Be1689D44C343f119C829F6702A8720b"
+echo "   Sepolia: 0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C (zUSDC)"
+echo "   Amoy:    0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD (zUSDC)"
 echo ""
 echo "🛑 Stop: ./stop-zerotoll.sh"
 echo ""

@@ -99,12 +99,12 @@ const Swap = () => {
   // Gasless mode toggle
   const [isGaslessMode, setIsGaslessMode] = useState(false);
   const [isTrueGasless, setIsTrueGasless] = useState(true); // Default to TRUE gasless
-  const [isPimlicoGasless, setIsPimlicoGasless] = useState(false); // Pimlico intent-based gasless
-  const [pimlicoStatus, setPimlicoStatus] = useState('');
+  const [isZeroTollGasless, setIsZeroTollGasless] = useState(false); // ZeroToll intent-based gasless
+  const [gaslessStatus, setGaslessStatus] = useState('');
   const gaslessSwap = useGaslessSwap();
   const trueGaslessSwap = useTrueGaslessSwap();
   const workingGasless = useWorkingGasless(); // NEW: Actually working gasless hook
-  const intentGasless = useIntentGasless(); // Pimlico intent-based gasless (works on Sepolia!)
+  const intentGasless = useIntentGasless(); // ZeroToll gasless (works on Sepolia and Amoy)
   
   // Check if current chain supports true gasless (Gnosis/Base only)
   const isGaslessChain = EIP7702_SUPPORTED_CHAINS.includes(chain?.id);
@@ -347,7 +347,7 @@ const Swap = () => {
       const decimals = tokenIn.decimals || 6;
       const amountWei = parseUnits(amountIn, decimals);
 
-      // If gasless mode, use TRUE gasless approval via Pimlico paymaster
+      // If gasless mode, use TRUE gasless approval via ZeroToll paymaster
       if (isGaslessMode && isTrueGasless) {
         // Check TRUE gasless availability first
         const availability = await trueGaslessSwap.checkAvailability();
@@ -362,7 +362,7 @@ const Swap = () => {
         toast.info(`🎉 TRUE GASLESS approval on ${availability.chain} - You pay $0 in gas!`);
         
         try {
-          // Use TRUE gasless approval via Pimlico paymaster
+          // Use TRUE gasless approval via ZeroToll paymaster
           await trueGaslessSwap.executeGaslessApproval({
             tokenAddress: tokenIn.address,
             spender: routerHubAddress,
@@ -480,7 +480,7 @@ const Swap = () => {
     }
   };
 
-  // TRUE GASLESS execution using Pimlico paymaster - USER PAYS $0 GAS!
+  // TRUE GASLESS execution using ZeroToll paymaster - USER PAYS $0 GAS!
   const handleTrueGaslessExecute = async () => {
     try {
       toast.info('🎉 Executing TRUE GASLESS swap - You pay $0 in gas!');
@@ -545,7 +545,7 @@ const Swap = () => {
       ]);
 
       // Execute TRUE gasless batch (approve + swap) - $0 gas!
-      console.log('📤 Executing TRUE GASLESS batch via Pimlico paymaster');
+      console.log('📤 Executing TRUE GASLESS batch via ZeroToll paymaster');
       
       await trueGaslessSwap.executeGaslessBatch({
         tokenAddress: tokenIn.address,
@@ -564,8 +564,8 @@ const Swap = () => {
   };
 
   const handleGaslessExecute = async () => {
-    // Relayer mode now uses the same backend relayer as Pimlico mode
-    // Both modes achieve TRUE gasless swaps via the backend Smart Account + Pimlico paymaster
+    // Relayer mode now uses the same backend relayer as ZeroToll mode
+    // Both modes achieve TRUE gasless swaps via the backend Smart Account + ZeroToll paymaster
     try {
       // Native tokens (POL/ETH) don't work with gasless swaps - need wrapped version
       if (tokenIn.isNative) {
@@ -591,13 +591,13 @@ const Swap = () => {
         return;
       }
 
-      // Use the same backend relayer as Pimlico mode
+      // Use the same backend relayer as ZeroToll mode
       toast.info('🔄 Relayer mode - submitting gasless swap via backend relayer...');
       
       const decimals = tokenIn.decimals || 6;
       const amountWei = parseUnits(amountIn, decimals);
       
-      // Calculate minAmountOut with proper decimal conversion (same as Pimlico mode)
+      // Calculate minAmountOut with proper decimal conversion (same as ZeroToll mode)
       const decimalsOut = tokenOut.decimals || 18;
       const slippageTolerance = 0.90; // 10% slippage tolerance
       
@@ -613,7 +613,7 @@ const Swap = () => {
       let result;
       if (permitType === 'erc2612') {
         // ERC-2612 permit - fully gasless (relayer pays)
-        setPimlicoStatus('Sign Permit + Swap Intent in MetaMask (NO GAS!)...');
+        setGaslessStatus('Sign Permit + Swap Intent in MetaMask (NO GAS!)...');
         toast.info('⚡ Sign 2 messages in MetaMask - relayer pays gas for you!');
         
         result = await intentGasless.submitSwapWithPermit({
@@ -626,7 +626,7 @@ const Swap = () => {
         });
       } else if (permitType === 'permit2') {
         // Permit2 - gasless (relayer pays)
-        setPimlicoStatus('Sign Permit2 + Swap Intent in MetaMask...');
+        setGaslessStatus('Sign Permit2 + Swap Intent in MetaMask...');
         toast.info('🔄 Sign 2 messages in MetaMask - relayer pays gas for you!');
         
         result = await intentGasless.submitSwapWithPermit2({
@@ -639,37 +639,55 @@ const Swap = () => {
         });
       }
 
-      setPimlicoStatus('Swap submitted! Waiting for confirmation...');
-      toast.success(`🎉 Gasless swap submitted! Tx: ${result.txHash?.slice(0, 10)}...`);
-      setTxHash(result.txHash);
+      setGaslessStatus('Swap submitted! Waiting for confirmation...');
+      const displayHash = result.userOpHash || result.txHash;
+      toast.success(`🎉 Gasless swap submitted! Hash: ${displayHash?.slice(0, 10)}...`);
+      setTxHash(displayHash);
 
-      // Poll for confirmation
+      // Poll for confirmation and get actual txHash
       for (let i = 0; i < 30; i++) {
         await new Promise(r => setTimeout(r, 2000));
         const status = await intentGasless.checkStatus(result.requestId);
+        console.log('📊 Swap status:', status);
+        
+        if (status.txHash) {
+          setTxHash(status.txHash);
+        }
+        
         if (status.status === 'confirmed') {
-          setPimlicoStatus('✓ Swap confirmed! You paid ZERO gas!');
+          setGaslessStatus('✓ Swap confirmed! You paid ZERO gas!');
           toast.success('🎉 Gasless swap confirmed! You paid $0 in gas!');
           return;
         } else if (status.status === 'failed') {
-          setPimlicoStatus('Swap failed on-chain');
+          setGaslessStatus('Swap failed on-chain');
           toast.error('Swap failed on-chain');
           return;
         }
       }
-      setPimlicoStatus('Check explorer for status');
+      setGaslessStatus('Check explorer for status');
       
     } catch (error) {
       console.error('Gasless swap error:', error);
-      setPimlicoStatus('');
+      setGaslessStatus('');
       toast.error(error.message || 'Gasless swap failed');
     }
   };
 
-  // Pimlico Intent-Based Gasless (works on Sepolia with ZTA/ZTB!)
-  const handlePimlicoGasless = async () => {
+  // ZeroToll Gasless (works on Sepolia and Amoy with zTokens)
+  const handleZeroTollGasless = async () => {
+    // Validate inputs first
+    if (!isConnected) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    if (!amountIn || parseFloat(amountIn) <= 0) {
+      toast.error('Please enter an amount to swap');
+      return;
+    }
+
     if (!intentGasless.isSupported) {
-      toast.error('Pimlico gasless not supported on this chain');
+      toast.error('ZeroToll gasless not supported on this chain');
       return;
     }
 
@@ -681,7 +699,7 @@ const Swap = () => {
       return;
     }
 
-    setPimlicoStatus('Checking balance...');
+    setGaslessStatus('Checking balance...');
     
     try {
       const balance = await intentGasless.getTokenBalance(tokenIn.address);
@@ -690,7 +708,7 @@ const Swap = () => {
       
       if (balance < amountWei) {
         toast.error(`Insufficient ${tokenIn.symbol} balance`);
-        setPimlicoStatus('');
+        setGaslessStatus('');
         return;
       }
 
@@ -723,7 +741,7 @@ const Swap = () => {
 
       if (permitType === 'erc2612') {
         // ERC-2612 permit - fully gasless
-        setPimlicoStatus('Sign Permit + Swap Intent in MetaMask (NO GAS!)...');
+        setGaslessStatus('Sign Permit + Swap Intent in MetaMask (NO GAS!)...');
         toast.info('⚡ Sign 2 messages in MetaMask - you pay ZERO gas!');
         
         result = await intentGasless.submitSwapWithPermit({
@@ -735,7 +753,7 @@ const Swap = () => {
         });
       } else if (permitType === 'permit2') {
         // Permit2 - gasless after one-time approval
-        setPimlicoStatus('Sign Permit2 + Swap Intent in MetaMask...');
+        setGaslessStatus('Sign Permit2 + Swap Intent in MetaMask...');
         toast.info('🔄 Sign 2 messages in MetaMask - gasless via Permit2!');
         
         result = await intentGasless.submitSwapWithPermit2({
@@ -747,38 +765,45 @@ const Swap = () => {
         });
       }
 
-      setPimlicoStatus('Swap submitted! Waiting for confirmation...');
-      toast.success(`🎉 Gasless swap submitted! Tx: ${result.txHash?.slice(0, 10)}...`);
-      setTxHash(result.txHash);
+      setGaslessStatus('Swap submitted! Waiting for confirmation...');
+      const displayHash = result.userOpHash || result.txHash;
+      toast.success(`🎉 Gasless swap submitted! Hash: ${displayHash?.slice(0, 10)}...`);
+      setTxHash(displayHash);
 
-      // Poll for confirmation
+      // Poll for confirmation and get actual txHash
       for (let i = 0; i < 30; i++) {
         await new Promise(r => setTimeout(r, 2000));
         const status = await intentGasless.checkStatus(result.requestId);
+        console.log('📊 ZeroToll swap status:', status);
+        
+        if (status.txHash) {
+          setTxHash(status.txHash);
+        }
+        
         if (status.status === 'confirmed') {
-          setPimlicoStatus('✓ Swap confirmed! You paid ZERO gas!');
+          setGaslessStatus('✓ Swap confirmed! You paid ZERO gas!');
           toast.success('🎉 Gasless swap confirmed! You paid $0 in gas!');
           return;
         } else if (status.status === 'failed') {
-          setPimlicoStatus('Swap failed on-chain');
+          setGaslessStatus('Swap failed on-chain');
           toast.error('Swap failed on-chain');
           return;
         }
       }
-      setPimlicoStatus('Check explorer for status');
+      setGaslessStatus('Check explorer for status');
     } catch (error) {
-      console.error('Pimlico gasless error:', error);
-      setPimlicoStatus('');
-      toast.error(error.message || 'Pimlico gasless failed');
+      console.error('ZeroToll gasless error:', error);
+      setGaslessStatus('');
+      toast.error(error.message || 'ZeroToll gasless failed');
     }
   };
 
   const handleExecute = async () => {
-    // If Pimlico gasless mode is enabled, check if token supports gasless
-    if (isPimlicoGasless) {
+    // If ZeroToll gasless mode is enabled, check if token supports gasless
+    if (isZeroTollGasless) {
       const permitType = intentGasless.getPermitType(tokenIn.address);
       if (permitType === 'erc2612' || permitType === 'permit2') {
-        return await handlePimlicoGasless();
+        return await handleZeroTollGasless();
       }
       // Token doesn't support gasless - show warning but continue with traditional
       toast.warning(`${tokenIn.symbol} doesn't support gasless. Proceeding with traditional swap.`);
@@ -932,73 +957,44 @@ const Swap = () => {
           <h1 className="text-3xl font-bold mb-2 text-zt-paper">Gasless Cross-Chain Swap</h1>
           <p className="text-zt-paper/60 mb-6">Pay fees in any token you swap—use input, skim from output (even native via wrapped), or stick to native gas. Fee capped on-chain, unused refunded.</p>
 
-          {/* Gasless Mode Selector - Relayer / Pimlico (no selection = Traditional) */}
+          {/* Gasless Mode Toggle - Single option */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-3">
-              Gasless Mode <span className="text-zt-paper/40 font-normal">(optional - leave unselected for traditional swap)</span>
+              Gasless Mode <span className="text-zt-paper/40 font-normal">(ZeroToll pays gas for you)</span>
             </label>
-            <div className="grid grid-cols-2 gap-3">
-              {/* Relayer Mode */}
-              <button
-                onClick={() => {
-                  if (isGaslessMode && !isPimlicoGasless) {
-                    // Clicking again deselects
-                    setIsGaslessMode(false);
-                  } else {
-                    setIsGaslessMode(true);
-                    setIsPimlicoGasless(false);
-                  }
-                }}
-                className={`glass p-4 rounded-xl transition-all text-left ${
-                  isGaslessMode && !isPimlicoGasless
-                    ? 'border-2 border-green-500 bg-green-500/10'
-                    : 'border border-white/10 hover:border-white/30'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg">🔄</span>
-                  {isGaslessMode && !isPimlicoGasless && <span className="text-green-400 text-xs">✓ Active</span>}
+            <button
+              onClick={() => {
+                setIsZeroTollGasless(!isZeroTollGasless);
+                setIsGaslessMode(false); // Disable old relayer mode
+              }}
+              className={`w-full glass p-4 rounded-xl transition-all text-left ${
+                isZeroTollGasless
+                  ? 'border-2 border-green-500 bg-green-500/10'
+                  : 'border border-white/10 hover:border-white/30'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">⚡</span>
+                  <div>
+                    <div className={`font-semibold ${isZeroTollGasless ? 'text-green-400' : 'text-zt-paper'}`}>
+                      ZeroToll Gasless {isZeroTollGasless && <span className="text-xs ml-2">✓ Active</span>}
+                    </div>
+                    <div className="text-xs text-zt-paper/50">Sign 2 messages, pay $0 gas - we sponsor it!</div>
+                  </div>
                 </div>
-                <div className={`font-semibold text-sm ${isGaslessMode && !isPimlicoGasless ? 'text-green-400' : 'text-zt-paper'}`}>Relayer</div>
-                <div className="text-xs text-zt-paper/50">Our relayer pays gas</div>
-              </button>
-
-              {/* Pimlico Mode */}
-              <button
-                onClick={() => {
-                  if (isPimlicoGasless) {
-                    // Clicking again deselects
-                    setIsPimlicoGasless(false);
-                  } else {
-                    setIsGaslessMode(false);
-                    setIsPimlicoGasless(true);
-                  }
-                }}
-                className={`glass p-4 rounded-xl transition-all text-left ${
-                  isPimlicoGasless
-                    ? 'border-2 border-green-500 bg-green-500/10'
-                    : 'border border-white/10 hover:border-white/30'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg">⚡</span>
-                  {isPimlicoGasless && <span className="text-green-400 text-xs">✓ Active</span>}
+                <div className={`w-12 h-6 rounded-full transition-colors ${isZeroTollGasless ? 'bg-green-500' : 'bg-white/20'}`}>
+                  <div className={`w-5 h-5 bg-white rounded-full mt-0.5 transition-transform ${isZeroTollGasless ? 'translate-x-6 ml-0.5' : 'ml-0.5'}`} />
                 </div>
-                <div className={`font-semibold text-sm ${isPimlicoGasless ? 'text-green-400' : 'text-zt-paper'}`}>Pimlico</div>
-                <div className="text-xs text-zt-paper/50">ERC-4337 paymaster</div>
-              </button>
-            </div>
+              </div>
+            </button>
 
             {/* Mode Description */}
             <div className="mt-3 text-xs text-zt-paper/60">
-              {!isGaslessMode && !isPimlicoGasless && (
-                <span>💳 Traditional swap - you pay gas in native token (ETH/POL). Click a button above to enable gasless.</span>
-              )}
-              {isGaslessMode && !isPimlicoGasless && (
-                <span className="text-green-400">🔄 Relayer mode active - our backend relayer pays gas from its own wallet. You pay ZERO gas! Click again to disable.</span>
-              )}
-              {isPimlicoGasless && (
-                <span className="text-green-400">⚡ Pimlico mode active - fully gasless via ERC-4337 paymaster. Best with zTokens (⚡ ERC-2612 permit). Click again to disable.</span>
+              {!isZeroTollGasless ? (
+                <span>💳 Traditional swap - you pay gas in native token (ETH/POL). Toggle above to enable gasless.</span>
+              ) : (
+                <span className="text-green-400">⚡ ZeroToll Gasless active - our paymaster sponsors your gas. Best with zTokens (⚡). Click to disable.</span>
               )}
             </div>
           </div>
@@ -1069,8 +1065,8 @@ const Swap = () => {
                 data-testid="amount-in-input"
               />
             </div>
-            {/* Permit Type Legend - Show when Pimlico mode is active */}
-            {isPimlicoGasless && (
+            {/* Permit Type Legend - Show when ZeroToll gasless is active */}
+            {isZeroTollGasless && (
               <div className="mt-2 flex flex-wrap gap-3 text-xs text-zt-paper/60">
                 <span title="ERC-2612 permit - fully gasless">⚡ Fully gasless</span>
                 <span title="Permit2 - gasless after approval">🔄 Permit2</span>
@@ -1169,7 +1165,7 @@ const Swap = () => {
                     <div className="text-xs text-zt-paper/60">
                       {isGaslessChain 
                         ? (trueGaslessSwap.isSmartAccount 
-                          ? 'Pay $0 in gas fees! Sponsored by Pimlico' 
+                          ? 'Pay $0 in gas fees! Sponsored by ZeroToll' 
                           : 'Enable Smart Account for $0 gas')
                         : 'Testnets: Batch approve+swap (gas required)'}
                     </div>
@@ -1242,13 +1238,13 @@ const Swap = () => {
                           <div className="font-semibold text-green-400 mb-1">🎉 TRUE GASLESS Available!</div>
                           <ul className="space-y-1 text-zt-paper/70">
                             <li>• <strong className="text-green-400">You pay $0 in gas fees!</strong></li>
-                            <li>• Gas sponsored by Pimlico paymaster</li>
+                            <li>• Gas sponsored by ZeroToll paymaster</li>
                             <li>• Approve + Swap in ONE gasless transaction</li>
                             <li>• Same wallet address, enhanced capabilities</li>
                           </ul>
                           <div className="mt-2 p-2 bg-green-500/10 rounded border border-green-500/30">
                             <span className="text-green-400 font-medium">✅ Gas: $0 (Sponsored)</span>
-                            <span className="text-zt-paper/60 block">Pimlico paymaster covers all gas costs!</span>
+                            <span className="text-zt-paper/60 block">ZeroToll paymaster covers all gas costs!</span>
                           </div>
                         </>
                       ) : trueGaslessSwap.needsUpgrade ? (
@@ -1286,7 +1282,7 @@ const Swap = () => {
             </div>
           </div>}
 
-          {/* Pimlico Intent Gasless (ZTA/ZTB on Sepolia or Amoy) */}
+          {/* ZeroToll Gasless (zTokens on Sepolia or Amoy) */}
           {(fromChain.id === 11155111 || fromChain.id === 80002) && intentGasless.isGaslessToken(tokenIn?.address) && (
             <div className="mb-6">
               <div className="glass p-4 rounded-xl border border-green-500/30 bg-green-500/5">
@@ -1294,27 +1290,27 @@ const Swap = () => {
                   <div className="flex items-center gap-3">
                     <Zap className="w-5 h-5 text-green-400" />
                     <div>
-                      <div className="font-semibold text-green-400">⚡ Pimlico Gasless Available!</div>
+                      <div className="font-semibold text-green-400">⚡ ZeroToll Gasless Available!</div>
                       <div className="text-xs text-zt-paper/60">
                         {tokenIn?.symbol} supports ERC-2612 Permit - swap with ZERO gas!
                       </div>
                     </div>
                   </div>
                   <button
-                    onClick={() => setIsPimlicoGasless(!isPimlicoGasless)}
+                    onClick={() => setIsZeroTollGasless(!isZeroTollGasless)}
                     className={`relative w-14 h-7 rounded-full transition-colors ${
-                      isPimlicoGasless ? 'bg-green-500' : 'bg-white/20'
+                      isZeroTollGasless ? 'bg-green-500' : 'bg-white/20'
                     }`}
                   >
                     <div
                       className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                        isPimlicoGasless ? 'translate-x-7' : ''
+                        isZeroTollGasless ? 'translate-x-7' : ''
                       }`}
                     />
                   </button>
                 </div>
                 
-                {isPimlicoGasless && (
+                {isZeroTollGasless && (
                   <div className="mt-3 pt-3 border-t border-white/10">
                     <div className="flex items-start gap-2 text-xs">
                       <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
@@ -1323,16 +1319,16 @@ const Swap = () => {
                         <ul className="space-y-1 text-zt-paper/70">
                           <li>1. Sign Permit (approves token transfer - no gas)</li>
                           <li>2. Sign Swap Intent (authorizes swap - no gas)</li>
-                          <li>3. Pimlico relayer executes on-chain (they pay gas!)</li>
+                          <li>3. ZeroToll executes on-chain (we pay gas!)</li>
                         </ul>
                         <div className="mt-2 p-2 bg-green-500/10 rounded border border-green-500/30">
-                          <span className="text-green-400 font-medium">✅ You pay: $0 | Pimlico pays: All gas</span>
+                          <span className="text-green-400 font-medium">✅ You pay: $0 | ZeroToll pays: All gas</span>
                         </div>
                       </div>
                     </div>
-                    {pimlicoStatus && (
+                    {gaslessStatus && (
                       <div className="mt-2 p-2 bg-zt-aqua/10 rounded text-xs text-zt-aqua">
-                        {pimlicoStatus}
+                        {gaslessStatus}
                       </div>
                     )}
                   </div>
@@ -1342,7 +1338,7 @@ const Swap = () => {
           )}
 
           {/* Gas Payment Mode Selector - Only show in Relayer mode */}
-          {isGaslessMode && !isPimlicoGasless && (
+          {isGaslessMode && !isZeroTollGasless && (
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-3">
               Fee Payment Mode
@@ -1397,7 +1393,7 @@ const Swap = () => {
           )}
 
           {/* Fee Cap - Only show in Relayer mode */}
-          {isGaslessMode && !isPimlicoGasless && (
+          {isGaslessMode && !isZeroTollGasless && (
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-2">
               Max Fee Cap (
@@ -1421,7 +1417,7 @@ const Swap = () => {
           )}
 
           {/* Info Banners - Only show in Relayer mode with OUTPUT fee */}
-          {isGaslessMode && !isPimlicoGasless && feeMode === 'OUTPUT' && isNativeOutput && (
+          {isGaslessMode && !isZeroTollGasless && feeMode === 'OUTPUT' && isNativeOutput && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
               <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -1429,7 +1425,7 @@ const Swap = () => {
               </div>
             </div>
           )}
-          {isGaslessMode && !isPimlicoGasless && feeMode === 'OUTPUT' && !isNativeOutput && (
+          {isGaslessMode && !isZeroTollGasless && feeMode === 'OUTPUT' && !isNativeOutput && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
               <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -1437,7 +1433,7 @@ const Swap = () => {
               </div>
             </div>
           )}
-          {isGaslessMode && !isPimlicoGasless && feeMode === 'INPUT' && (
+          {isGaslessMode && !isZeroTollGasless && feeMode === 'INPUT' && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-violet/30">
               <Info className="w-5 h-5 text-zt-violet flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -1498,13 +1494,18 @@ const Swap = () => {
             />
           )}
 
-          {/* Success Message */}
-          {txHash && !isGaslessMode && (
+          {/* Success Message - Show for both traditional and ZeroToll gasless modes */}
+          {txHash && (
             <div className="mb-6 glass p-4 rounded-xl flex items-center gap-3 border border-green-500/30">
               <CheckCircle className="w-6 h-6 text-green-400 flex-shrink-0" />
               <div className="flex-1">
-                <p className="text-zt-paper font-semibold">Swap Submitted!</p>
+                <p className="text-zt-paper font-semibold">
+                  {isZeroTollGasless ? '⚡ Gasless Swap Submitted!' : 'Swap Submitted!'}
+                </p>
                 <p className="text-zt-paper/70 text-sm font-mono mb-2">{txHash.slice(0, 20)}...</p>
+                {gaslessStatus && (
+                  <p className="text-green-400 text-sm mb-2">{gaslessStatus}</p>
+                )}
                 {txHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
                   <div className="flex gap-2">
                     {/* Show only source chain explorer for same-chain swaps */}
@@ -1581,8 +1582,8 @@ const Swap = () => {
             </button>
             
             {/* Show Approve button if needed, otherwise Execute */}
-            {/* Skip approval for Pimlico gasless (uses ERC-2612 Permit) */}
-            {needsApproval && !tokenIn.isNative && !isPimlicoGasless ? (
+            {/* Skip approval for ZeroToll gasless (uses ERC-2612 Permit) */}
+            {needsApproval && !tokenIn.isNative && !isZeroTollGasless ? (
               <button
                 onClick={handleApprove}
                 disabled={approvalPending || loading}
@@ -1601,12 +1602,12 @@ const Swap = () => {
             ) : (
               <button
                 onClick={handleExecute}
-                disabled={(loading || gaslessSwap.isLoading || intentGasless.isLoading) || (!quote && !isPimlicoGasless) || (needsApproval && !tokenIn.isNative && !isGaslessMode && !isPimlicoGasless) || (fromChain.id !== toChain.id)}
+                disabled={(loading || gaslessSwap.isLoading || intentGasless.isLoading) || (!quote && !isZeroTollGasless) || (needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless) || (fromChain.id !== toChain.id)}
                 className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 data-testid="execute-swap-btn"
                 title={
                   fromChain.id !== toChain.id ? 'Cross-chain swaps not yet supported' :
-                  needsApproval && !tokenIn.isNative && !isGaslessMode && !isPimlicoGasless ? 'Please approve token first' : 
+                  needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless ? 'Please approve token first' : 
                   ''
                 }
               >
@@ -1614,8 +1615,8 @@ const Swap = () => {
                   <Loader2 className="inline w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    {(isGaslessMode || isPimlicoGasless) && <Zap className="w-4 h-4" />}
-                    {isPimlicoGasless ? '⚡ Execute Gasless (No Approval!)' : isGaslessMode ? 'Execute Gasless Swap' : 'Execute Swap'}
+                    {(isGaslessMode || isZeroTollGasless) && <Zap className="w-4 h-4" />}
+                    {isZeroTollGasless ? '⚡ Execute Gasless (No Approval!)' : isGaslessMode ? 'Execute Gasless Swap' : 'Execute Swap'}
                   </>
                 )}
               </button>
@@ -1634,8 +1635,8 @@ const Swap = () => {
             </div>
           )}
           
-          {/* Approval Info Banner - Don't show for Pimlico gasless (uses Permit) */}
-          {needsApproval && !tokenIn.isNative && !isPimlicoGasless && (
+          {/* Approval Info Banner - Don't show for ZeroToll gasless (uses Permit) */}
+          {needsApproval && !tokenIn.isNative && !isZeroTollGasless && (
             <div className="mt-4 glass p-4 rounded-xl flex items-start gap-3 border border-yellow-500/30">
               <Info className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">

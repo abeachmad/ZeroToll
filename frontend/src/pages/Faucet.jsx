@@ -321,7 +321,7 @@ const Faucet = () => {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-zt-aqua">🔄</span>
-                <span><strong>Gasless Swaps:</strong> Use with Pimlico mode for completely gasless trading</span>
+                <span><strong>Gasless Swaps:</strong> Use with ZeroToll gasless mode for completely gasless trading</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-zt-aqua">🧪</span>

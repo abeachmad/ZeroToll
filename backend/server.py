@@ -638,6 +638,59 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         logging.error(f"Execute request failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+class GaslessHistoryInput(BaseModel):
+    """Input model for gasless swap history from phase2-relayer"""
+    user: str
+    fromChain: str
+    toChain: str
+    tokenIn: str
+    tokenOut: str
+    amountIn: str
+    amountOut: str
+    feeMode: str = "GASLESS"
+    feePaid: str = "0"
+    feeToken: str = "SPONSORED"
+    status: str
+    txHash: Optional[str] = None
+    userOpHash: Optional[str] = None
+    explorerUrl: Optional[str] = None
+    sponsor: Optional[str] = None
+
+@api_router.post("/gasless-history")
+async def save_gasless_history(data: GaslessHistoryInput):
+    """Save gasless swap history from phase2-relayer"""
+    if db is None:
+        return {"success": False, "error": "MongoDB not available"}
+    
+    try:
+        history = SwapHistory(
+            user=data.user,
+            fromChain=data.fromChain,
+            toChain=data.toChain,
+            tokenIn=data.tokenIn,
+            tokenOut=data.tokenOut,
+            amountIn=data.amountIn,
+            amountOut=data.amountOut,
+            netOut=data.amountOut,
+            feeMode=data.feeMode,
+            feePaid=data.feePaid,
+            feeToken=data.feeToken,
+            refund="0",
+            status=data.status,
+            txHash=data.txHash or "",
+            explorerUrl=data.explorerUrl or ""
+        )
+        doc = history.model_dump()
+        doc['timestamp'] = doc['timestamp'].isoformat()
+        doc['userOpHash'] = data.userOpHash
+        doc['sponsor'] = data.sponsor
+        await db.swap_history.insert_one(doc)
+        logging.info(f"💾 Saved gasless swap history: {data.txHash}")
+        return {"success": True}
+    except Exception as e:
+        logging.error(f"Failed to save gasless history: {e}")
+        return {"success": False, "error": str(e)}
+
 @api_router.get("/history", response_model=List[SwapHistory])
 async def get_history(user: Optional[str] = None):
     if db is None:
