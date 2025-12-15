@@ -31,21 +31,6 @@ ZeroToll is a **gasless DEX** that eliminates gas friction in DeFi through **int
 4. Our **VerifyingPaymasterV07** sponsors ALL gas costs
 5. **RouterV3** executes swap and sends fee to Treasury
 
-```
-User (EOA)                    ZeroToll Relayer (port 3002)
-    |                                |
-    | 1. Sign Permit (ERC-2612)      |
-    | 2. Sign SwapIntent (EIP-712)   |
-    |------------------------------->|
-    |                                | 3. Calculate fee (2x gas)
-    |                                | 4. Build UserOperation
-    |                                | 5. Sign with VerifyingPaymasterV07
-    |                                | 6. RouterV3 executes + fee to Treasury
-    |<-------------------------------|
-    | Tokens swapped, $0 gas paid    |
-    | Small fee deducted from input  |
-```
-
 ---
 
 ## 💰 Economic Model
@@ -75,33 +60,15 @@ Monthly fee revenue:   $18,000
 Monthly profit:        $9,000
 ```
 
-### Phase 4 Fee Distribution (Planned)
-
-| Allocation | Percentage | Purpose |
-|------------|------------|---------|
-| LP Rewards | 80% | Community pool liquidity providers |
-| Operations | 15% | Infrastructure, development |
-| Reserve | 5% | Emergency fund |
-
 ---
 
 ## 🚀 Quick Start
-
-### Prerequisites
-
-- Node.js 18+
-- Python 3.10+
-- MongoDB 7.0+ (auto-started by script)
-- pnpm
-
-### Start All Services
 
 ```bash
 # Start everything (MongoDB + Backend + Relayer + Frontend)
 ./start-zerotoll.sh
 
-# Wait ~60 seconds for frontend compilation
-# Then open: http://localhost:3000
+# Open: http://localhost:3000
 
 # Stop everything
 ./stop-zerotoll.sh
@@ -113,56 +80,39 @@ Monthly profit:        $9,000
 |---------|------|-------------|
 | MongoDB | 27017 | Transaction history storage |
 | Python Backend | 8000 | API server, Pyth oracle quotes |
-| ZeroToll Relayer | 3002 | **Self-Hosted Paymaster** + fee calculation |
+| ZeroToll Relayer | 3002 | Self-Hosted Paymaster + fee calculation |
 | Frontend | 3000 | React app |
-
-### Get Testnet Tokens
-
-- **zTokens (for gasless)**: Use the in-app Faucet at `/faucet`
-- **Amoy POL**: https://faucet.polygon.technology
-- **Sepolia ETH**: https://sepoliafaucet.com
 
 ---
 
 ## 📊 Deployed Contracts
 
-### RouterV3 + Treasury (Fee System)
+### RouterV3 + Treasury
 
 | Network | RouterV3 | Treasury |
 |---------|----------|----------|
 | **Sepolia** | `0xB54e95a30E4Aa355380798313E0791833C7F0BFF` | `0xA5e89F1485D56fd5dfA20B6FDC9874B8bCF0bd10` |
 | **Amoy** | `0xD83D377E4698317731b2953854c01d39C60815d7` | `0xD6a7294445F34d0F7244b2072696106904ea807B` |
 
-### Self-Hosted Paymaster (VerifyingPaymasterV07)
+### Self-Hosted Paymaster
 
-| Network | Address | Explorer |
-|---------|---------|----------|
-| **Sepolia** | `0xaf7e002447b790f212ea435f9387509cd1ef0054` | [View](https://sepolia.etherscan.io/address/0xaf7e002447b790f212ea435f9387509cd1ef0054) |
-| **Amoy** | `0xaad1211a722ee04b6980724586b6b5b7b0c86fee` | [View](https://amoy.polygonscan.com/address/0xaad1211a722ee04b6980724586b6b5b7b0c86fee) |
-
-### Infrastructure
-
-| Component | Address |
-|-----------|---------|
-| EntryPoint v0.7 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-| Smart Account Factory | `0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985` |
-| Relayer EOA | `0xf304eeD846d82a91d688d1bC1A4fA692051d1D7A` |
-| Smart Account | `0x2caF80daf45581E017aaC929812b92Ad954Be2E8` |
+| Network | Address |
+|---------|---------|
+| **Sepolia** | `0xaf7e002447b790f212ea435f9387509cd1ef0054` |
+| **Amoy** | `0xaad1211a722ee04b6980724586b6b5b7b0c86fee` |
 
 ### zTokens (ERC-2612 Permit)
 
-| Token | Sepolia | Amoy | Decimals |
-|-------|---------|------|----------|
-| **zUSDC** | `0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C` | `0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD` | 6 |
-| **zETH** | `0x8153FA09Be1689D44C343f119C829F6702A8720b` | `0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9` | 18 |
-| **zPOL** | `0x63c31C4247f6AA40B676478226d6FEB5707649D6` | `0xB0A04aB21faAe4A5399938c07EDdfA0FB41d2B9d` | 18 |
-| **zLINK** | `0x4e2dbcCc07D8e5a8C9f420ea60d1e3aEc7B64D2C` | `0x51f6c79e5cA4ACF086d0954AfAAf5c72Be56CBb1` | 18 |
+| Token | Sepolia | Amoy |
+|-------|---------|------|
+| **zUSDC** | `0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C` | `0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD` |
+| **zETH** | `0x8153FA09Be1689D44C343f119C829F6702A8720b` | `0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9` |
+| **zPOL** | `0x63c31C4247f6AA40B676478226d6FEB5707649D6` | `0xB0A04aB21faAe4A5399938c07EDdfA0FB41d2B9d` |
+| **zLINK** | `0x4e2dbcCc07D8e5a8C9f420ea60d1e3aEc7B64D2C` | `0x51f6c79e5cA4ACF086d0954AfAAf5c72Be56CBb1` |
 
 ---
 
 ## ✅ Verified Gasless Transactions
-
-**Self-hosted paymaster with fee system working on both networks!**
 
 | Network | Transaction | Status |
 |---------|-------------|--------|
@@ -183,160 +133,70 @@ Monthly profit:        $9,000
 
 ### Phase 2: Self-Hosted Paymaster + Fee System ✅ COMPLETE
 - Deployed **VerifyingPaymasterV07** on both networks
-- Policy server for UserOp signing
-- **RouterV3** with fee support
-- **Treasury** contracts for fee collection
+- **RouterV3** with fee support + **Treasury** contracts
 - **2x gas cost** fee model (transparent, shown upfront)
 - **Pyth Oracle** for real-time price feeds
 - Full control over gas sponsorship (no third-party fees)
 
-### Phase 3: EIP-7702 Integration 🔵 P
+### Phase 3: EIP-7702 Integration 🔵 PLANNED
 
 **Goal**: Simpler gasless flow with EIP-7702 EOA delegation
 
-| A|
+| Aspect | Current (ERC-4337) | EIP-7702 |
 |--------|-------------------|----------|
-| Gas cost | ~300,000 | ~150,000 (50% savin
-| Infrastructure | Bundler + EntryPoint + Per |
-| User experience | "Upgrade to Smart Accoible |
+| Gas cost | ~300,000 | ~150,000 (50% savings) |
+| Infrastructure | Bundler + EntryPoint + Paymaster | Just relayer |
+| User experience | "Upgrade to Smart Account" | Invisible |
 | Native token output | Complex | Built-in |
 
 **Key Features**:
-- EOA temporarily delegates to ZeroTollDelt
+- EOA temporarily delegates to ZeroTollDelegate contract
 - No permanent smart account upgrade needed
 - Native token output (ERC20 → ETH/POL) built-in
 - 50% gas savings vs ERC-4337
 
-```
-User signs: 7702 auth + permit + intent (NOAS)
-     ↓
-t
-        ↓
-EOAet
-        ↓
-Fee deducted from it token
-```
+**Network Support**: ✅ Polygon Amoy, ✅ Ethereum Sepolia
 
-**Network Supportia
+📄 [Full Implementation Plan](./docs/EIP7702_IMPLEMENTATION_PLAN.md)
 
-d)
+### Phase 4: Community Pool 🔵 PLANNED
 
-NNED
+**Goal**: Fully decentralized, sustainable, community-owned paymaster
 
+| Allocation | Percentage | Purpose |
+|------------|------------|---------|
+| LP Rewards | 80% | Community pool liquidity providers |
+| Operations | 15% | Infrastructure, development |
+| Reserve | 5% | Emergency fund |
 
-
-
-┌─────────────────────┐
-│ Community Paymaster │
-├─────────────────────────────────────────┤
-│ 1. PaymasterVault (ERC-4626)           │
-│    - LPs deposit POL/ETH                │
-│    - Earn yield from swap fees          │
-│
-│ 2. Treasury         │
-     │
-│    - Distributes 80% to LP  │
-│                             │
-│ 3. GasRefiller (Automation)            │
-│    - Auto-refills paymaster deposit     │
-└─────────────────────────────────────────┘
-``
-
-)**:
-```
-
-Dai0
-Daily Fee0
-Monthly LP Rewards (80%): $1,440
-Annual APR: %
-```
+**LP Economics (Projected)**:
+- Pool Size: $10,000
+- Daily Fees: $60
+- Monthly LP Rewards (80%): $1,440
+- Annual APR: ~173%
 
 ---
 
-## 🏗️ Arure
-
-### Smart Contracts
-
-| Contract | Purpose |
-|----------|-
-| *|
-upport |
-| * |
-
-| **zTokens** |  |
-
-### Backend Services
-
-| Service | File | Purpose |
-|---------|------|---------|
-| API Server | `backend/server.py` | Quotes, histo
-| ZeroToll Relayer | `backlation |
-| Pyth Oracle | `backend/pyth_rest_oracle.py` feeds |
-
----
-
-## 📁 Project Structure
-
-```
-oll/
-├── packages/ctracts
-
-│   ├── server.py             # Python A
-│   ├── phase2-relayer.mjs    # Self-hosted paymastr
-│   └── pyth_rest_oracle.py   # Pyth price feeds
-├── frontend/                  # Reac
-├── docs/
-.md
-│  _PLAN.md
-
-├── start-zerervices
-s
-└── README.md
-
-
-
-
-
+## 🎨 Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-in v5.0 |
-| Blayer) |
-
+| Smart Contracts | Solidity 0.8.24, Hardhat, OpenZeppelin v5.0 |
+| Backend | FastAPI (Python), Node.js (Relayer) |
+| Frontend | React 18, Tailwind CSS, wagmi, viem |
 | Database | MongoDB 7.0 |
-s) |
+| Oracles | Pyth Network (real-time prices) |
 | Account Abstraction | ERC-4337, EIP-7702 (Phase 3) |
-me."*
-swap at a tiss e gasle, onryoneto evesible eFi acces D
-
-*"Makingn**ildathoygon Bue Pol❤️ for thith uilt w---
-
-**Betwork/
-
-yth.nttps://prk**: hetwo N
-- **Pyth.io/etherscan//sepolia.tps:lorer**: htlia Expthereum Sepo
-- **Em/copolygonscan.//amoy.*: https:er*plormoy Ex A
-- **Polygoninks
-
-
-## 🔗 Ls.
-
----e for detaililLICENSE) fNSE](./LICE - See [nseMIT Licee
-
-# 📜 Licens
-#on
+| Networks | Polygon Amoy, Ethereum Sepolia |
 
 ---
-tecti proand slippageion  validat
-- ✅ Inputnsfersen tra tokRC20 for all ✅ SafeE
--rr paymastefoidation valsigner ✅ Policy ions
-- ng functngil state-chayGuard on alncReentracts
-- ✅ ted contrae-tespelin battlep ✅ OpenZ
--
-# 🔒 Security
+
+## 📜 License
+
+MIT License
+
 ---
 
-#olia |
-ereum Sepoy, Eth Ams | Polygontwork
-| Nermit) |2 (PeC-261, ERpIntent)12 (Swares | EIP-7 Signatunly) |
-|structure oco (inframliler | Pi| Bund
+**Built with ❤️ for the Polygon Buildathon**
+
+*"Making DeFi accessible to everyone, one gasless swap at a time."*

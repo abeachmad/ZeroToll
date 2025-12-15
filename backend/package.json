@@ -1,12 +1,13 @@
 {
-  "name": "zerotoll-gasless-api",
-  "version": "1.0.0",
+  "name": "zerotoll-relayer",
+  "version": "2.0.0",
   "type": "module",
-  "description": "Gasless Transaction API using EIP-7702 and MetaMask Smart Accounts",
-  "main": "gasless_api.mjs",
+  "description": "ZeroToll Gasless Relayer - Self-Hosted Paymaster",
+  "main": "phase2-relayer.mjs",
   "scripts": {
-    "start": "node gasless_api.mjs",
-    "dev": "node --watch gasless_api.mjs"
+    "start": "node phase2-relayer.mjs",
+    "dev": "node --watch phase2-relayer.mjs",
+    "relayer": "node phase2-relayer.mjs"
   },
   "dependencies": {
     "@metamask/smart-accounts-kit": "^0.1.0",

@@ -886,7 +886,7 @@ app.get('/health', async (req, res) => {
 });
 
 // Initialize and start
-const PORT = process.env.PHASE2_RELAYER_PORT || 3002;
+const PORT = process.env.PORT || process.env.PHASE2_RELAYER_PORT || 3002;
 
 async function init() {
   console.log('\n' + '='.repeat(60));
