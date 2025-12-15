@@ -13,11 +13,11 @@
 
 ZeroToll is a **gasless DEX** that eliminates gas friction in DeFi through **intent-based signatures and self-hosted paymaster sponsorship**.
 
-### Phase 2B: Dynamic Fee System
+### Fee Model
 
 | Feature | Description |
 |---------|-------------|
-| **Fee Model** | 2x gas cost, paid from INPUT token |
+| **Fee** | 2x gas cost, paid from INPUT token |
 | **Transparency** | Fee shown upfront before swap |
 | **Treasury** | Fees collected for LP rewards (Phase 3) |
 | **Oracle** | Real-time Pyth Network prices |
@@ -45,6 +45,43 @@ User (EOA)                    ZeroToll Relayer (port 3002)
     | Tokens swapped, $0 gas paid    |
     | Small fee deducted from input  |
 ```
+
+---
+
+## � Ecocnomic Model
+
+### Why Self-Hosted Paymaster?
+
+| Approach | Cost per 1M Swaps | Control |
+|----------|-------------------|---------|
+| **Pimlico Paymaster** | ~$1,000 (vendor fees) | ❌ None |
+| **ZeroToll Self-Hosted** | ~$500 (gas only) | ✅ Full |
+| **Savings** | **50%** | - |
+
+### Fee Economics
+
+```
+Example: 10,000 gasless swaps/day @ $100 avg swap
+
+Gas cost per swap:     $0.003
+Fee collected (2x):    $0.006
+Daily gas cost:        $30
+Daily fee revenue:     $60
+Monthly profit:        $900
+
+At scale (100K swaps/day):
+Monthly gas cost:      $9,000
+Monthly fee revenue:   $18,000
+Monthly profit:        $9,000
+```
+
+### Phase 3 Fee Distribution (Planned)
+
+| Allocation | Percentage | Purpose |
+|------------|------------|---------|
+| LP Rewards | 80% | Community pool liquidity providers |
+| Operations | 15% | Infrastructure, development |
+| Reserve | 5% | Emergency fund |
 
 ---
 
@@ -77,7 +114,6 @@ User (EOA)                    ZeroToll Relayer (port 3002)
 | MongoDB | 27017 | Transaction history storage |
 | Python Backend | 8000 | API server, Pyth oracle quotes |
 | ZeroToll Relayer | 3002 | **Self-Hosted Paymaster** + fee calculation |
-| Delegation API | 3003 | Legacy delegation support |
 | Frontend | 3000 | React app |
 
 ### Get Testnet Tokens
@@ -88,7 +124,7 @@ User (EOA)                    ZeroToll Relayer (port 3002)
 
 ---
 
-## 📊 Deployed Contracts (Phase 2B)
+## 📊 Deployed Contracts
 
 ### RouterV3 + Treasury (Fee System)
 
@@ -112,8 +148,6 @@ User (EOA)                    ZeroToll Relayer (port 3002)
 | Smart Account Factory | `0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985` |
 | Relayer EOA | `0xf304eeD846d82a91d688d1bC1A4fA692051d1D7A` |
 | Smart Account | `0x2caF80daf45581E017aaC929812b92Ad954Be2E8` |
-| Deployer | `0x330A86eE67bA0Da0043EaD201866A32d362C394c` |
-| Bundler | `0xd4ab7c32fce0d28882052a83de467b9be2dbfc8e` |
 
 ### zTokens (ERC-2612 Permit)
 
@@ -128,7 +162,7 @@ User (EOA)                    ZeroToll Relayer (port 3002)
 
 ## ✅ Verified Gasless Transactions
 
-**Phase 2B with fee system working on both networks!**
+**Self-hosted paymaster with fee system working on both networks!**
 
 | Network | Transaction | Status |
 |---------|-------------|--------|
@@ -136,55 +170,54 @@ User (EOA)                    ZeroToll Relayer (port 3002)
 | **Sepolia** | [0x9ea3743d...](https://sepolia.etherscan.io/tx/0x9ea3743dd77cb83ec50ec23ba7faef56b7fd052931bee737d7b6bb16995d0ce8) | ✅ Success |
 
 **Gas spent by user: ZERO** - All gas sponsored by ZeroToll Paymaster!
-**Fee: ~$0.003** - 2x gas cost deducted from input token
 
 ---
 
 ## 🗺️ Development Phases
 
-### Phase 1: MVP with Pimlico ✅ COMPLETE
+### Phase 1: MVP ✅ COMPLETE
 - Intent-based gasless swaps (ERC-4337 + EIP-712 + ERC-2612)
 - Pimlico bundler + paymaster integration
 - zTokens with ERC-2612 Permit
 - Multi-chain support (Amoy + Sepolia)
 
-### Phase 2: Self-Hosted Paymaster ✅ COMPLETE
-- Deployed VerifyingPaymasterV07 on both networks
+### Phase 2: Self-Hosted Paymaster + Fee System ✅ COMPLETE
+- Deployed **VerifyingPaymasterV07** on both networks
 - Policy server for UserOp signing
-- Full control over gas sponsorship
-
-### Phase 2B: Dynamic Fee System ✅ COMPLETE
 - **RouterV3** with fee support
 - **Treasury** contracts for fee collection
 - **2x gas cost** fee model (transparent, shown upfront)
 - **Pyth Oracle** for real-time price feeds
-- Fee deducted from INPUT token (user-friendly)
+- Full control over gas sponsorship (no third-party fees)
 
 ### Phase 3: Community Pool 🔵 PLANNED
 
 **Goal**: Fully decentralized, sustainable, community-owned paymaster
 
-**Fee Distribution**:
-- 80% → LP Rewards (Community Pool)
-- 15% → Operations
-- 5% → Reserve
-
-**Architecture**:
 ```
 ┌─────────────────────────────────────────┐
 │ Community Paymaster Liquidity Pool      │
 ├─────────────────────────────────────────┤
 │ 1. PaymasterVault (ERC-4626)           │
 │    - LPs deposit POL/ETH                │
-│    - Earn yield from gas fees           │
+│    - Earn yield from swap fees          │
 │                                         │
 │ 2. Treasury                            │
-│    - Collects swap fees                 │
-│    - Distributes to LPs                 │
+│    - Collects swap fees (2x gas)        │
+│    - Distributes 80% to LPs             │
 │                                         │
 │ 3. GasRefiller (Automation)            │
 │    - Auto-refills paymaster deposit     │
 └─────────────────────────────────────────┘
+```
+
+**LP Economics (Projected)**:
+```
+Pool Size: $10,000
+Daily Swaps: 10,000
+Daily Fees: $60
+Monthly LP Rewards (80%): $1,440
+Annual APR: ~173%
 ```
 
 ---
@@ -198,7 +231,6 @@ User (EOA)                    ZeroToll Relayer (port 3002)
 | **VerifyingPaymasterV07** | Self-hosted paymaster for gas sponsorship |
 | **ZeroTollRouterV3** | Router with fee support |
 | **ZeroTollTreasury** | Fee collection for LP rewards |
-| **RouterHub** | Multi-DEX routing engine |
 | **zTokens** | ERC-2612 compliant test tokens |
 
 ### Backend Services
@@ -222,24 +254,12 @@ ZeroToll/
 │   └── pyth_rest_oracle.py   # Pyth price feeds
 ├── frontend/                  # React frontend
 ├── docs/
-│   ├── INFRASTRUCTURE_REPORT.md  # Current contract addresses
-│   ├── PHASE2_TECHNICAL_REPORT.md
-│   └── CURRENT_CONTRACTS.md
+│   ├── INFRASTRUCTURE_REPORT.md
+│   └── HOW_GASLESS_SWAPS_WORK.md
 ├── start-zerotoll.sh         # 🚀 Start all services
 ├── stop-zerotoll.sh          # 🛑 Stop all services
 └── README.md
 ```
-
----
-
-## 📖 Documentation
-
-| Document | Purpose |
-|----------|---------|
-| [docs/INFRASTRUCTURE_REPORT.md](./docs/INFRASTRUCTURE_REPORT.md) | Current infrastructure & balances |
-| [docs/PHASE2_TECHNICAL_REPORT.md](./docs/PHASE2_TECHNICAL_REPORT.md) | Phase 2 technical details |
-| [CREDENTIALS_SETUP.md](./CREDENTIALS_SETUP.md) | API keys and wallet setup |
-| [HOW_GASLESS_SWAPS_WORK.md](./HOW_GASLESS_SWAPS_WORK.md) | Technical deep-dive |
 
 ---
 
@@ -266,7 +286,6 @@ ZeroToll/
 - ✅ Policy signer validation for paymaster
 - ✅ SafeERC20 for all token transfers
 - ✅ Input validation and slippage protection
-- ✅ No Pimlico paymaster dependency (self-hosted)
 
 ---
 
