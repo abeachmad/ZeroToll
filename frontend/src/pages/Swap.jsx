@@ -109,6 +109,13 @@ const Swap = () => {
   // Check if current chain supports true gasless (Gnosis/Base only)
   const isGaslessChain = EIP7702_SUPPORTED_CHAINS.includes(chain?.id);
   
+  // Fetch fee estimate when ZeroToll gasless is enabled
+  useEffect(() => {
+    if (isZeroTollGasless && tokenIn?.address && intentGasless.getFeeEstimate) {
+      intentGasless.getFeeEstimate(tokenIn.address);
+    }
+  }, [isZeroTollGasless, tokenIn?.address, intentGasless.getFeeEstimate]);
+  
   // Approval state
   const [needsApproval, setNeedsApproval] = useState(false);
   const [approvalPending, setApprovalPending] = useState(false);
@@ -994,7 +1001,14 @@ const Swap = () => {
               {!isZeroTollGasless ? (
                 <span>💳 Traditional swap - you pay gas in native token (ETH/POL). Toggle above to enable gasless.</span>
               ) : (
-                <span className="text-green-400">⚡ ZeroToll Gasless active - our paymaster sponsors your gas. Best with zTokens (⚡). Click to disable.</span>
+                <div>
+                  <span className="text-green-400">⚡ ZeroToll Gasless active - our paymaster sponsors your gas. Best with zTokens (⚡).</span>
+                  {intentGasless.feeEstimate && (
+                    <span className="block mt-1 text-yellow-400">
+                      💰 Service fee: ~${intentGasless.feeEstimate.feeUSD?.toFixed(4)} ({intentGasless.feeEstimate.feeFormatted} {tokenIn?.symbol}) - 2x gas cost
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -1321,8 +1335,22 @@ const Swap = () => {
                           <li>2. Sign Swap Intent (authorizes swap - no gas)</li>
                           <li>3. ZeroToll executes on-chain (we pay gas!)</li>
                         </ul>
+                        {/* Fee Estimate Display */}
+                        {intentGasless.feeEstimate && (
+                          <div className="mt-2 p-2 bg-yellow-500/10 rounded border border-yellow-500/30">
+                            <div className="flex items-center justify-between">
+                              <span className="text-yellow-400 font-medium">Service Fee (2x gas):</span>
+                              <span className="text-zt-paper font-mono">
+                                ~${intentGasless.feeEstimate.feeUSD?.toFixed(4)} ({intentGasless.feeEstimate.feeFormatted} {tokenIn?.symbol})
+                              </span>
+                            </div>
+                            <div className="text-zt-paper/50 text-[10px] mt-1">
+                              Deducted from input • Supports LP rewards
+                            </div>
+                          </div>
+                        )}
                         <div className="mt-2 p-2 bg-green-500/10 rounded border border-green-500/30">
-                          <span className="text-green-400 font-medium">✅ You pay: $0 | ZeroToll pays: All gas</span>
+                          <span className="text-green-400 font-medium">✅ Gas: $0 | Fee: {intentGasless.feeEstimate ? `~$${intentGasless.feeEstimate.feeUSD?.toFixed(4)}` : 'calculating...'}</span>
                         </div>
                       </div>
                     </div>

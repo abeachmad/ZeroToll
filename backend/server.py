@@ -34,12 +34,16 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize MongoDB
     global client, db
     try:
-        mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+        # Support both MONGO_URL and MONGODB_URI for compatibility
+        mongo_url = os.environ.get('MONGO_URL') or os.environ.get('MONGODB_URI', 'mongodb://localhost:27017')
         client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
         db = client[os.environ.get('DB_NAME', 'zerotoll')]
+        # Test connection
+        await client.admin.command('ping')
         logger.info("MongoDB connected successfully")
     except Exception as e:
         logger.warning(f"MongoDB connection failed: {e}")
+        logger.warning("History will not be saved. Install MongoDB or set MONGO_URL/MONGODB_URI")
         client = None
         db = None
     
@@ -160,7 +164,7 @@ class SwapHistory(BaseModel):
     feePaid: str
     feeToken: str
     refund: str
-    oracleSource: str             # Pyth, TWAP, Chainlink
+    oracleSource: str = "Pyth"    # Pyth, TWAP, Chainlink (default Pyth for gasless)
     priceAge: Optional[int] = None
     status: str
     txHash: Optional[str] = None

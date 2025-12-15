@@ -1,7 +1,7 @@
 #!/bin/bash
 
-echo "🛑 Stopping ZeroToll"
-echo "===================="
+echo "🛑 Stopping ZeroToll (Phase 2B)"
+echo "================================"
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -71,6 +71,23 @@ pkill -f "craco start" 2>/dev/null
 pkill -f "node.*frontend" 2>/dev/null
 pkill -f "node.*react" 2>/dev/null
 
+# Stop MongoDB (optional - keeps data for next start)
+echo ""
+echo "🗄️  Stopping MongoDB..."
+if pgrep -x mongod > /dev/null 2>&1; then
+    # Graceful shutdown
+    mongod --shutdown --dbpath "$HOME/mongodb-data" 2>/dev/null
+    if [ $? -eq 0 ]; then
+        echo "   ✅ MongoDB stopped gracefully"
+    else
+        # Force kill if graceful shutdown fails
+        pkill -x mongod 2>/dev/null
+        echo "   ✅ MongoDB stopped (forced)"
+    fi
+else
+    echo "   ℹ️  MongoDB not running"
+fi
+
 # Force kill ports if still in use
 sleep 1
 echo ""
@@ -107,4 +124,11 @@ echo "============================================"
 echo ""
 echo "📄 Logs preserved in: $SCRIPT_DIR/.pids/"
 echo "🚀 Restart: ./start-zerotoll.sh"
+echo ""
+echo "💡 Phase 2B Info:"
+echo "   • Treasury (Amoy): 0xD6a7294445F34d0F7244b2072696106904ea807B"
+echo "   • RouterV3 (Amoy): 0xD83D377E4698317731b2953854c01d39C60815d7"
+echo "   • Fee: 2x gas cost from input token"
+echo ""
+echo "🗄️  MongoDB data preserved in: ~/mongodb-data"
 echo ""

@@ -14,7 +14,7 @@ async function main() {
   // RouterV3 addresses
   const routerV3Addresses = {
     80002: "0xD83D377E4698317731b2953854c01d39C60815d7",
-    11155111: null // TBD
+    11155111: "0xB54e95a30E4Aa355380798313E0791833C7F0BFF"
   };
   
   // zToken addresses

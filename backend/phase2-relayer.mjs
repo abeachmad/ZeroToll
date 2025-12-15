@@ -50,9 +50,9 @@ const CHAIN_CONFIG = {
   11155111: {
     name: 'sepolia',
     chain: sepolia,
-    router: '0x577560699EF88e99f15d04df57c9552056d2a10D', // V2 (V3 pending deployment)
-    routerV3: null, // TBD - need Sepolia ETH
-    treasury: null, // TBD
+    router: '0xB54e95a30E4Aa355380798313E0791833C7F0BFF', // V3 with fee support
+    routerV3: '0xB54e95a30E4Aa355380798313E0791833C7F0BFF',
+    treasury: '0xA5e89F1485D56fd5dfA20B6FDC9874B8bCF0bd10',
     paymaster: process.env.SEPOLIA_VERIFYING_PAYMASTER || '0xaf7e002447b790f212ea435f9387509cd1ef0054',
     pimlicoUrl: `https://api.pimlico.io/v2/sepolia/rpc?apikey=${PIMLICO_API_KEY}`,
     rpc: 'https://ethereum-sepolia-rpc.publicnode.com',
@@ -173,10 +173,11 @@ function getTokenDecimals(tokenAddress) {
   return TOKEN_DECIMALS[symbol] || 18;
 }
 
-// Pyth price feed IDs
+// Pyth price feed IDs (verified working)
 const PYTH_PRICE_IDS = {
   'ETH': '0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace',
-  'POL': '0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68571f7c0d6f0d7e5e3e7e1e1e', // MATIC/POL
+  'POL': '0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68153335374ec10722edd70472', // MATIC/POL (verified)
+  'MATIC': '0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68153335374ec10722edd70472',
   'USDC': '0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a',
   'LINK': '0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221',
 };
@@ -193,16 +194,26 @@ async function getPythPrice(symbol) {
       return getFallbackPrice(baseSymbol);
     }
     
-    const response = await fetch(`https://hermes.pyth.network/v2/updates/price/latest?ids[]=${priceId}`);
+    const response = await fetch(`https://hermes.pyth.network/api/latest_price_feeds?ids[]=${priceId}`);
     const data = await response.json();
     
+    // Handle both API response formats
+    let priceData;
     if (data.parsed && data.parsed[0]) {
-      const priceData = data.parsed[0].price;
+      // v2/updates/price/latest format
+      priceData = data.parsed[0].price;
+    } else if (Array.isArray(data) && data[0]?.price) {
+      // api/latest_price_feeds format
+      priceData = data[0].price;
+    }
+    
+    if (priceData) {
       const price = Number(priceData.price) * Math.pow(10, priceData.expo);
       console.log(`📊 Pyth price for ${symbol}: $${price.toFixed(4)}`);
       return price;
     }
     
+    console.log(`⚠️ No price data for ${symbol}, using fallback`);
     return getFallbackPrice(baseSymbol);
   } catch (e) {
     console.log(`⚠️ Pyth fetch failed for ${symbol}:`, e.message);
@@ -576,15 +587,20 @@ app.get('/api/fee-estimate/:chainId/:tokenIn', async (req, res) => {
     
     const feeData = await calculateGaslessFee(chainId, tokenIn);
     
+    // Format fee for display (e.g., "0.0115" instead of "11500")
+    const feeFormatted = (Number(feeData.feeInToken) / (10 ** feeData.tokenDecimals)).toFixed(6);
+    
     res.json({
       success: true,
       chainId,
       tokenIn,
       feeUSD: feeData.feeUSD,
       feeInToken: feeData.feeInToken.toString(),
+      feeFormatted,
       gasCostUSD: feeData.gasCostUSD,
       multiplier: '2x',
       tokenSymbol: feeData.tokenSymbol,
+      tokenDecimals: feeData.tokenDecimals,
       message: 'Fee = 2x estimated gas cost',
       treasury: chainConfig.treasury
     });

@@ -31,6 +31,33 @@ rm -f "$SCRIPT_DIR/.pids"/*.log 2>/dev/null
 # Fix line endings
 sed -i 's/\r$//' "$SCRIPT_DIR/backend/.env" 2>/dev/null
 
+# Start MongoDB (for history storage)
+echo ""
+echo "🗄️  Starting MongoDB..."
+MONGO_DATA_DIR="$HOME/mongodb-data"
+mkdir -p "$MONGO_DATA_DIR"
+
+# Check if MongoDB is already running
+if pgrep -x mongod > /dev/null 2>&1; then
+    echo "   ✅ MongoDB already running"
+else
+    # Clean up stale socket file if exists
+    sudo rm -f /tmp/mongodb-27017.sock 2>/dev/null
+    
+    # Start MongoDB
+    if command -v mongod &> /dev/null; then
+        mongod --dbpath "$MONGO_DATA_DIR" --fork --logpath "$MONGO_DATA_DIR/mongod.log" > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "   ✅ MongoDB started (data: $MONGO_DATA_DIR)"
+        else
+            echo "   ⚠️  MongoDB failed to start - history won't be saved"
+        fi
+    else
+        echo "   ⚠️  MongoDB not installed - history won't be saved"
+        echo "      Install: sudo apt install mongodb-org"
+    fi
+fi
+
 # Check .env files
 echo ""
 echo "🔍 Checking environment..."
@@ -175,7 +202,7 @@ done
 
 echo ""
 echo "============================================================="
-echo "✅ ZeroToll Started! (Self-Hosted Paymaster)"
+echo "✅ ZeroToll Started! (Phase 2B - Fee System Active)"
 echo "============================================================="
 echo ""
 echo "📊 Services:"
@@ -188,15 +215,24 @@ echo "💎 Self-Hosted Paymasters (VerifyingPaymasterV07):"
 echo "   • Sepolia:  0xaf7e002447b790f212ea435f9387509cd1ef0054"
 echo "   • Amoy:     0xaad1211a722ee04b6980724586b6b5b7b0c86fee"
 echo ""
+echo "💰 Phase 2B Fee System (Amoy):"
+echo "   • Treasury:   0xD6a7294445F34d0F7244b2072696106904ea807B"
+echo "   • RouterV3:   0xD83D377E4698317731b2953854c01d39C60815d7"
+echo "   • Fee:        2x gas cost (dynamic, from input token)"
+echo "   • Split:      80% LP rewards | 15% Ops | 5% Reserve"
+echo ""
 echo "📝 Contracts (Sepolia - chainId 11155111):"
-echo "   • Router:     0x577560699EF88e99f15d04df57c9552056d2a10D"
+echo "   • RouterV3:   0xB54e95a30E4Aa355380798313E0791833C7F0BFF (with fee)"
+echo "   • Treasury:   0xA5e89F1485D56fd5dfA20B6FDC9874B8bCF0bd10"
 echo "   • zUSDC:      0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C"
 echo "   • zETH:       0x8153FA09Be1689D44C343f119C829F6702A8720b"
 echo "   • zPOL:       0x63c31C4247f6AA40B676478226d6FEB5707649D6"
 echo "   • zLINK:      0x4e2dbcCc07D8e5a8C9f420ea60d1e3aEc7B64D2C"
 echo ""
 echo "📝 Contracts (Polygon Amoy - chainId 80002):"
-echo "   • Router:     0xc75df1943d6EFE04b422b9bB45509782609Fc67a"
+echo "   • RouterV2:   0xc75df1943d6EFE04b422b9bB45509782609Fc67a"
+echo "   • RouterV3:   0xD83D377E4698317731b2953854c01d39C60815d7 (with fee)"
+echo "   • Treasury:   0xD6a7294445F34d0F7244b2072696106904ea807B"
 echo "   • zUSDC:      0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD"
 echo "   • zETH:       0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9"
 echo "   • zPOL:       0xB0A04aB21faAe4A5399938c07EDdfA0FB41d2B9d"
@@ -213,7 +249,13 @@ echo "   1. Open http://localhost:3000/swap"
 echo "   2. Connect MetaMask (Sepolia or Polygon Amoy)"
 echo "   3. Select zUSDC, zETH, zPOL, or zLINK token"
 echo "   4. Enable 'ZeroToll Gasless' toggle"
-echo "   5. Execute swap - YOU PAY \$0 IN GAS!"
+echo "   5. Execute swap - Gas: \$0 | Fee: ~2x gas cost"
+echo ""
+echo "💰 Fee Info:"
+echo "   • Fee = 2x estimated gas cost (dynamic)"
+echo "   • Deducted from INPUT token before swap"
+echo "   • Sent to Treasury for LP rewards (Phase 3)"
+echo "   • Example: ~\$0.01 for zUSDC swap on Amoy"
 echo ""
 echo "🚰 Get Test Tokens (call faucet() on any zToken):"
 echo "   Sepolia: 0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C (zUSDC)"

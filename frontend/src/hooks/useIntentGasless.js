@@ -16,10 +16,10 @@ import { useAccount, useChainId, useWalletClient } from 'wagmi';
 // This is the ONLY relayer we use - no Pimlico fallback
 const RELAYER_URL = process.env.REACT_APP_RELAYER_URL || 'http://localhost:3002';
 
-// ZeroToll Router addresses per chain (ZeroTollRouterV2)
+// ZeroToll Router addresses per chain (RouterV3 with fee support)
 const ZEROTOLL_ROUTERS = {
-  11155111: '0x577560699EF88e99f15d04df57c9552056d2a10D', // Sepolia (decimal fix)
-  80002: '0xc75df1943d6EFE04b422b9bB45509782609Fc67a', // Amoy (decimal fix)
+  11155111: '0xB54e95a30E4Aa355380798313E0791833C7F0BFF', // Sepolia RouterV3 (with fee)
+  80002: '0xD83D377E4698317731b2953854c01d39C60815d7', // Amoy RouterV3 (with fee)
 };
 
 // Permit2 contract address (same on all chains)
@@ -87,11 +87,28 @@ export function useIntentGasless() {
   const [config, setConfig] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [feeEstimate, setFeeEstimate] = useState(null);
 
   // Check if current chain supports intent gasless
   const isSupported = chainId && ZEROTOLL_ROUTERS[chainId];
   const routerAddress = ZEROTOLL_ROUTERS[chainId];
 
+  // Fetch fee estimate for a token
+  const getFeeEstimate = useCallback(async (tokenAddress) => {
+    if (!chainId || !tokenAddress) return null;
+    try {
+      const res = await fetch(`${RELAYER_URL}/api/fee-estimate/${chainId}/${tokenAddress}`);
+      if (res.ok) {
+        const data = await res.json();
+        console.log('💰 Fee estimate:', data);
+        setFeeEstimate(data);
+        return data;
+      }
+    } catch (e) {
+      console.log('Fee estimate failed:', e.message);
+    }
+    return null;
+  }, [chainId]);
 
   // Fetch config from relayer
   useEffect(() => {
@@ -576,6 +593,7 @@ export function useIntentGasless() {
     config,
     isLoading,
     error,
+    feeEstimate,         // Fee estimate data from relayer
     
     // Checks
     isSupported,
@@ -592,6 +610,7 @@ export function useIntentGasless() {
     getTokenBalance,
     getPermit2Allowance,    // New: check Permit2 allowance
     claimFaucet,
+    getFeeEstimate,      // Get fee estimate for a token
     
     // Constants
     gaslessTokens: GASLESS_TOKENS[chainId] || {},
