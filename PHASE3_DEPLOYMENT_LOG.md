@@ -107,25 +107,29 @@ node backend/eip7702-relayer.mjs nonce 11155111 0xYOUR_ADDRESS
 
 | Item | Value |
 |------|-------|
-| ZeroTollDelegate | ⏳ Pending |
-| Domain Separator | ⏳ Pending |
-| Transaction Hash | ⏳ Pending |
-| Block Number | ⏳ Pending |
-| Gas Used | ⏳ Pending |
-| Verification | ⏳ Pending |
-| Explorer URL | ⏳ Pending |
+| ZeroTollDelegate | ✅ `0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C` |
+| Domain Separator | ✅ `0x6a47786451062199a7a39c90fdae0216f4020193c1f5fc9f47c462c4645f5cba` |
+| Transaction Hash | ✅ Confirmed |
+| Block Number | ✅ Confirmed |
+| Gas Used | ✅ Deployed successfully |
+| Verification | ⚠️ Manual verification needed (API key not configured) |
+| Explorer URL | https://amoy.polygonscan.com/address/0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C |
 
 ### Ethereum Sepolia (Chain ID: 11155111)
 
 | Item | Value |
 |------|-------|
-| ZeroTollDelegate | ⏳ Pending |
+| ZeroTollDelegate | ⏳ Pending (insufficient funds) |
 | Domain Separator | ⏳ Pending |
 | Transaction Hash | ⏳ Pending |
 | Block Number | ⏳ Pending |
 | Gas Used | ⏳ Pending |
 | Verification | ⏳ Pending |
 | Explorer URL | ⏳ Pending |
+
+**Note**: Sepolia deployment needs ~0.0025 ETH for gas. Get testnet ETH from:
+- https://sepoliafaucet.com/
+- https://www.alchemy.com/faucets/ethereum-sepolia
 
 ---
 

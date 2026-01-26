@@ -22,8 +22,8 @@ dotenv.config();
 const RELAYER_PRIVATE_KEY = process.env.RELAYER_PRIVATE_KEY;
 
 const DELEGATE_ADDRESS = {
-  80002: '0x...', // Amoy - Update after deployment
-  11155111: '0x...' // Sepolia - Update after deployment
+  80002: '0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C', // Amoy - Deployed!
+  11155111: '0x...' // Sepolia - Pending (need testnet ETH)
 };
 
 const RPC_URL = {
