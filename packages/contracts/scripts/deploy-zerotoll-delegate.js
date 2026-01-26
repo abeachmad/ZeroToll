@@ -21,13 +21,14 @@ const ADDRESSES = {
 
 async function main() {
   const [deployer] = await hre.ethers.getSigners();
-  const chainId = await deployer.getChainId();
+  const network = await hre.ethers.provider.getNetwork();
+  const chainId = Number(network.chainId);
   
   console.log("\n=== Deploying ZeroTollDelegate ===");
   console.log("Network:", hre.network.name);
   console.log("Chain ID:", chainId);
   console.log("Deployer:", deployer.address);
-  console.log("Balance:", hre.ethers.utils.formatEther(await deployer.getBalance()), "ETH");
+  console.log("Balance:", hre.ethers.formatEther(await hre.ethers.provider.getBalance(deployer.address)), "ETH");
   
   // Get addresses for this network
   const addresses = ADDRESSES[chainId];
@@ -49,14 +50,16 @@ async function main() {
     addresses.weth
   );
   
-  await delegate.deployed();
-  console.log("✅ ZeroTollDelegate deployed to:", delegate.address);
+  await delegate.waitForDeployment();
+  const delegateAddress = await delegate.getAddress();
+  console.log("✅ ZeroTollDelegate deployed to:", delegateAddress);
   
   // Verify domain separator
   const domainSeparator = await delegate.DOMAIN_SEPARATOR();
   console.log("Domain Separator:", domainSeparator);
   
   // Save deployment info
+  const deploymentTx = delegate.deploymentTransaction();
   const deploymentInfo = {
     network: hre.network.name,
     chainId: chainId,
@@ -64,15 +67,15 @@ async function main() {
     deployer: deployer.address,
     contracts: {
       ZeroTollDelegate: {
-        address: delegate.address,
+        address: delegateAddress,
         router: addresses.router,
         treasury: addresses.treasury,
         weth: addresses.weth,
         domainSeparator: domainSeparator
       }
     },
-    transactionHash: delegate.deployTransaction.hash,
-    blockNumber: delegate.deployTransaction.blockNumber
+    transactionHash: deploymentTx ? deploymentTx.hash : null,
+    blockNumber: deploymentTx ? deploymentTx.blockNumber : null
   };
   
   const deploymentsDir = path.join(__dirname, "../deployments");
@@ -87,14 +90,16 @@ async function main() {
   
   // Wait for confirmations before verification
   console.log("\nWaiting for 5 confirmations...");
-  await delegate.deployTransaction.wait(5);
+  if (deploymentTx) {
+    await deploymentTx.wait(5);
+  }
   
   // Verify on Etherscan/Polygonscan
   if (hre.network.name !== "hardhat" && hre.network.name !== "localhost") {
     console.log("\nVerifying contract on block explorer...");
     try {
       await hre.run("verify:verify", {
-        address: delegate.address,
+        address: delegateAddress,
         constructorArguments: [
           addresses.router,
           addresses.treasury,
@@ -108,7 +113,7 @@ async function main() {
   }
   
   console.log("\n=== Deployment Complete ===");
-  console.log("ZeroTollDelegate:", delegate.address);
+  console.log("ZeroTollDelegate:", delegateAddress);
   console.log("\nNext steps:");
   console.log("1. Update frontend config with delegate address");
   console.log("2. Update relayer with EIP-7702 support");
