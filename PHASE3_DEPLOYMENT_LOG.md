@@ -119,17 +119,13 @@ node backend/eip7702-relayer.mjs nonce 11155111 0xYOUR_ADDRESS
 
 | Item | Value |
 |------|-------|
-| ZeroTollDelegate | ⏳ Pending (insufficient funds) |
-| Domain Separator | ⏳ Pending |
-| Transaction Hash | ⏳ Pending |
-| Block Number | ⏳ Pending |
-| Gas Used | ⏳ Pending |
-| Verification | ⏳ Pending |
-| Explorer URL | ⏳ Pending |
-
-**Note**: Sepolia deployment needs ~0.0025 ETH for gas. Get testnet ETH from:
-- https://sepoliafaucet.com/
-- https://www.alchemy.com/faucets/ethereum-sepolia
+| ZeroTollDelegate | ✅ `0xcFE005B2E0013e0FF8cB0569d9b103094d423B36` |
+| Domain Separator | ✅ `0xa408ae54a055adad6f41653829d35572b90f64e7c45b9f9c3d3ad39a1903b93e` |
+| Transaction Hash | ✅ Confirmed |
+| Block Number | ✅ Confirmed |
+| Gas Used | ✅ Deployed successfully |
+| Verification | ⚠️ Manual verification needed (API key not configured) |
+| Explorer URL | https://sepolia.etherscan.io/address/0xcFE005B2E0013e0FF8cB0569d9b103094d423B36 |
 
 ---
 

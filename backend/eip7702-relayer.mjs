@@ -23,7 +23,7 @@ const RELAYER_PRIVATE_KEY = process.env.RELAYER_PRIVATE_KEY;
 
 const DELEGATE_ADDRESS = {
   80002: '0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C', // Amoy - Deployed!
-  11155111: '0x...' // Sepolia - Pending (need testnet ETH)
+  11155111: '0xcFE005B2E0013e0FF8cB0569d9b103094d423B36' // Sepolia - Deployed!
 };
 
 const RPC_URL = {
