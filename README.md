@@ -177,6 +177,34 @@ Monthly profit:        $9,000
 
 ---
 
+## 🔒 Security & Trust Model
+
+### On-Chain Security Guarantees
+
+| Protection | Implementation |
+|------------|----------------|
+| **Fee Cap** | Maximum 1% of swap amount (enforced in RouterV3) |
+| **Slippage Protection** | `minAmountOut` verified on-chain |
+| **No Replay Attacks** | Nonce + deadline in signed intent |
+| **Intent Integrity** | EIP-712 signature verification |
+
+### What Relayer CANNOT Do
+
+- ❌ Steal user funds (signature verification)
+- ❌ Charge excessive fees (1% cap in contract)
+- ❌ Execute at worse price (minAmountOut protection)
+- ❌ Modify intent (signature invalidation)
+- ❌ Replay transactions (nonce protection)
+
+### What Relayer CAN Do
+
+- ✅ Choose not to execute (liveness, not security)
+- ✅ See intent before execution (Phase 3 fixes this)
+
+📄 [Full Trust Model & Security Analysis](./docs/TRUST_MODEL.md)
+
+---
+
 ## 🎨 Tech Stack
 
 | Layer | Technology |
