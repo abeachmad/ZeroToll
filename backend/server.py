@@ -18,6 +18,7 @@ from route_client import get_best_route_for_intent
 from web3_tx_builder import execute_intent_on_chain
 from token_registry import get_token_address, address_to_symbol
 from pyth_rest_oracle import pyth_oracle  # NEW: LIVE prices from Pyth REST API (off-chain)
+from routes.eip7702 import router as eip7702_router  # EIP-7702 integration
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -799,6 +800,7 @@ async def get_oracle_health():
         }
 
 app.include_router(api_router)
+app.include_router(eip7702_router, prefix="/api")  # EIP-7702 routes
 
 logging.basicConfig(
     level=logging.INFO,
