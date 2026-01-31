@@ -78,30 +78,64 @@
 
 ## 🚀 How to Continue
 
-### Option 1: End-to-End Testing (Recommended)
+### Option 1: Automated Testing (Recommended) ✨ NEW!
+
+**Goal**: Run automated backend tests to verify 50% gas savings
+
+**Command**:
+```bash
+./start-zerotoll.sh --test
+```
+
+This will:
+- Start all services (MongoDB, Backend, Relayer, Frontend)
+- Wait for services to stabilize
+- Automatically run 7 EIP-7702 backend tests
+- Show results with 50% gas savings confirmation
+
+**Expected Output:**
+```
+TEST 1: Info Endpoint ✅
+TEST 2: Health Check (Amoy) ✅
+TEST 3: Health Check (Sepolia) ✅
+TEST 4: Nonce (Amoy) ✅
+TEST 5: Nonce (Sepolia) ✅
+TEST 6: Quote (Amoy) ✅ - 50% gas savings confirmed!
+TEST 7: Quote (Sepolia) ✅ - 50% gas savings confirmed!
+
+Passed: 7/7
+🎉 ALL TESTS PASSED!
+```
+
+### Option 2: Manual Testing
+
+**Start services without tests:**
+```bash
+./start-zerotoll.sh
+```
+
+**Run tests manually:**
+```bash
+cd backend
+python3 test_eip7702.py
+```
+
+**Stop services:**
+```bash
+./stop-zerotoll.sh
+```
+
+### Option 3: End-to-End Testing (Week 3)
 
 **Goal**: Test actual swaps on testnet and measure real gas usage
 
 **Steps**:
 1. Fund test wallet with testnet tokens
-2. Start backend server
-3. Start frontend
+2. Start services: `./start-zerotoll.sh`
+3. Open browser: `http://localhost:3000`
 4. Execute test swaps
 5. Measure gas usage
 6. Document results
-
-**Command**:
-```bash
-# Terminal 1: Backend
-cd ~/ZeroToll/backend
-uvicorn server:app --host 0.0.0.0 --port 3002 --reload
-
-# Terminal 2: Frontend
-cd ~/ZeroToll/frontend
-npm start
-
-# Browser: http://localhost:3000
-```
 
 ### Option 2: Documentation & Demo (Week 4)
 
@@ -179,21 +213,31 @@ npm start
 
 ## 💡 Quick Commands
 
-### Test Backend
+### Start with Automated Testing ✨ NEW!
 ```bash
-cd ~/ZeroToll/backend
+./start-zerotoll.sh --test
+```
+
+### Start Without Testing
+```bash
+./start-zerotoll.sh
+```
+
+### Stop All Services
+```bash
+./stop-zerotoll.sh
+```
+
+### Manual Test Backend
+```bash
+cd backend
 python3 test_eip7702.py
 ```
 
-### Start Services
+### View Logs
 ```bash
-# Backend
-cd ~/ZeroToll/backend
-uvicorn server:app --host 0.0.0.0 --port 3002 --reload
-
-# Frontend
-cd ~/ZeroToll/frontend
-npm start
+tail -f .pids/backend.log
+tail -f .pids/relayer.log
 ```
 
 ### Check Git Status
