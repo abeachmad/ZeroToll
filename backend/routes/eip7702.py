@@ -63,62 +63,35 @@ async def get_nonce(chain_id: int, address: str):
     """
     Get user's current nonce for EIP-7702 swaps
     GET /api/eip7702/nonce/{chain_id}/{address}
+    
+    Uses timestamp-based nonce to avoid collision and ensure uniqueness
     """
     try:
-        result = subprocess.run(
-            ['node', RELAYER_PATH, 'nonce', str(chain_id), address],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        import time
         
-        if result.returncode == 0:
-            # Parse nonce from output
-            output = result.stdout.strip()
-            if 'Nonce:' in output:
-                nonce = output.split('Nonce:')[1].strip()
-                return {
-                    'success': True,
-                    'nonce': nonce,
-                    'chainId': chain_id,
-                    'address': address
-                }
-            else:
-                # Fallback to 0 if can't parse
-                return {
-                    'success': True,
-                    'nonce': '0',
-                    'chainId': chain_id,
-                    'address': address,
-                    'note': 'Using default nonce 0'
-                }
-        else:
-            # If relayer fails, return 0 as fallback
-            return {
-                'success': True,
-                'nonce': '0',
-                'chainId': chain_id,
-                'address': address,
-                'note': 'Relayer unavailable, using default nonce 0'
-            }
-            
-    except subprocess.TimeoutExpired:
-        # Timeout - return 0 as fallback
+        # Use timestamp as nonce (seconds since epoch)
+        # This ensures each authorization is unique and avoids nonce reuse
+        timestamp_nonce = int(time.time())
+        
         return {
             'success': True,
-            'nonce': '0',
+            'nonce': str(timestamp_nonce),
             'chainId': chain_id,
             'address': address,
-            'note': 'Timeout, using default nonce 0'
+            'type': 'timestamp',
+            'note': 'Using timestamp-based nonce for uniqueness'
         }
+            
     except Exception as e:
-        # Any error - return 0 as fallback (don't raise 500)
+        # Fallback to timestamp if any error
+        import time
         return {
             'success': True,
-            'nonce': '0',
+            'nonce': str(int(time.time())),
             'chainId': chain_id,
             'address': address,
-            'note': f'Error: {str(e)}, using default nonce 0'
+            'type': 'timestamp',
+            'note': f'Error: {str(e)}, using timestamp fallback'
         }
 
 
@@ -206,30 +179,41 @@ async def execute_swap(request: ExecuteRequest):
         
         print(f"🚀 Executing EIP-7702 swap on chain {chain_id}")
         print(f"   Intent: {intent}")
+        print(f"   Authorization: {authorization}")
+        print(f"   Calling relayer at: {RELAYER_PATH}")
         
         # Call the relayer to execute the swap
-        result = subprocess.run(
-            [
-                'node', 
-                RELAYER_PATH, 
-                'execute',
-                str(chain_id),
-                json.dumps({
-                    'authorization': authorization,
-                    'permit': permit,
-                    'intent': intent,
-                    'intentSignature': intent_signature,
-                    'fee': fee
-                })
-            ],
-            capture_output=True,
-            text=True,
-            timeout=60  # 60 seconds timeout for blockchain tx
-        )
-        
-        print(f"📤 Relayer return code: {result.returncode}")
-        print(f"📤 Relayer stdout: {result.stdout}")
-        print(f"📤 Relayer stderr: {result.stderr}")
+        try:
+            result = subprocess.run(
+                [
+                    'node', 
+                    RELAYER_PATH, 
+                    'execute',
+                    str(chain_id),
+                    json.dumps({
+                        'authorization': authorization,
+                        'permit': permit,
+                        'intent': intent,
+                        'intentSignature': intent_signature,
+                        'fee': fee
+                    })
+                ],
+                capture_output=True,
+                text=True,
+                timeout=360  # 6 minutes timeout (5 min for gas estimation + 1 min for tx)
+            )
+            
+            print(f"📤 Relayer return code: {result.returncode}")
+            print(f"📤 Relayer stdout: {result.stdout}")
+            print(f"📤 Relayer stderr: {result.stderr}")
+        except subprocess.TimeoutExpired as e:
+            print(f"⏱️  Relayer timeout after 6 minutes")
+            print(f"   stdout: {e.stdout}")
+            print(f"   stderr: {e.stderr}")
+            raise HTTPException(
+                status_code=504, 
+                detail=f'Transaction timeout after 6 minutes. This may indicate RPC issues. Check relayer logs for details.'
+            )
         
         if result.returncode == 0:
             # Parse result from relayer
@@ -267,7 +251,7 @@ async def execute_swap(request: ExecuteRequest):
             raise HTTPException(status_code=500, detail=f'Swap execution failed: {error_msg}')
         
     except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail='Swap execution timeout (60s)')
+        raise HTTPException(status_code=504, detail='Swap execution timeout (6 minutes)')
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

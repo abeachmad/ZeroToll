@@ -318,8 +318,8 @@ class Web3TransactionBuilder:
             
             logger.info(f"Approval transaction sent: {tx_hash_hex}")
             
-            # Wait for receipt
-            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
+            # Wait for receipt with extended timeout (5 minutes for slow RPC)
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
             if receipt["status"] == 1:
                 logger.info(f"Approval successful: {tx_hash_hex}")
                 return tx_hash_hex, None

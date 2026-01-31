@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🛑 Stopping ZeroToll (Phase 3A - EIP-7702)"
+echo "🛑 Stopping ZeroToll (EIP-7702 Implementation)"
 echo "==========================================="
 echo ""
 
@@ -118,24 +118,17 @@ if [ "$all_clear" = true ]; then
     echo "✅ ZeroToll stopped successfully!"
 else
     echo "⚠️  Some ports may still be in use"
-    echo "   Try: sudo fuser -k 8000/tcp 3000/tcp 3002/tcp 3003/tcp"
+    echo "   Try: sudo fuser -k 3000/tcp 3002/tcp"
 fi
 echo "============================================"
 echo ""
 echo "📄 Logs preserved in: $SCRIPT_DIR/.pids/"
 echo "🚀 Restart: ./start-zerotoll.sh"
-echo "🧪 Restart with tests: ./start-zerotoll.sh --test"
 echo ""
-echo "💡 Phase 3A Info (EIP-7702):"
+echo "💡 EIP-7702 Info:"
 echo "   • Delegate (Sepolia): 0xcFE005B2E0013e0FF8cB0569d9b103094d423B36"
 echo "   • Delegate (Amoy):    0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C"
-echo "   • Gas Savings: 50% vs ERC-4337"
-echo "   • Method: Direct delegation (no EntryPoint)"
-echo ""
-echo "💡 Phase 2B Info (ERC-4337):"
-echo "   • Treasury (Amoy): 0xD6a7294445F34d0F7244b2072696106904ea807B"
-echo "   • RouterV3 (Amoy): 0xD83D377E4698317731b2953854c01d39C60815d7"
-echo "   • Fee: 2x gas cost from input token"
-echo ""
-echo "🗄️  MongoDB data preserved in: ~/mongodb-data"
+echo "   • Relayer:            0xf304eeD846d82a91d688d1bC1A4fA692051d1D7A"
+echo "   • Gas Savings:        50% vs ERC-4337"
+echo "   • Transaction Type:   0x04 (EIP-7702)"
 echo ""

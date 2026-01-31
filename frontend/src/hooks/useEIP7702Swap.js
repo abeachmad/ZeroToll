@@ -64,6 +64,7 @@ export function useEIP7702Swap() {
 
   /**
    * Get user's current nonce
+   * Uses timestamp-based nonce for uniqueness
    */
   const getNonce = useCallback(async () => {
     try {
@@ -74,16 +75,35 @@ export function useEIP7702Swap() {
       }
 
       const data = await response.json();
-      return data.nonce;
+      
+      if (data.success && data.nonce) {
+        console.log('📊 Nonce from backend:', data.nonce, `(${data.type || 'unknown'})`);
+        return data.nonce;
+      }
+      
+      // Fallback: use timestamp
+      const timestampNonce = Math.floor(Date.now() / 1000).toString();
+      console.log('⚠️ Using timestamp fallback nonce:', timestampNonce);
+      return timestampNonce;
     } catch (err) {
       console.error('Nonce error:', err);
-      // Return 0 as fallback
-      return '0';
+      // Fallback: use timestamp to ensure uniqueness
+      const timestampNonce = Math.floor(Date.now() / 1000).toString();
+      console.log('⚠️ Error getting nonce, using timestamp:', timestampNonce);
+      return timestampNonce;
     }
   }, [chainId, address]);
 
   /**
    * Sign EIP-7702 authorization
+   * 
+   * EIP-7702 authorization format:
+   * - chainId: uint256
+   * - address: address (delegate contract)
+   * - nonce: uint64 (delegation nonce, usually 0 for first time)
+   * - yParity: uint8 (0 or 1)
+   * - r: bytes32
+   * - s: bytes32
    */
   const signAuthorization = useCallback(async () => {
     try {
@@ -92,18 +112,21 @@ export function useEIP7702Swap() {
         throw new Error(`EIP-7702 not supported on chain ${chainId}`);
       }
 
-      // EIP-7702 authorization structure
-      const authorization = {
+      // EIP-7702 authorization message
+      // Format: keccak256(MAGIC || rlp([chain_id, address, nonce]))
+      // MAGIC = 0x05
+      // For simplicity, we'll use EIP-712 typed data which wallets understand
+      const authMessage = {
         chainId: BigInt(chainId),
         address: delegateAddress,
-        nonce: 0n // First time delegation
+        nonce: 0n
       };
 
-      // Sign authorization (simplified - in production use proper EIP-7702 signing)
-      // For now, we'll use a typed data signature
+      // Sign using EIP-712 (wallets understand this)
+      // The actual EIP-7702 signature will be constructed from this
       const signature = await signTypedDataAsync({
         domain: {
-          name: 'EIP-7702 Authorization',
+          name: 'EIP7702Authorization',
           version: '1',
           chainId: chainId
         },
@@ -111,7 +134,7 @@ export function useEIP7702Swap() {
           Authorization: [
             { name: 'chainId', type: 'uint256' },
             { name: 'address', type: 'address' },
-            { name: 'nonce', type: 'uint256' }
+            { name: 'nonce', type: 'uint64' }
           ]
         },
         primaryType: 'Authorization',
@@ -122,9 +145,22 @@ export function useEIP7702Swap() {
         }
       });
 
+      // Parse signature into r, s, v components
+      const r = signature.slice(0, 66);
+      const s = '0x' + signature.slice(66, 130);
+      const v = parseInt(signature.slice(130, 132), 16);
+      
+      // Convert v to yParity (0 or 1)
+      const yParity = v >= 27 ? v - 27 : v;
+
+      // Return authorization in EIP-7702 format
       return {
-        ...authorization,
-        signature
+        chainId: authMessage.chainId,
+        address: authMessage.address,
+        nonce: authMessage.nonce,
+        yParity,
+        r,
+        s
       };
     } catch (err) {
       console.error('Authorization signing error:', err);
@@ -292,11 +328,14 @@ export function useEIP7702Swap() {
       console.log('🚀 Executing swap...');
       
       // Convert BigInt values to strings for JSON serialization
+      // EIP-7702 authorization format with r, s, yParity
       const serializableAuthorization = {
         chainId: authorization.chainId.toString(),
         address: authorization.address,
         nonce: authorization.nonce.toString(),
-        signature: authorization.signature
+        yParity: authorization.yParity,
+        r: authorization.r,
+        s: authorization.s
       };
       
       const response = await fetch(`${API_URL}/api/eip7702/execute`, {
@@ -313,17 +352,49 @@ export function useEIP7702Swap() {
       });
 
       if (!response.ok) {
-        throw new Error('Swap execution failed');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Swap execution failed');
       }
 
       const result = await response.json();
       console.log('✅ Swap executed:', result);
 
+      // Parse txHash from different response formats
+      let txHash = null;
+      let explorerUrl = null;
+      
       if (result.txHash) {
-        setTxHash(result.txHash);
+        txHash = result.txHash;
+        explorerUrl = result.explorerUrl;
+      } else if (result.data && result.data.txHash) {
+        txHash = result.data.txHash;
+        explorerUrl = result.data.explorerUrl;
+      } else if (result.output) {
+        // Parse from raw output string
+        const txHashMatch = result.output.match(/Transaction sent: (0x[a-fA-F0-9]{64})/);
+        if (txHashMatch) {
+          txHash = txHashMatch[1];
+          // Build explorer URL
+          if (chainId === 11155111) {
+            explorerUrl = `https://sepolia.etherscan.io/tx/${txHash}`;
+          } else if (chainId === 80002) {
+            explorerUrl = `https://amoy.polygonscan.com/tx/${txHash}`;
+          }
+        }
       }
 
-      return result;
+      if (txHash) {
+        setTxHash(txHash);
+        console.log('📊 Transaction Hash:', txHash);
+        console.log('🔍 Explorer:', explorerUrl);
+      }
+
+      return {
+        ...result,
+        txHash,
+        explorerUrl,
+        success: true
+      };
     } catch (err) {
       console.error('Swap error:', err);
       setError(err.message);

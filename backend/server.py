@@ -799,6 +799,37 @@ async def get_oracle_health():
             "error": str(e)
         }
 
+@api_router.get("/config/{chain_id}")
+async def get_config(chain_id: int):
+    """Get configuration for a specific chain (for frontend compatibility)"""
+    # ZeroToll Router addresses per chain
+    routers = {
+        11155111: '0xB54e95a30E4Aa355380798313E0791833C7F0BFF',  # Sepolia RouterV3
+        80002: '0xD83D377E4698317731b2953854c01d39C60815d7',     # Amoy RouterV3
+    }
+    
+    # Delegate addresses for EIP-7702
+    delegates = {
+        11155111: '0xcFE005B2E0013e0FF8cB0569d9b103094d423B36',  # Sepolia
+        80002: '0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C',     # Amoy
+    }
+    
+    if chain_id not in routers:
+        raise HTTPException(status_code=404, detail=f"Chain {chain_id} not supported")
+    
+    return {
+        "success": True,
+        "chainId": chain_id,
+        "router": routers[chain_id],
+        "delegate": delegates.get(chain_id),
+        "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+        "features": {
+            "gasless": True,
+            "eip7702": chain_id in delegates,
+            "permit2": True
+        }
+    }
+
 app.include_router(api_router)
 app.include_router(eip7702_router, prefix="/api")  # EIP-7702 routes
 
