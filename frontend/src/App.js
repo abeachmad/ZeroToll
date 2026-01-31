@@ -14,7 +14,6 @@ const Docs = lazy(() => import('@/pages/Docs'));
 const TestMetaMask7702 = lazy(() => import('@/components/TestMetaMask7702'));
 const TestSmartAccount = lazy(() => import('@/components/TestSmartAccount'));
 const Faucet = lazy(() => import('@/pages/Faucet'));
-const EIP7702Demo = lazy(() => import('@/pages/EIP7702Demo'));
 
 function App() {
   return (
@@ -37,7 +36,6 @@ function App() {
               <Route path="/test-7702" element={<TestMetaMask7702 />} />
               <Route path="/test-smart-account" element={<TestSmartAccount />} />
               <Route path="/faucet" element={<Faucet />} />
-              <Route path="/eip7702" element={<EIP7702Demo />} />
             </Routes>
           </Suspense>
         </BrowserRouter>
