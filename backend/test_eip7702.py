@@ -8,7 +8,8 @@ import requests
 import json
 import sys
 
-BASE_URL = "http://localhost:3002/api/eip7702"
+# EIP-7702 endpoints are on Python backend (port 8000), not Node.js relayer (port 3002)
+BASE_URL = "http://localhost:8000/api/eip7702"
 
 def test_info():
     """Test /info endpoint"""
