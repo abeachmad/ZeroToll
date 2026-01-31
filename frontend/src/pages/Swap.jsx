@@ -827,18 +827,35 @@ const Swap = () => {
         return;
       }
 
+      // Fetch quote first if not available
+      if (!quote || !quote.amountOut || isNaN(parseFloat(quote.amountOut))) {
+        toast.info('Fetching quote from Pyth oracle...');
+        setGaslessStatus('Fetching quote from Pyth price feed...');
+        
+        try {
+          await handleGetQuote();
+          // Wait a bit for quote to be set
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (err) {
+          console.error('Failed to fetch quote:', err);
+          toast.warning('Could not fetch quote, using estimate');
+        }
+      }
+
       // Parse amount
       const amount = parseUnits(amountIn, tokenIn.decimals || 18);
       
-      // Calculate minOut - use quote if available, otherwise use 95% of input as estimate
+      // Calculate minOut from quote (with 5% slippage)
       let minOut = 0n;
       if (quote && quote.amountOut && !isNaN(parseFloat(quote.amountOut))) {
         minOut = BigInt(Math.floor(parseFloat(quote.amountOut) * 0.95));
+        console.log('Using quote from Pyth:', { amountOut: quote.amountOut, minOut: minOut.toString() });
       } else {
-        // Estimate: assume 1:1 ratio with 5% slippage
+        // Fallback: estimate 1:1 ratio with 5% slippage
         const estimatedOut = amount * 95n / 100n;
         minOut = estimatedOut;
-        toast.info('Using estimated output (no quote available)');
+        console.warn('No quote available, using estimate:', minOut.toString());
+        toast.warning('Using estimated output (quote unavailable)');
       }
 
       toast.info('🚀 Starting EIP-7702 gasless swap (50% cheaper!)');
