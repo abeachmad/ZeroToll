@@ -925,7 +925,8 @@ const Swap = () => {
     }
 
     // CRITICAL: Check approval before executing swap
-    if (needsApproval && !tokenIn.isNative) {
+    // Skip for gasless modes (ZeroToll and EIP-7702) as they use ERC-2612 Permit
+    if (needsApproval && !tokenIn.isNative && !isZeroTollGasless && !isEIP7702Mode) {
       toast.error('⚠️ Please approve token spending first');
       return;
     }
@@ -1713,8 +1714,8 @@ const Swap = () => {
             </button>
             
             {/* Show Approve button if needed, otherwise Execute */}
-            {/* Skip approval for ZeroToll gasless (uses ERC-2612 Permit) */}
-            {needsApproval && !tokenIn.isNative && !isZeroTollGasless ? (
+            {/* Skip approval for ZeroToll gasless and EIP-7702 (both use ERC-2612 Permit) */}
+            {needsApproval && !tokenIn.isNative && !isZeroTollGasless && !isEIP7702Mode ? (
               <button
                 onClick={handleApprove}
                 disabled={approvalPending || loading}
@@ -1733,12 +1734,12 @@ const Swap = () => {
             ) : (
               <button
                 onClick={handleExecute}
-                disabled={(loading || gaslessSwap.isLoading || intentGasless.isLoading) || (!quote && !isZeroTollGasless) || (needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless) || (fromChain.id !== toChain.id)}
+                disabled={(loading || gaslessSwap.isLoading || intentGasless.isLoading || eip7702Swap.loading) || (!quote && !isZeroTollGasless && !isEIP7702Mode) || (needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode) || (fromChain.id !== toChain.id)}
                 className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 data-testid="execute-swap-btn"
                 title={
                   fromChain.id !== toChain.id ? 'Cross-chain swaps not yet supported' :
-                  needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless ? 'Please approve token first' : 
+                  needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode ? 'Please approve token first' : 
                   ''
                 }
               >
@@ -1766,8 +1767,8 @@ const Swap = () => {
             </div>
           )}
           
-          {/* Approval Info Banner - Don't show for ZeroToll gasless (uses Permit) */}
-          {needsApproval && !tokenIn.isNative && !isZeroTollGasless && (
+          {/* Approval Info Banner - Don't show for ZeroToll gasless or EIP-7702 (both use Permit) */}
+          {needsApproval && !tokenIn.isNative && !isZeroTollGasless && !isEIP7702Mode && (
             <div className="mt-4 glass p-4 rounded-xl flex items-start gap-3 border border-yellow-500/30">
               <Info className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
