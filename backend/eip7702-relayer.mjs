@@ -9,11 +9,6 @@ import {
   formatUnits
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-// EIP-7702 is experimental - may not be available yet
-// import { 
-//   eip7702Actions,
-//   signAuthorization 
-// } from 'viem/experimental';
 import { polygonAmoy, sepolia } from 'viem/chains';
 import dotenv from 'dotenv';
 
@@ -80,7 +75,7 @@ const DELEGATE_ABI = [
 /**
  * Create wallet and public clients for a chain
  */
-function createClients(chainId) {
+async function createClients(chainId) {
   const chain = chainId === 80002 ? polygonAmoy : sepolia;
   
   // Ensure private key has 0x prefix
@@ -90,21 +85,38 @@ function createClients(chainId) {
   
   const relayerAccount = privateKeyToAccount(privateKey);
   
-  // Note: EIP-7702 is not yet live on testnets
-  // Using standard wallet client for now
+  // Create wallet client
   const walletClient = createWalletClient({
     account: relayerAccount,
     chain,
     transport: http(RPC_URL[chainId])
   });
-  // .extend(eip7702Actions()); // TODO: Enable when EIP-7702 is live
   
-  const publicClient = createPublicClient({
-    chain,
-    transport: http(RPC_URL[chainId])
-  });
-  
-  return { walletClient, publicClient, relayerAccount };
+  // Try to extend with EIP-7702 actions if available
+  try {
+    const { eip7702Actions } = await import('viem/experimental');
+    const extendedClient = walletClient.extend(eip7702Actions());
+    console.log('✅ EIP-7702 actions enabled');
+    return {
+      walletClient: extendedClient,
+      publicClient: createPublicClient({
+        chain,
+        transport: http(RPC_URL[chainId])
+      }),
+      relayerAccount
+    };
+  } catch (error) {
+    console.warn('⚠️  EIP-7702 not available, using standard client:', error.message);
+    // Return standard client without EIP-7702
+    return {
+      walletClient,
+      publicClient: createPublicClient({
+        chain,
+        transport: http(RPC_URL[chainId])
+      }),
+      relayerAccount
+    };
+  }
 }
 
 /**
@@ -147,87 +159,19 @@ export async function executeSwap7702(params) {
   console.log('✅ Mock transaction generated');
   console.log('TX Hash:', mockTxHash);
   
+  const explorerUrl = chainId === 80002 
+    ? `https://amoy.polygonscan.com/tx/${mockTxHash}`
+    : `https://sepolia.etherscan.io/tx/${mockTxHash}`;
+  
   return {
     success: true,
     txHash: mockTxHash,
     blockNumber: '12345678',
     gasUsed: '150000',
     amountOut: intent.minAmountOut,
+    explorerUrl,
     note: 'MOCK TRANSACTION - EIP-7702 not yet live on testnets',
     warning: 'This is a simulated transaction for UI testing only'
-  };
-}
-  const callData = encodeFunctionData({
-    abi: DELEGATE_ABI,
-    functionName: 'execute',
-    args: [intent, intentSignature, permit, BigInt(fee)]
-  });
-  
-  console.log('\nBuilding EIP-7702 transaction...');
-  console.log('Call data length:', callData.length);
-  
-  // Estimate gas
-  let gasEstimate;
-  try {
-    gasEstimate = await publicClient.estimateGas({
-      account: relayerAccount.address,
-      to: intent.user,  // Call user's EOA directly!
-      data: callData,
-      authorizationList: [authorization]
-    });
-    console.log('Gas estimate:', gasEstimate.toString());
-  } catch (error) {
-    console.error('Gas estimation failed:', error.message);
-    gasEstimate = 300000n; // Fallback
-  }
-  
-  // Build and send 7702 transaction
-  console.log('\nSending transaction...');
-  const txHash = await walletClient.sendTransaction({
-    to: intent.user,  // Call user's EOA directly via delegation!
-    data: callData,
-    authorizationList: [authorization],  // User's 7702 authorization
-    gas: gasEstimate + 50000n, // Add buffer
-    maxFeePerGas: parseUnits('50', 9), // 50 gwei
-    maxPriorityFeePerGas: parseUnits('2', 9) // 2 gwei tip
-  });
-  
-  console.log('✅ Transaction sent:', txHash);
-  
-  // Wait for confirmation
-  console.log('Waiting for confirmation...');
-  const receipt = await publicClient.waitForTransactionReceipt({ 
-    hash: txHash,
-    confirmations: 1
-  });
-  
-  console.log('✅ Transaction confirmed');
-  console.log('Block:', receipt.blockNumber);
-  console.log('Gas used:', receipt.gasUsed.toString());
-  console.log('Status:', receipt.status === 'success' ? '✅ Success' : '❌ Failed');
-  
-  // Parse logs to get amountOut
-  let amountOut = '0';
-  if (receipt.logs && receipt.logs.length > 0) {
-    // Look for SwapExecuted event
-    const swapEvent = receipt.logs.find(log => 
-      log.topics[0] === '0x...' // SwapExecuted event signature
-    );
-    if (swapEvent) {
-      // Parse amountOut from event data
-      console.log('Swap event found');
-    }
-  }
-  
-  return {
-    success: receipt.status === 'success',
-    txHash,
-    blockNumber: receipt.blockNumber.toString(),
-    gasUsed: receipt.gasUsed.toString(),
-    amountOut,
-    explorerUrl: chainId === 80002 
-      ? `https://amoy.polygonscan.com/tx/${txHash}`
-      : `https://sepolia.etherscan.io/tx/${txHash}`
   };
 }
 
@@ -240,7 +184,7 @@ export async function getUserNonce(chainId, userAddress) {
     throw new Error(`Delegate not deployed on chain ${chainId}`);
   }
   
-  const { publicClient } = createClients(chainId);
+  const { publicClient } = await createClients(chainId);
   
   const nonce = await publicClient.readContract({
     address: delegateAddress,
@@ -280,7 +224,7 @@ export async function calculateFee(chainId, tokenIn, amountIn) {
  */
 export async function healthCheck(chainId) {
   try {
-    const { publicClient, relayerAccount } = createClients(chainId);
+    const { publicClient, relayerAccount } = await createClients(chainId);
     const balance = await publicClient.getBalance({ address: relayerAccount.address });
     
     return {
