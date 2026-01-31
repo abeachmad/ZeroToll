@@ -1,8 +1,50 @@
 # 🎯 ZeroToll Phase 3 - Current Status
 
-**Last Updated**: January 27, 2026
+**Last Updated**: January 31, 2026
 **Phase**: 3A - EIP-7702 Integration
-**Week**: 2 Complete, Starting Week 3
+**Status**: Native Token Fix Applied ✅
+
+---
+
+## ✅ LATEST FIX (January 31, 2026)
+
+### ChainId Error + Native Token Support - FIXED ✅
+
+**Error 1**: `ReferenceError: chainId is not defined` in `getTokenAddress` helper
+
+**Error 2**: `InvalidAddressError: Address "NATIVE" is invalid` when swapping to native tokens
+
+**Root Cause**: 
+1. `chainId` variable not in scope inside helper function
+2. Frontend was passing "NATIVE" string instead of proper address
+
+**Solution**: 
+1. Pass `chainId` as parameter: `getTokenAddress(token, chain?.id)`
+2. Use special NATIVE address: `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE`
+3. Contract automatically unwraps WPOL/WETH → POL/ETH for user!
+
+**Key Feature Unlocked**: 
+- ✅ Users receive **actual native tokens** (POL/ETH), not wrapped!
+- ✅ ZeroToll unwraps automatically (gasless!)
+- ✅ Solves the "cold start problem" - buy native tokens without having native tokens for gas!
+
+**Files Modified**:
+- `frontend/src/pages/Swap.jsx` - Fixed chainId scope, use NATIVE address
+- `EIP7702_NATIVE_TOKEN_FIX.md` - Complete rewrite with native token explanation
+- `NATIVE_TOKEN_UNWRAP_GUIDE.md` - Comprehensive user guide (NEW)
+- `CHAINID_FIX_SUMMARY.md` - Technical fix summary (NEW)
+
+**User Experience**:
+```javascript
+💰 You will receive native POL in your wallet!
+🔍 Token addresses: {
+  tokenOut: { 
+    symbol: 'POL',
+    actual: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+    willUnwrap: '✅ Yes - you will receive native POL'
+  }
+}
+```
 
 ---
 

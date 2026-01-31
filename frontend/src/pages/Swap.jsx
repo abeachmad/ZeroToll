@@ -861,18 +861,85 @@ const Swap = () => {
       toast.info('🚀 Starting EIP-7702 gasless swap (50% cheaper!)');
       setGaslessStatus('Step 1/3: Signing EIP-7702 authorization...');
 
+      // Special NATIVE address for ZeroTollDelegate contract
+      // When user wants native output (POL/ETH), delegate will:
+      // 1. Swap to WPOL/WETH
+      // 2. Unwrap to native
+      // 3. Keep in user's EOA (via delegation)
+      const NATIVE_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+
+      // Convert token addresses for EIP-7702
+      const getTokenAddress = (token, currentChainId) => {
+        if (token.isNative || token.address === 'NATIVE') {
+          // Use special NATIVE address - delegate will unwrap for user!
+          return NATIVE_ADDRESS;
+        }
+        return token.address;
+      };
+
+      const tokenInAddress = getTokenAddress(tokenIn, chain?.id);
+      const tokenOutAddress = getTokenAddress(tokenOut, chain?.id);
+
+      console.log('🔍 Token addresses:', {
+        tokenIn: { symbol: tokenIn.symbol, original: tokenIn.address, actual: tokenInAddress },
+        tokenOut: { 
+          symbol: tokenOut.symbol, 
+          original: tokenOut.address, 
+          actual: tokenOutAddress,
+          willUnwrap: tokenOutAddress === NATIVE_ADDRESS ? '✅ Yes - you will receive native ' + tokenOut.symbol : '❌ No'
+        }
+      });
+
+      // Show user-friendly message for native output
+      if (tokenOutAddress === NATIVE_ADDRESS) {
+        toast.info(`💰 You will receive native ${tokenOut.symbol} in your wallet!`);
+      }
+
       // Execute EIP-7702 swap
       const result = await eip7702Swap.executeSwap({
-        tokenIn: tokenIn.address,
-        tokenOut: tokenOut.address,
+        tokenIn: tokenInAddress,
+        tokenOut: tokenOutAddress,
         amountIn: amount,
         minAmountOut: minOut
       });
 
       if (result && result.txHash) {
         setTxHash(result.txHash);
-        toast.success('🎉 EIP-7702 swap successful! 50% gas savings!');
-        setGaslessStatus('✅ Swap complete - check explorer');
+        
+        // Show explorer link
+        const explorerUrl = result.explorerUrl || 
+          (chain?.id === 80002 
+            ? `https://amoy.polygonscan.com/tx/${result.txHash}`
+            : `https://sepolia.etherscan.io/tx/${result.txHash}`);
+        
+        toast.success(
+          <div>
+            <div>🎉 EIP-7702 swap successful! 50% gas savings!</div>
+            <a 
+              href={explorerUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ color: '#60a5fa', textDecoration: 'underline' }}
+            >
+              View on Explorer →
+            </a>
+          </div>,
+          { duration: 10000 }
+        );
+        
+        setGaslessStatus(
+          <div>
+            ✅ Swap complete - 
+            <a 
+              href={explorerUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ color: '#60a5fa', marginLeft: '4px' }}
+            >
+              View TX
+            </a>
+          </div>
+        );
       } else {
         toast.success('✅ EIP-7702 swap submitted!');
         setGaslessStatus('Check explorer for status');
@@ -1774,8 +1841,8 @@ const Swap = () => {
                   <Loader2 className="inline w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    {(isGaslessMode || isZeroTollGasless) && <Zap className="w-4 h-4" />}
-                    {isZeroTollGasless ? '⚡ Execute Gasless (No Approval!)' : isGaslessMode ? 'Execute Gasless Swap' : 'Execute Swap'}
+                    {(isGaslessMode || isZeroTollGasless || isEIP7702Mode) && <Zap className="w-4 h-4" />}
+                    {isEIP7702Mode ? '⚡ Execute EIP-7702 (50% Cheaper!)' : isZeroTollGasless ? '⚡ Execute Gasless (No Approval!)' : isGaslessMode ? 'Execute Gasless Swap' : 'Execute Swap'}
                   </>
                 )}
               </button>

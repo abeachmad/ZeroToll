@@ -290,12 +290,21 @@ export function useEIP7702Swap() {
 
       // Step 6: Execute swap via relayer
       console.log('🚀 Executing swap...');
+      
+      // Convert BigInt values to strings for JSON serialization
+      const serializableAuthorization = {
+        chainId: authorization.chainId.toString(),
+        address: authorization.address,
+        nonce: authorization.nonce.toString(),
+        signature: authorization.signature
+      };
+      
       const response = await fetch(`${API_URL}/api/eip7702/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chainId,
-          authorization,
+          authorization: serializableAuthorization,
           permit,
           intent,
           intentSignature,
