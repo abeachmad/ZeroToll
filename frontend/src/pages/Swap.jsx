@@ -829,7 +829,17 @@ const Swap = () => {
 
       // Parse amount
       const amount = parseUnits(amountIn, tokenIn.decimals || 18);
-      const minOut = quote ? BigInt(Math.floor(parseFloat(quote.amountOut) * 0.95)) : 0n;
+      
+      // Calculate minOut - use quote if available, otherwise use 95% of input as estimate
+      let minOut = 0n;
+      if (quote && quote.amountOut && !isNaN(parseFloat(quote.amountOut))) {
+        minOut = BigInt(Math.floor(parseFloat(quote.amountOut) * 0.95));
+      } else {
+        // Estimate: assume 1:1 ratio with 5% slippage
+        const estimatedOut = amount * 95n / 100n;
+        minOut = estimatedOut;
+        toast.info('Using estimated output (no quote available)');
+      }
 
       toast.info('🚀 Starting EIP-7702 gasless swap (50% cheaper!)');
       setGaslessStatus('Step 1/3: Signing EIP-7702 authorization...');
