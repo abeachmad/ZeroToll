@@ -105,12 +105,17 @@ export function useEIP7702Swap() {
    * - r: bytes32
    * - s: bytes32
    */
-  const signAuthorization = useCallback(async () => {
+  const signAuthorization = useCallback(async (nonce) => {
     try {
       const delegateAddress = DELEGATE_ADDRESS[chainId];
       if (!delegateAddress) {
         throw new Error(`EIP-7702 not supported on chain ${chainId}`);
       }
+
+      // Convert nonce to BigInt
+      const nonceBigInt = BigInt(nonce);
+      
+      console.log('📝 Signing authorization with nonce:', nonce);
 
       // EIP-7702 authorization message
       // Format: keccak256(MAGIC || rlp([chain_id, address, nonce]))
@@ -119,7 +124,7 @@ export function useEIP7702Swap() {
       const authMessage = {
         chainId: BigInt(chainId),
         address: delegateAddress,
-        nonce: 0n
+        nonce: nonceBigInt
       };
 
       // Sign using EIP-712 (wallets understand this)
@@ -141,7 +146,7 @@ export function useEIP7702Swap() {
         message: {
           chainId: chainId.toString(),
           address: delegateAddress,
-          nonce: '0'
+          nonce: nonce.toString()  // Use actual nonce from parameter
         }
       });
 
@@ -300,10 +305,10 @@ export function useEIP7702Swap() {
       const nonce = await getNonce();
       console.log('Nonce:', nonce);
 
-      // Step 3: Sign EIP-7702 authorization
+      // Step 3: Sign EIP-7702 authorization with nonce
       console.log('✍️  Signing EIP-7702 authorization...');
-      const authorization = await signAuthorization();
-      console.log('Authorization signed');
+      const authorization = await signAuthorization(nonce);  // Pass nonce here!
+      console.log('Authorization signed with nonce:', nonce);
 
       // Step 4: Sign EIP-2612 permit
       console.log('✍️  Signing permit...');
