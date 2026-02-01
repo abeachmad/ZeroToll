@@ -173,12 +173,34 @@ export function useEIP7702Swap() {
       const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour
       const delegateAddress = DELEGATE_ADDRESS[chainId];
 
+      // Query permit nonce from token contract
+      let permitNonce = 0;
+      try {
+        if (publicClient) {
+          permitNonce = await publicClient.readContract({
+            address: tokenAddress,
+            abi: [{
+              "inputs": [{"name": "owner", "type": "address"}],
+              "name": "nonces",
+              "outputs": [{"name": "", "type": "uint256"}],
+              "stateMutability": "view",
+              "type": "function"
+            }],
+            functionName: 'nonces',
+            args: [address]
+          });
+          console.log('📊 Permit nonce from token:', permitNonce.toString());
+        }
+      } catch (err) {
+        console.warn('⚠️  Could not query permit nonce, using 0:', err.message);
+      }
+
       // EIP-2612 permit structure
       const permit = {
         owner: address,
         spender: delegateAddress,
         value: amount.toString(),
-        nonce: 0, // Simplified - should query token contract
+        nonce: permitNonce.toString(),
         deadline
       };
 
@@ -186,7 +208,7 @@ export function useEIP7702Swap() {
       const signature = await signTypedDataAsync({
         domain: {
           name: 'USD Coin', // Should be queried from token
-          version: '1',
+          version: '2', // USDC uses version 2
           chainId: chainId,
           verifyingContract: tokenAddress
         },
@@ -218,7 +240,7 @@ export function useEIP7702Swap() {
       console.error('Permit signing error:', err);
       throw err;
     }
-  }, [chainId, address, signTypedDataAsync]);
+  }, [chainId, address, publicClient, signTypedDataAsync]);
 
   /**
    * Sign swap intent (EIP-712)
