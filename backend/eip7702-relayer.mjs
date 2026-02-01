@@ -181,6 +181,10 @@ export async function executeSwap7702(params) {
   console.log('  Delegate:', authorizationFormatted.address);
   console.log('  Nonce:', authorizationFormatted.nonce.toString());
   console.log('  yParity:', authorizationFormatted.yParity);
+  console.log('  r:', authorizationFormatted.r);
+  console.log('  s:', authorizationFormatted.s);
+  console.log('\n⚠️  DEBUGGING: Raw authorization from frontend:');
+  console.log(JSON.stringify(authorization, null, 2));
   
   // Encode delegate call
   const callData = encodeFunctionData({
