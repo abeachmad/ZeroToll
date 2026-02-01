@@ -112,19 +112,14 @@ export function useEIP7702Swap() {
         throw new Error(`EIP-7702 not supported on chain ${chainId}`);
       }
 
-      // Convert nonce to BigInt
-      const nonceBigInt = BigInt(nonce);
-      
       console.log('📝 Signing authorization with nonce:', nonce);
 
-      // EIP-7702 authorization message
-      // Format: keccak256(MAGIC || rlp([chain_id, address, nonce]))
-      // MAGIC = 0x05
-      // For simplicity, we'll use EIP-712 typed data which wallets understand
-      const authMessage = {
-        chainId: BigInt(chainId),
+      // CRITICAL: Use consistent format throughout
+      // We sign with these exact values and return them
+      const authData = {
+        chainId: chainId.toString(),
         address: delegateAddress,
-        nonce: nonceBigInt
+        nonce: nonce.toString()
       };
 
       // Sign using EIP-712 (wallets understand this)
@@ -143,11 +138,7 @@ export function useEIP7702Swap() {
           ]
         },
         primaryType: 'Authorization',
-        message: {
-          chainId: chainId.toString(),
-          address: delegateAddress,
-          nonce: nonce.toString()  // Use actual nonce from parameter
-        }
+        message: authData  // Use exact same object for consistency
       });
 
       // Parse signature into r, s, v components
@@ -159,10 +150,11 @@ export function useEIP7702Swap() {
       const yParity = v >= 27 ? v - 27 : v;
 
       // Return authorization in EIP-7702 format
+      // Use the EXACT same values we signed with
       return {
-        chainId: authMessage.chainId,
-        address: authMessage.address,
-        nonce: authMessage.nonce,
+        chainId: authData.chainId,
+        address: authData.address,
+        nonce: authData.nonce,
         yParity,
         r,
         s
@@ -332,23 +324,14 @@ export function useEIP7702Swap() {
       // Step 6: Execute swap via relayer
       console.log('🚀 Executing swap...');
       
-      // Convert BigInt values to strings for JSON serialization
-      // EIP-7702 authorization format with r, s, yParity
-      const serializableAuthorization = {
-        chainId: authorization.chainId.toString(),
-        address: authorization.address,
-        nonce: authorization.nonce.toString(),
-        yParity: authorization.yParity,
-        r: authorization.r,
-        s: authorization.s
-      };
-      
+      // Authorization is already in correct format (strings) from signAuthorization
+      // No need to convert again - just pass it directly
       const response = await fetch(`${API_URL}/api/eip7702/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chainId,
-          authorization: serializableAuthorization,
+          authorization,  // Already serializable (all strings)
           permit,
           intent,
           intentSignature,
