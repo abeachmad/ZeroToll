@@ -97,8 +97,8 @@ export function useEIP7702Swap() {
   /**
    * Sign EIP-7702 authorization
    * 
-   * MUST use viem's signAuthorization from experimental package
-   * This is the ONLY correct way to sign EIP-7702 authorizations
+   * Uses viem's signAuthorization for proper EIP-7702 format
+   * Must create a new client with eip7702Actions extended
    */
   const signAuthorization = useCallback(async (nonce) => {
     try {
@@ -109,19 +109,27 @@ export function useEIP7702Swap() {
 
       console.log('📝 Signing EIP-7702 authorization with nonce:', nonce);
 
-      if (!walletClient) {
-        throw new Error('Wallet client not available');
+      if (!walletClient || !address) {
+        throw new Error('Wallet client or address not available');
       }
 
-      // CRITICAL: Use viem's signAuthorization for proper EIP-7702 format
-      // Import from viem/experimental
+      // Import eip7702Actions from viem/experimental
       const { eip7702Actions } = await import('viem/experimental');
       
-      // Extend wallet client with EIP-7702 actions
-      const client = walletClient.extend(eip7702Actions());
+      // Get the current chain and transport from walletClient
+      const { chain, transport, account } = walletClient;
+      
+      // Create a new wallet client with eip7702Actions
+      const { createWalletClient } = await import('viem');
+      const client = createWalletClient({
+        account,
+        chain,
+        transport
+      }).extend(eip7702Actions());
+
+      console.log('✅ Client created with EIP-7702 actions');
 
       // Sign authorization using viem's built-in method
-      // This creates the correct EIP-7702 authorization format
       const authorization = await client.signAuthorization({
         contractAddress: delegateAddress,
         chainId: chainId,
@@ -141,13 +149,9 @@ export function useEIP7702Swap() {
       };
     } catch (err) {
       console.error('Authorization signing error:', err);
-      // If viem experimental not available, throw clear error
-      if (err.message.includes('Cannot find module')) {
-        throw new Error('viem/experimental not available. Please upgrade viem to latest version.');
-      }
       throw err;
     }
-  }, [chainId, walletClient]);
+  }, [chainId, address, walletClient]);
 
   /**
    * Sign EIP-2612 permit
