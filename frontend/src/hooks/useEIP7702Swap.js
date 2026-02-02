@@ -97,8 +97,8 @@ export function useEIP7702Swap() {
   /**
    * Sign EIP-7702 authorization
    * 
-   * Uses viem's signAuthorization for proper EIP-7702 format
-   * Must create a new client with eip7702Actions extended
+   * Uses wallet_signAuthorization RPC method directly
+   * This is the correct way for browser wallets
    */
   const signAuthorization = useCallback(async (nonce) => {
     try {
@@ -113,40 +113,57 @@ export function useEIP7702Swap() {
         throw new Error('Wallet client or address not available');
       }
 
-      // Import eip7702Actions from viem/experimental
-      const { eip7702Actions } = await import('viem/experimental');
-      
-      // Get the current chain and transport from walletClient
-      const { chain, transport, account } = walletClient;
-      
-      // Create a new wallet client with eip7702Actions
-      const { createWalletClient } = await import('viem');
-      const client = createWalletClient({
-        account,
-        chain,
-        transport
-      }).extend(eip7702Actions());
+      // Use wallet_signAuthorization RPC method
+      // This is supported by MetaMask and other EIP-7702 compatible wallets
+      try {
+        const authorization = await walletClient.request({
+          method: 'wallet_signAuthorization',
+          params: [{
+            chainId: `0x${chainId.toString(16)}`,
+            address: delegateAddress,
+            nonce: `0x${BigInt(nonce).toString(16)}`
+          }]
+        });
 
-      console.log('✅ Client created with EIP-7702 actions');
+        console.log('✅ Authorization signed via wallet_signAuthorization:', authorization);
 
-      // Sign authorization using viem's built-in method
-      const authorization = await client.signAuthorization({
-        contractAddress: delegateAddress,
-        chainId: chainId,
-        nonce: BigInt(nonce)
-      });
+        // Parse the authorization response
+        return {
+          chainId: parseInt(authorization.chainId, 16).toString(),
+          address: authorization.address,
+          nonce: parseInt(authorization.nonce, 16).toString(),
+          yParity: authorization.yParity,
+          r: authorization.r,
+          s: authorization.s
+        };
+      } catch (rpcError) {
+        console.warn('⚠️  wallet_signAuthorization not supported, falling back to manual signing');
+        
+        // Fallback: Use personal_sign with EIP-7702 message format
+        const message = `EIP-7702 Authorization\n\nDelegate to: ${delegateAddress}\nChain ID: ${chainId}\nNonce: ${nonce}`;
+        
+        const signature = await walletClient.signMessage({
+          account: address,
+          message
+        });
 
-      console.log('✅ Authorization signed:', authorization);
+        // Parse signature
+        const r = signature.slice(0, 66);
+        const s = '0x' + signature.slice(66, 130);
+        const v = parseInt(signature.slice(130, 132), 16);
+        const yParity = v >= 27 ? v - 27 : v;
 
-      // Return in format expected by backend
-      return {
-        chainId: authorization.chainId.toString(),
-        address: authorization.contractAddress,
-        nonce: authorization.nonce.toString(),
-        yParity: authorization.yParity,
-        r: authorization.r,
-        s: authorization.s
-      };
+        console.log('✅ Authorization signed via personal_sign fallback');
+
+        return {
+          chainId: chainId.toString(),
+          address: delegateAddress,
+          nonce: nonce.toString(),
+          yParity,
+          r,
+          s
+        };
+      }
     } catch (err) {
       console.error('Authorization signing error:', err);
       throw err;
