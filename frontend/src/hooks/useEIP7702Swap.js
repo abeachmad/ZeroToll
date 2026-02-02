@@ -97,13 +97,8 @@ export function useEIP7702Swap() {
   /**
    * Sign EIP-7702 authorization
    * 
-   * EIP-7702 authorization format:
-   * - chainId: uint256
-   * - address: address (delegate contract)
-   * - nonce: uint64 (delegation nonce, usually 0 for first time)
-   * - yParity: uint8 (0 or 1)
-   * - r: bytes32
-   * - s: bytes32
+   * MUST use viem's signAuthorization from experimental package
+   * This is the ONLY correct way to sign EIP-7702 authorizations
    */
   const signAuthorization = useCallback(async (nonce) => {
     try {
@@ -112,58 +107,47 @@ export function useEIP7702Swap() {
         throw new Error(`EIP-7702 not supported on chain ${chainId}`);
       }
 
-      console.log('📝 Signing authorization with nonce:', nonce);
+      console.log('📝 Signing EIP-7702 authorization with nonce:', nonce);
 
-      // CRITICAL: Use consistent format throughout
-      // We sign with these exact values and return them
-      const authData = {
-        chainId: chainId.toString(),
-        address: delegateAddress,
-        nonce: nonce.toString()
-      };
+      if (!walletClient) {
+        throw new Error('Wallet client not available');
+      }
 
-      // Sign using EIP-712 (wallets understand this)
-      // The actual EIP-7702 signature will be constructed from this
-      const signature = await signTypedDataAsync({
-        domain: {
-          name: 'EIP7702Authorization',
-          version: '1',
-          chainId: chainId
-        },
-        types: {
-          Authorization: [
-            { name: 'chainId', type: 'uint256' },
-            { name: 'address', type: 'address' },
-            { name: 'nonce', type: 'uint64' }
-          ]
-        },
-        primaryType: 'Authorization',
-        message: authData  // Use exact same object for consistency
+      // CRITICAL: Use viem's signAuthorization for proper EIP-7702 format
+      // Import from viem/experimental
+      const { eip7702Actions } = await import('viem/experimental');
+      
+      // Extend wallet client with EIP-7702 actions
+      const client = walletClient.extend(eip7702Actions());
+
+      // Sign authorization using viem's built-in method
+      // This creates the correct EIP-7702 authorization format
+      const authorization = await client.signAuthorization({
+        contractAddress: delegateAddress,
+        chainId: chainId,
+        nonce: BigInt(nonce)
       });
 
-      // Parse signature into r, s, v components
-      const r = signature.slice(0, 66);
-      const s = '0x' + signature.slice(66, 130);
-      const v = parseInt(signature.slice(130, 132), 16);
-      
-      // Convert v to yParity (0 or 1)
-      const yParity = v >= 27 ? v - 27 : v;
+      console.log('✅ Authorization signed:', authorization);
 
-      // Return authorization in EIP-7702 format
-      // Use the EXACT same values we signed with
+      // Return in format expected by backend
       return {
-        chainId: authData.chainId,
-        address: authData.address,
-        nonce: authData.nonce,
-        yParity,
-        r,
-        s
+        chainId: authorization.chainId.toString(),
+        address: authorization.contractAddress,
+        nonce: authorization.nonce.toString(),
+        yParity: authorization.yParity,
+        r: authorization.r,
+        s: authorization.s
       };
     } catch (err) {
       console.error('Authorization signing error:', err);
+      // If viem experimental not available, throw clear error
+      if (err.message.includes('Cannot find module')) {
+        throw new Error('viem/experimental not available. Please upgrade viem to latest version.');
+      }
       throw err;
     }
-  }, [chainId, signTypedDataAsync]);
+  }, [chainId, walletClient]);
 
   /**
    * Sign EIP-2612 permit
