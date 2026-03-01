@@ -1,0 +1,49 @@
+{
+  "11155111": {
+    "name": "Sepolia",
+    "tokens": {
+      "ETH": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+      "WETH": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+      "USDC": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      "PYUSD": "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9",
+      "LINK": "0x779877A7B0D9E8603169DdbD7836e478b4624789",
+      "ZUSDC": "0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C",
+      "ZETH": "0x8153FA09Be1689D44C343f119C829F6702A8720b",
+      "ZPOL": "0x63c31C4247f6AA40B676478226d6FEB5707649D6",
+      "ZLINK": "0x4e2dbcCc07D8e5a8C9f420ea60d1e3aEc7B64D2C"
+    }
+  },
+  "80002": {
+    "name": "Amoy",
+    "tokens": {
+      "POL": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+      "WMATIC": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+      "WPOL": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+      "USDC": "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582",
+      "LINK": "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904",
+      "WETH": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+      "ZUSDC": "0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD",
+      "ZETH": "0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9",
+      "ZPOL": "0xB0A04aB21faAe4A5399938c07EDdfA0FB41d2B9d",
+      "ZLINK": "0x51f6c79e5cA4ACF086d0954AfAAf5c72Be56CBb1"
+    }
+  },
+  "421614": {
+    "name": "Arbitrum Sepolia",
+    "tokens": {
+      "ETH": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+      "WETH": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "USDC": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+      "LINK": "0xb1D4538B4571d411F07960EF2838Ce337FE1E80E"
+    }
+  },
+  "11155420": {
+    "name": "Optimism Sepolia",
+    "tokens": {
+      "ETH": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+      "WETH": "0x4200000000000000000000000000000000000006",
+      "USDC": "0x5fd84259d66Cd46123540766Be93DFE6D43130D7",
+      "LINK": "0xE4aB69C077896252FAFBD49EFD26B5D171A32410"
+    }
+  }
+}

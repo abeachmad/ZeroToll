@@ -1,0 +1,16 @@
+{
+  "network": "sepolia",
+  "timestamp": 1762668817540,
+  "oracle": "0x1240c97bc33f7635b8e25C721fF6D05d2bfC44Db",
+  "pyth": "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21",
+  "tokens": {
+    "WETH": {
+      "address": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+      "priceId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace"
+    },
+    "USDC": {
+      "address": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      "priceId": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "network": "sepolia",
+  "timestamp": 1764703337902,
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "pyth": "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21",
+  "tokens": {
+    "zUSDC": {
+      "address": "0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C",
+      "name": "ZeroToll USDC",
+      "decimals": 6,
+      "priceId": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"
+    },
+    "zETH": {
+      "address": "0x8153FA09Be1689D44C343f119C829F6702A8720b",
+      "name": "ZeroToll ETH",
+      "decimals": 18,
+      "priceId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace"
+    },
+    "zPOL": {
+      "address": "0x63c31C4247f6AA40B676478226d6FEB5707649D6",
+      "name": "ZeroToll POL",
+      "decimals": 18,
+      "priceId": "0x5de33440f6c8ee7a2c3c3e5e8b5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e"
+    },
+    "zLINK": {
+      "address": "0x4e2dbcCc07D8e5a8C9f420ea60d1e3aEc7B64D2C",
+      "name": "ZeroToll LINK",
+      "decimals": 18,
+      "priceId": "0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221"
+    }
+  },
+  "adapter": "0x4E6A591459F0724E19f9B06A584B26fFB724a2a3"
+}

@@ -1,0 +1,11 @@
+{
+  "network": "sepolia",
+  "chainId": "11155111",
+  "routerHub": "0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84",
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "deployedAt": "2025-11-09T15:39:51.568Z",
+  "gaslessFeeBps": 50,
+  "gaslessFeeRecipient": "0x0000000000000000000000000000000000000000",
+  "phase": "1 - Gasless Fee Support",
+  "existingRouter": "0x15dbf63c4B3Df4CF6Cfd31701C1D373c6640DADd"
+}

@@ -1,0 +1,42 @@
+# Render Blueprint for ZeroToll
+# Deploy: https://render.com/deploy
+
+services:
+  # Python Backend - Quotes, History, Stats
+  - type: web
+    name: zerotoll-api
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: MONGODB_URI
+        sync: false
+
+  # Node.js Relayer - Gasless Swap Execution
+  - type: web
+    name: zerotoll-relayer
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node phase2-relayer.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: PIMLICO_API_KEY
+        sync: false
+      - key: RELAYER_PRIVATE_KEY
+        sync: false
+      - key: PORT
+        value: "3002"
+      - key: PYTHON_BACKEND_URL
+        fromService:
+          name: zerotoll-api
+          type: web
+          property: host

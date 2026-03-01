@@ -1,0 +1,17 @@
+{
+  "chainId": 80002,
+  "gasFactor": "1",
+  "port": "3000",
+  "privateApiPort": "3003",
+  "network": "https://rpc-amoy.polygon.technology/",
+  "entryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+  "beneficiary": "0xd4aB7C32fCe0d28882052a83De467b9BE2DBFC8e",
+  "minBalance": "0.1",
+  "mnemonic": "./localconfig/mnemonic.txt",
+  "maxBundleGas": 5000000,
+  "minStake": "0.1",
+  "minUnstakeDelay": 0,
+  "autoBundleInterval": 3,
+  "autoBundleMempoolSize": 10,
+  "unsafe": true
+}

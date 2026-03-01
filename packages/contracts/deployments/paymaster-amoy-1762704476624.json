@@ -1,0 +1,11 @@
+{
+  "network": "amoy",
+  "chainId": "80002",
+  "paymaster": "0x620138B987C5EE4fb2476a2D409d67979D0AE50F",
+  "entryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "deployedAt": "2025-11-09T16:07:56.624Z",
+  "initialDeposit": "0.5",
+  "currentBalance": "0.5",
+  "phase": "2 - Testnet Paymaster (Accept All)"
+}

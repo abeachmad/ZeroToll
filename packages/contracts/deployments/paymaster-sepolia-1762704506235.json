@@ -1,0 +1,11 @@
+{
+  "network": "sepolia",
+  "chainId": "11155111",
+  "paymaster": "0x2058E1DC26cE80f543157182734aA95DABE70FD7",
+  "entryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "deployedAt": "2025-11-09T16:08:26.235Z",
+  "initialDeposit": "0.5",
+  "currentBalance": "0.5",
+  "phase": "2 - Testnet Paymaster (Accept All)"
+}

@@ -1,0 +1,90 @@
+type GasSettlement @entity(immutable: true) {
+  id: ID!
+  user: Bytes!
+  feeToken: Bytes!              # token used for fee payment
+  feeTokenSymbol: String!       # symbol for display
+  feeMode: String!              # NATIVE, INPUT, OUTPUT, STABLE
+  costInFeeToken: BigInt!       # actual cost in fee token units
+  refundInFeeToken: BigInt!     # refund amount in fee token units
+  oracleSource: String!         # Pyth, TWAP, Chainlink
+  priceAgeSec: Int              # oracle price age in seconds
+  priceConfidence: Int          # oracle confidence %
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  txHash: Bytes!
+}
+
+type RouteExecution @entity(immutable: true) {
+  id: ID!
+  intentId: Bytes!
+  tokenIn: Bytes!
+  tokenOut: Bytes!
+  amountIn: BigInt!
+  amountOut: BigInt!
+  netOut: BigInt!               # after fee deduction (if OUTPUT mode)
+  outIsNative: Boolean!         # true if output is native (POL/ETH)
+  outGrossWrapped: BigInt!      # gross wrapped amount before unwrap
+  outNetNative: BigInt!         # net native amount after unwrap
+  wrappedToken: Bytes           # WETH/WPOL address if native output
+  srcChainId: BigInt!
+  dstChainId: BigInt!
+  feeMode: String!
+  feeTokenSymbol: String!
+  oracleSource: String!
+  priceAgeSec: Int
+  timestamp: BigInt!
+}
+
+type FillRecord @entity(immutable: true) {
+  id: ID!
+  intentId: Bytes!
+  relayer: Bytes!
+  costNative: BigInt!
+  feeToken: Bytes!
+  feeAmount: BigInt!
+  refundAmount: BigInt!
+  latencyMs: BigInt!
+  status: String!               # success, pending, failed
+  timestamp: BigInt!
+}
+
+type FeeDistribution @entity(immutable: true) {
+  id: ID!
+  lpAmount: BigInt!
+  relayerAmount: BigInt!
+  treasuryAmount: BigInt!
+  feeToken: Bytes!
+  timestamp: BigInt!
+}
+
+type DailyMetrics @entity(immutable: false) {
+  id: ID!                       # date string YYYY-MM-DD
+  totalSwaps: Int!
+  successfulSwaps: Int!
+  failedSwaps: Int!
+  totalVolumeUSD: BigDecimal!
+  totalFeesUSD: BigDecimal!
+  totalRefundsUSD: BigDecimal!
+  gasSavedUSD: BigDecimal!
+  uniqueUsers: Int!
+  avgFeeUSD: BigDecimal!
+  nativeModeCount: Int!
+  inputModeCount: Int!
+  outputModeCount: Int!
+  stableModeCount: Int!
+  nativeOutputCount: Int!       # count of native (POL/ETH) outputs
+  date: BigInt!
+}
+
+type GlobalStats @entity(immutable: false) {
+  id: ID!                       # singleton "global"
+  totalSwaps: BigInt!
+  successfulSwaps: BigInt!
+  totalVolumeUSD: BigDecimal!
+  totalFeesUSD: BigDecimal!
+  totalRefundsUSD: BigDecimal!
+  gasSavedUSD: BigDecimal!
+  uniqueUsers: BigInt!
+  supportedTokens: Int!
+  lastUpdated: BigInt!
+}

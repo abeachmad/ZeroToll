@@ -1,0 +1,10 @@
+**/node_modules/**
+**/venv/**
+**/__pycache__/**
+**/build/**
+**/dist/**
+**/artifacts/**
+**/cache/**
+**/.git/objects/**
+**/*.log
+**/nohup.out

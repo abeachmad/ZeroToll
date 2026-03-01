@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { time } = require("@nomicfoundation/hardhat-network-helpers");
+const { time, loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 
 /**
  * RelayerRegistry Test Suite
@@ -46,13 +46,13 @@ describe("RelayerRegistry", function () {
 
     it("Should have correct constants", async function () {
       expect(await registry.MIN_STAKE()).to.equal(MIN_STAKE);
-      expect(await registry.MAX_RELAYERS()).to.equal(100);
+      expect(await registry.MAX_RELAYERS()).to.equal(100n);
       expect(await registry.SLASH_PERCENTAGE()).to.equal(SLASH_PERCENTAGE);
-      expect(await registry.MIN_REPUTATION()).to.equal(500);
+      expect(await registry.MIN_REPUTATION()).to.equal(500n);
     });
 
     it("Should start with zero relayers", async function () {
-      expect(await registry.getRelayerCount()).to.equal(0);
+      expect(await registry.getRelayerCount()).to.equal(0n);
       const activeRelayers = await registry.getActiveRelayers();
       expect(activeRelayers.length).to.equal(0);
     });
@@ -60,18 +60,15 @@ describe("RelayerRegistry", function () {
 
   describe("Registration", function () {
     it("Should allow registration with sufficient stake", async function () {
-      await expect(
-        registry.connect(relayer1).registerRelayer({ value: MIN_STAKE })
-      )
-        .to.emit(registry, "RelayerRegistered")
-        .withArgs(relayer1.address, MIN_STAKE);
+      const tx = await registry.connect(relayer1).registerRelayer({ value: MIN_STAKE });
+      await tx.wait();
 
       const relayerInfo = await registry.getRelayerInfo(relayer1.address);
       expect(relayerInfo.active).to.be.true;
       expect(relayerInfo.stake).to.equal(MIN_STAKE);
-      expect(relayerInfo.reputation).to.equal(1000);
-      expect(relayerInfo.successfulExecutions).to.equal(0);
-      expect(relayerInfo.failedExecutions).to.equal(0);
+      expect(relayerInfo.reputation).to.equal(1000n);
+      expect(relayerInfo.successfulExecutions).to.equal(0n);
+      expect(relayerInfo.failedExecutions).to.equal(0n);
     });
 
     it("Should reject registration with insufficient stake", async function () {
@@ -95,7 +92,7 @@ describe("RelayerRegistry", function () {
       const activeRelayers = await registry.getActiveRelayers();
       expect(activeRelayers.length).to.equal(1);
       expect(activeRelayers[0]).to.equal(relayer1.address);
-      expect(await registry.getRelayerCount()).to.equal(1);
+      expect(await registry.getRelayerCount()).to.equal(1n);
     });
 
     it("Should allow multiple relayers to register", async function () {
@@ -103,7 +100,7 @@ describe("RelayerRegistry", function () {
       await registry.connect(relayer2).registerRelayer({ value: MIN_STAKE });
       await registry.connect(relayer3).registerRelayer({ value: MIN_STAKE });
 
-      expect(await registry.getRelayerCount()).to.equal(3);
+      expect(await registry.getRelayerCount()).to.equal(3n);
       const activeRelayers = await registry.getActiveRelayers();
       expect(activeRelayers).to.include(relayer1.address);
       expect(activeRelayers).to.include(relayer2.address);

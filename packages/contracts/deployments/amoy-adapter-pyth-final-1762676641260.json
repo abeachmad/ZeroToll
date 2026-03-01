@@ -1,0 +1,19 @@
+{
+  "network": "amoy",
+  "chainId": "80002",
+  "timestamp": 1762676640887,
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "contracts": {
+    "adapter": "0x2Ed51974196EC8787a74c00C5847F03664d66Dc5",
+    "oracle": "0x14BfA9bdf75a2c8049C826B63EeEf6ED7F52E838",
+    "routerHub": "0x5335f887E69F4B920bb037062382B9C17aA52ec6"
+  },
+  "tokens": {
+    "WPOL": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+    "USDC": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
+    "LINK": "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904"
+  },
+  "gasUsed": {
+    "adapter": "948013"
+  }
+}
