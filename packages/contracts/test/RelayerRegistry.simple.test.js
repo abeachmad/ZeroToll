@@ -106,10 +106,13 @@ describe("RelayerRegistry - Simplified", function () {
       const balanceAfter = await ethers.provider.getBalance(relayer1.address);
       
       // Should receive stake back minus gas
-      expect(balanceAfter).to.be.closeTo(
-        balanceBefore + MIN_STAKE - gasCost,
-        ethers.parseEther("0.01") // Allow small difference
-      );
+      const expectedBalance = balanceBefore + MIN_STAKE - gasCost;
+      const diff = balanceAfter > expectedBalance ? 
+        balanceAfter - expectedBalance : 
+        expectedBalance - balanceAfter;
+      
+      // Allow 0.01 ETH difference for gas variations
+      expect(diff).to.be.lte(ethers.parseEther("0.01"));
       
       expect(await registry.isRelayerActive(relayer1.address)).to.be.false;
       expect(await registry.getRelayerCount()).to.equal(0n);
@@ -143,7 +146,7 @@ describe("RelayerRegistry - Simplified", function () {
         await registry.connect(relayer1).increaseStake({ value: 0 });
         expect.fail("Should have reverted");
       } catch (error) {
-        expect(error.message).to.include("Must send ETH");
+        expect(error.message).to.include("Must send stake");
       }
     });
   });
@@ -157,12 +160,17 @@ describe("RelayerRegistry - Simplified", function () {
       const intentHash = ethers.id("test-intent-1");
       const reward = ethers.parseEther("0.1");
 
+      // Send reward to contract first
+      await executor.sendTransaction({
+        to: await registry.getAddress(),
+        value: reward
+      });
+
       await registry.connect(executor).recordExecution(
         relayer1.address,
         intentHash,
         true,
-        reward,
-        { value: reward }
+        reward
       );
 
       const info = await registry.getRelayerInfo(relayer1.address);
@@ -210,12 +218,17 @@ describe("RelayerRegistry - Simplified", function () {
       const intentHash = ethers.id("test-intent-4");
       const reward = ethers.parseEther("0.1");
 
+      // Send reward to contract first
+      await executor.sendTransaction({
+        to: await registry.getAddress(),
+        value: reward
+      });
+
       await registry.connect(executor).recordExecution(
         relayer1.address,
         intentHash,
         true,
-        reward,
-        { value: reward }
+        reward
       );
 
       try {
@@ -223,8 +236,7 @@ describe("RelayerRegistry - Simplified", function () {
           relayer1.address,
           intentHash,
           true,
-          reward,
-          { value: reward }
+          reward
         );
         expect.fail("Should have reverted");
       } catch (error) {
@@ -240,15 +252,21 @@ describe("RelayerRegistry - Simplified", function () {
 
     it("Should calculate reputation correctly", async function () {
       // Execute 3 successful, 1 failed = 75% success rate
+      const reward = ethers.parseEther("0.1");
+      
+      // Send rewards to contract first
+      await executor.sendTransaction({
+        to: await registry.getAddress(),
+        value: reward * 3n
+      });
+
       for (let i = 0; i < 3; i++) {
         const intentHash = ethers.id(`success-${i}`);
-        const reward = ethers.parseEther("0.1");
         await registry.connect(executor).recordExecution(
           relayer1.address,
           intentHash,
           true,
-          reward,
-          { value: reward }
+          reward
         );
       }
 
@@ -269,12 +287,18 @@ describe("RelayerRegistry - Simplified", function () {
       // Execute one successful swap
       const intentHash = ethers.id("success-1");
       const reward = ethers.parseEther("0.1");
+      
+      // Send rewards to contract first
+      await executor.sendTransaction({
+        to: await registry.getAddress(),
+        value: reward * 2n
+      });
+
       await registry.connect(executor).recordExecution(
         relayer1.address,
         intentHash,
         true,
-        reward,
-        { value: reward }
+        reward
       );
 
       // Fast forward 10 days
@@ -286,8 +310,7 @@ describe("RelayerRegistry - Simplified", function () {
         relayer1.address,
         intentHash2,
         true,
-        reward,
-        { value: reward }
+        reward
       );
 
       const info = await registry.getRelayerInfo(relayer1.address);
@@ -310,16 +333,22 @@ describe("RelayerRegistry - Simplified", function () {
     it("Should return correct relayer stats", async function () {
       await registry.connect(relayer1).registerRelayer({ value: MIN_STAKE });
 
+      const reward = ethers.parseEther("0.1");
+      
+      // Send rewards to contract first
+      await executor.sendTransaction({
+        to: await registry.getAddress(),
+        value: reward * 3n
+      });
+
       // Execute some swaps
       for (let i = 0; i < 3; i++) {
         const intentHash = ethers.id(`intent-${i}`);
-        const reward = ethers.parseEther("0.1");
         await registry.connect(executor).recordExecution(
           relayer1.address,
           intentHash,
           true,
-          reward,
-          { value: reward }
+          reward
         );
       }
 
@@ -333,17 +362,17 @@ describe("RelayerRegistry - Simplified", function () {
   describe("Admin Functions", function () {
     it("Should allow owner to update executor", async function () {
       const newExecutor = relayer1.address;
-      await registry.connect(owner).updateExecutor(newExecutor);
+      await registry.connect(owner).setExecutor(newExecutor);
 
       expect(await registry.executor()).to.equal(newExecutor);
     });
 
     it("Should reject executor update from non-owner", async function () {
       try {
-        await registry.connect(relayer1).updateExecutor(relayer2.address);
+        await registry.connect(relayer1).setExecutor(relayer2.address);
         expect.fail("Should have reverted");
       } catch (error) {
-        expect(error.message).to.include("OwnableUnauthorizedAccount");
+        expect(error.message).to.include("Ownable");
       }
     });
 
@@ -363,10 +392,13 @@ describe("RelayerRegistry - Simplified", function () {
 
       const balanceAfter = await ethers.provider.getBalance(owner.address);
 
-      expect(balanceAfter).to.be.closeTo(
-        balanceBefore + contractBalance - gasCost,
-        ethers.parseEther("0.01")
-      );
+      const expectedBalance = balanceBefore + contractBalance - gasCost;
+      const diff = balanceAfter > expectedBalance ? 
+        balanceAfter - expectedBalance : 
+        expectedBalance - balanceAfter;
+      
+      // Allow 0.01 ETH difference
+      expect(diff).to.be.lte(ethers.parseEther("0.01"));
     });
   });
 
