@@ -519,8 +519,8 @@ const Swap = () => {
     setLoading(true);
     try {
       if (isConfidentialMode) {
-        if (tokenIn.isNative || tokenOut.isNative) {
-          toast.error('Confidential Gasless Intent currently supports wrapped ERC-20 tokens only.');
+        if (tokenIn.isNative) {
+          toast.error('Confidential Gasless Intent currently supports ERC-20 input tokens only.');
           return;
         }
 
@@ -538,6 +538,9 @@ const Swap = () => {
         setQuote(confidentialQuote);
         if (confidentialQuote.netOut !== undefined) {
           setAmountOut(Number(confidentialQuote.netOut).toFixed(6));
+        }
+        if (tokenOut.isNative) {
+          toast.info(`🔐 Confidential mode will route through ${wrappedOutputSymbol} internally, then unwrap to native ${tokenOut.symbol} on finalization.`);
         }
         toast.success('Confidential quote received!');
         return;
@@ -772,8 +775,8 @@ const Swap = () => {
       return;
     }
 
-    if (tokenIn.isNative || tokenOut.isNative) {
-      toast.error('Use wrapped ERC-20 tokens for the confidential staged flow.');
+    if (tokenIn.isNative) {
+      toast.error('Use an ERC-20 input token for the confidential staged flow.');
       return;
     }
 
@@ -834,6 +837,10 @@ const Swap = () => {
 
       if (!quotedAmountOut || Number.isNaN(quotedAmountOut)) {
         throw new Error('Confidential quote is missing a net output amount.');
+      }
+
+      if (tokenOut.isNative) {
+        toast.info(`💰 Confidential mode will settle through ${wrappedOutputSymbol} internally, then unwrap to native ${tokenOut.symbol} on finalization.`);
       }
 
       const result = await confidentialGasless.executeConfidentialSwap({
@@ -1459,13 +1466,16 @@ const Swap = () => {
                     Sepolia runtime now uses real CoFHE browser encryption for `minOut`, and the live path can now drive escrow settlement demos on-chain.
                   </span>
                   <span className="block mt-1 text-cyan-200">
-                    Live today: same-token escrow demo, plus cross-token inventory-backed demo when the operator has enough `tokenOut` inventory.
+                    Live today: staged escrow demos with ERC-20 input, including native output delivery via wrapped routing and final-step unwrap.
                   </span>
                   {confidentialApprovalRequired && (
                     <span className="block mt-1 text-yellow-300">
-                      One ERC20 approval to the escrow contract is currently required before sponsored submit can proceed.
+                      Current limitation: the first ERC20 approval/spending-cap transaction to the escrow contract is still a normal on-chain approval paid by the user in native gas.
                     </span>
                   )}
+                  <span className="block mt-1 text-yellow-200">
+                    Sponsorship starts after approval. The staged submit/execute/finalize lifecycle is the sponsored part.
+                  </span>
                   {confidentialGasless.quote?.estimatedFeeUSD && (
                     <span className="block mt-1 text-cyan-200">
                       Estimated sponsored cost + protocol fee: ~${Number(confidentialGasless.quote.estimatedFeeUSD).toFixed(4)}
@@ -1713,7 +1723,10 @@ const Swap = () => {
                       This mode is staged on purpose: encrypt a private threshold, sponsor execution, wait for decryption readiness, then finalize success or refund.
                     </div>
                     <div className="mt-1 text-zt-paper/60">
-                      Runtime today: real CoFHE encryption on Sepolia + escrow-backed lifecycle tracking. Same-token and inventory-backed cross-token demos can now complete on-chain, while the general swap path remains hybrid until live adapter execution is wired in.
+                      Runtime today: real CoFHE encryption on Sepolia + escrow-backed lifecycle tracking. This is still a demo-oriented staged path, not a production-ready confidential router.
+                    </div>
+                    <div className="mt-1 text-yellow-200">
+                      Important: if approval is required, that approval transaction still costs the user native gas. ZeroToll only sponsors the staged confidential execution after approval exists.
                     </div>
                     {confidentialGasless.intentId && (
                       <div className="mt-2 rounded bg-black/20 p-2 text-cyan-100">
@@ -1736,6 +1749,35 @@ const Swap = () => {
                           <>
                             <br />
                             Approval spender: {confidentialEscrowAddress}
+                          </>
+                        )}
+                      </div>
+                    )}
+                    {quote?.delivery && (
+                      <div className="mt-2 rounded bg-black/20 p-2 text-zt-paper/75">
+                        Delivery: {quote.delivery.willUnwrapNative
+                          ? `${quote.delivery.executionTokenOutSymbol} internally, then unwrap to native ${quote.delivery.requestedTokenOutSymbol}`
+                          : `Direct ${quote.delivery.requestedTokenOutSymbol} transfer`}
+                      </div>
+                    )}
+                    {quote?.liveExecutionHint?.adapter && (
+                      <div className="mt-2 rounded bg-black/20 p-2 text-zt-paper/75">
+                        Execution venue: {quote.liveExecutionHint.adapter}
+                        {quote.liveExecutionHint.adapter === 'MockDEXAdapter' && (
+                          <>
+                            <br />
+                            Demo note: this venue is on-chain but uses mocked liquidity for buildathon demonstration.
+                          </>
+                        )}
+                      </div>
+                    )}
+                    {confidentialGasless.lastStatus?.execution?.liveExecution?.adapterKind && (
+                      <div className="mt-2 rounded bg-black/20 p-2 text-zt-paper/75">
+                        Finalized path: {confidentialGasless.lastStatus.execution.liveExecution.adapterKind}
+                        {confidentialGasless.lastStatus.execution.liveExecution.adapterKind === 'mockDex' && (
+                          <>
+                            <br />
+                            This finalized through MockDEXAdapter demo liquidity, not a production market venue.
                           </>
                         )}
                       </div>

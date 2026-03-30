@@ -354,6 +354,7 @@ def submit_intent_with_plaintext_min_out(
     chain_id: int,
     intent: Dict[str, Any],
     plaintext_min_out: int,
+    deliver_native: bool = False,
 ) -> Dict[str, Any]:
     client = get_confidential_contract_client(chain_id)
     if client is None:
@@ -368,6 +369,7 @@ def submit_intent_with_plaintext_min_out(
     tx_builder = contract.functions.submitIntentWithPlaintextMinOutForTesting(
         intent_tuple,
         int(plaintext_min_out),
+        bool(deliver_native),
     )
     receipt_data = _send_transaction(w3, account, tx_builder, chain_id)
 
@@ -400,7 +402,8 @@ def get_settlement_summary(chain_id: int, intent_id: str) -> Optional[Dict[str, 
         "feeAmount": str(summary[5]),
         "netAmountOut": str(summary[6]),
         "inputReleased": bool(summary[7]),
-        "executionTarget": summary[8],
+        "deliverNative": bool(summary[8]),
+        "executionTarget": summary[9],
     }
 
 

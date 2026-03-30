@@ -133,6 +133,9 @@ for (const [chainKey, chain] of Object.entries(source.chains)) {
   const confidentialIntentEscrow = isConfiguredAddress(chain.contracts.confidentialIntentEscrow)
     ? chain.contracts.confidentialIntentEscrow
     : null;
+  const wrappedToken = isConfiguredAddress(chain.contracts.wrappedToken)
+    ? chain.contracts.wrappedToken
+    : null;
   const adapters = Object.fromEntries(
     Object.entries(chain.contracts.adapters || {}).map(([adapterKey, address]) => [
       adapterKey,
@@ -151,6 +154,7 @@ for (const [chainKey, chain] of Object.entries(source.chains)) {
     treasury,
     paymaster,
     feeSink,
+    wrappedToken,
     confidentialIntentEscrow,
     adapters,
     permit2: source.permit2,

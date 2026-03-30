@@ -33,7 +33,7 @@ from confidential_contract import (
     submit_intent_with_plaintext_min_out,
 )
 from pyth_rest_oracle import pyth_oracle
-from token_registry import address_to_symbol
+from token_registry import address_to_symbol, symbol_to_address
 
 logger = logging.getLogger(__name__)
 
@@ -84,16 +84,92 @@ def _is_native_symbol(symbol: Optional[str], chain_id: int) -> bool:
     return normalized == "NATIVE" or (native_symbol and normalized == native_symbol)
 
 
-def _ensure_confidential_erc20_only(
+def _get_wrapped_native_address(chain_id: int) -> Optional[str]:
+    configured = CHAIN_CONFIG.get(chain_id, {}).get("wrappedToken")
+    if _is_address(configured or ""):
+        return configured
+
+    native_symbol = str(CHAIN_CONFIG.get(chain_id, {}).get("nativeSymbol") or "").upper()
+    candidates = {
+        "ETH": ("WETH",),
+        "POL": ("WPOL", "WMATIC"),
+        "MATIC": ("WMATIC", "WPOL"),
+    }.get(native_symbol, ())
+
+    for symbol in candidates:
+        try:
+            candidate = symbol_to_address(symbol, chain_id)
+        except Exception:
+            continue
+        if _is_address(candidate):
+            return candidate
+
+    return None
+
+
+def _resolve_token_address(value: str, symbol: str, chain_id: int) -> Optional[str]:
+    if _is_address(value):
+        return value
+
+    try:
+        resolved = symbol_to_address(symbol, chain_id)
+    except Exception:
+        return None
+
+    return resolved if _is_address(resolved) else None
+
+
+def _resolve_confidential_output(
+    token_out_value: str,
+    token_out_symbol: str,
+    chain_id: int,
+) -> Dict[str, Any]:
+    requested_is_native = _is_native_symbol(token_out_symbol, chain_id)
+    requested_symbol = (
+        str(CHAIN_CONFIG.get(chain_id, {}).get("nativeSymbol") or token_out_symbol).upper()
+        if requested_is_native
+        else token_out_symbol
+    )
+    requested_address = _resolve_token_address(token_out_value, requested_symbol, chain_id)
+    execution_address = requested_address
+    execution_symbol = requested_symbol
+
+    if requested_is_native:
+        wrapped_native_address = _get_wrapped_native_address(chain_id)
+        if not wrapped_native_address:
+            raise HTTPException(
+                status_code=400,
+                detail="Wrapped native token is not configured for confidential native delivery on this chain.",
+            )
+        execution_address = wrapped_native_address
+        execution_symbol = address_to_symbol(wrapped_native_address, chain_id)
+
+    return {
+        "requestedAddress": requested_address,
+        "requestedSymbol": requested_symbol,
+        "requestedIsNative": requested_is_native,
+        "executionAddress": execution_address,
+        "executionSymbol": execution_symbol,
+        "deliveryMode": "native_unwrap" if requested_is_native else "erc20_transfer",
+    }
+
+
+def _ensure_confidential_supported(
     token_in_symbol: str,
     token_out_symbol: str,
     src_chain_id: int,
     dst_chain_id: int,
 ) -> None:
-    if _is_native_symbol(token_in_symbol, src_chain_id) or _is_native_symbol(token_out_symbol, dst_chain_id):
+    if _is_native_symbol(token_in_symbol, src_chain_id):
         raise HTTPException(
             status_code=400,
-            detail="Confidential Gasless Intent currently supports wrapped/ERC-20 tokens only.",
+            detail="Confidential Gasless Intent currently supports ERC-20 input tokens only.",
+        )
+
+    if _is_native_symbol(token_out_symbol, dst_chain_id) and not _get_wrapped_native_address(dst_chain_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Wrapped native token is not configured for confidential native delivery on this chain.",
         )
 
 
@@ -224,7 +300,7 @@ def _describe_live_execution(mode: str, finalized: Optional[bool] = None) -> str
         if mode == "cross_token_ztoken_adapter_live_demo":
             return "Live zToken confidential execution routed through ZeroTollAdapter. Waiting for on-chain decryption readiness."
         if mode == "cross_token_adapter_live_demo":
-            return "Live confidential execution routed through MockDEXAdapter. Waiting for on-chain decryption readiness."
+            return "Live confidential execution routed through MockDEXAdapter demo liquidity. This path is on-chain, but the venue is still a mocked market. Waiting for on-chain decryption readiness."
         return "Live cross-token inventory-backed confidential demo executed on escrow. Waiting for on-chain decryption readiness."
 
     if finalized:
@@ -233,7 +309,7 @@ def _describe_live_execution(mode: str, finalized: Optional[bool] = None) -> str
         if mode == "cross_token_ztoken_adapter_live_demo":
             return "Live zToken confidential settlement finalized through ZeroTollAdapter."
         if mode == "cross_token_adapter_live_demo":
-            return "Live confidential settlement finalized through MockDEXAdapter."
+            return "Live confidential settlement finalized through MockDEXAdapter demo liquidity. This was an on-chain demo path, not a production market venue."
         return "Live cross-token inventory-backed confidential settlement finalized on escrow."
 
     if mode == "same_token_live_escrow_demo":
@@ -241,7 +317,7 @@ def _describe_live_execution(mode: str, finalized: Optional[bool] = None) -> str
     if mode == "cross_token_ztoken_adapter_live_demo":
         return "Live zToken confidential settlement refunded after ZeroTollAdapter execution."
     if mode == "cross_token_adapter_live_demo":
-        return "Live confidential settlement refunded after MockDEXAdapter execution."
+        return "Live confidential settlement refunded after MockDEXAdapter demo execution."
     return "Live cross-token inventory-backed confidential settlement refunded on escrow."
 
 
@@ -257,6 +333,7 @@ def _live_escrow_demo_eligible(intent: Dict[str, Any]) -> bool:
 def _get_contract_state(chain_id: int, intent_id: Optional[str] = None) -> Dict[str, Any]:
     chain_config = CHAIN_CONFIG.get(chain_id, {})
     contract_address = chain_config.get("confidentialIntentEscrow")
+    wrapped_token = _get_wrapped_native_address(chain_id)
     client = get_confidential_contract_client(chain_id)
     settlement = None
     verdict_status = None
@@ -270,8 +347,10 @@ def _get_contract_state(chain_id: int, intent_id: Optional[str] = None) -> Dict[
 
     return {
         "confidentialIntentEscrow": contract_address,
+        "wrappedToken": wrapped_token,
         "ready": bool(contract_address),
         "submissionReady": client is not None,
+        "nativeDeliveryReady": bool(contract_address and wrapped_token and client is not None),
         "liveSubmitMode": (
             "plaintext_testing_helper" if contract_address and client is not None else "staged_backend_only"
         ),
@@ -341,20 +420,22 @@ def _build_live_adapter_hint(
 
 def _build_quote(
     token_in_symbol: str,
-    token_out_symbol: str,
+    requested_token_out_symbol: str,
+    execution_token_out_symbol: str,
     amount_in: float,
     chain_id: int,
     token_in_address: Optional[str] = None,
     token_out_address: Optional[str] = None,
+    delivery_mode: str = "erc20_transfer",
 ) -> Dict[str, Any]:
     contract_state = _get_contract_state(chain_id)
     price_in_data = pyth_oracle.get_price(token_in_symbol, chain_id)
-    price_out_data = pyth_oracle.get_price(token_out_symbol, chain_id)
+    price_out_data = pyth_oracle.get_price(execution_token_out_symbol, chain_id)
 
     if not price_in_data["available"] or not price_out_data["available"]:
         raise HTTPException(
             status_code=503,
-            detail=f"Confidential quote unavailable for {token_in_symbol} or {token_out_symbol}.",
+            detail=f"Confidential quote unavailable for {token_in_symbol} or {execution_token_out_symbol}.",
         )
 
     price_in = price_in_data["price"]
@@ -368,7 +449,7 @@ def _build_quote(
         token_in_address=token_in_address,
         token_out_address=token_out_address,
         token_in_symbol=token_in_symbol,
-        token_out_symbol=token_out_symbol,
+        token_out_symbol=execution_token_out_symbol,
         amount_in=amount_in,
     )
 
@@ -396,12 +477,19 @@ def _build_quote(
             else "Fhenix-scaffold"
         ),
         "tokenInSymbol": token_in_symbol,
-        "tokenOutSymbol": token_out_symbol,
+        "tokenOutSymbol": requested_token_out_symbol,
+        "executionTokenOutSymbol": execution_token_out_symbol,
         "grossOut": round(gross_out, 6),
         "netOut": round(net_out, 6),
         "estimatedFeeToken": round(fee_amount, 6),
         "estimatedFeeUSD": round(fee_usd, 6),
         "suggestedConfidentialMinOut": round(suggested_confidential_min_out, 6),
+        "delivery": {
+            "mode": delivery_mode,
+            "requestedTokenOutSymbol": requested_token_out_symbol,
+            "executionTokenOutSymbol": execution_token_out_symbol,
+            "willUnwrapNative": delivery_mode == "native_unwrap",
+        },
         "privacy": {
             "clientEncryptionExpected": (
                 "cofhe_sdk_web" if chain_id in COFHE_BROWSER_CHAINS else "commitment_only_scaffold"
@@ -418,7 +506,7 @@ def _build_quote(
         "oracleSource": "Pyth",
         "priceStaleness": {
             token_in_symbol: price_in_data["stale"],
-            token_out_symbol: price_out_data["stale"],
+            execution_token_out_symbol: price_out_data["stale"],
         },
     }
 
@@ -561,19 +649,26 @@ class ConfidentialFinalizeRequest(BaseModel):
 async def get_confidential_quote(request: ConfidentialQuoteRequest):
     token_in_symbol = _coerce_token_symbol(request.tokenIn, request.srcChainId)
     token_out_symbol = _coerce_token_symbol(request.tokenOut, request.dstChainId)
-    _ensure_confidential_erc20_only(
+    _ensure_confidential_supported(
         token_in_symbol,
         token_out_symbol,
         request.srcChainId,
         request.dstChainId,
     )
+    output_resolution = _resolve_confidential_output(
+        request.tokenOut,
+        token_out_symbol,
+        request.dstChainId,
+    )
     return _build_quote(
         token_in_symbol,
-        token_out_symbol,
+        output_resolution["requestedSymbol"],
+        output_resolution["executionSymbol"],
         request.amountIn,
         request.srcChainId,
         request.tokenIn,
-        request.tokenOut,
+        output_resolution["executionAddress"],
+        output_resolution["deliveryMode"],
     )
 
 
@@ -581,12 +676,21 @@ async def get_confidential_quote(request: ConfidentialQuoteRequest):
 async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request: Request):
     token_in_symbol = _coerce_token_symbol(payload.tokenIn, payload.srcChainId)
     token_out_symbol = _coerce_token_symbol(payload.tokenOut, payload.dstChainId)
-    _ensure_confidential_erc20_only(
+    _ensure_confidential_supported(
         token_in_symbol,
         token_out_symbol,
         payload.srcChainId,
         payload.dstChainId,
     )
+    resolved_token_in = _resolve_token_address(payload.tokenIn, token_in_symbol, payload.srcChainId)
+    output_resolution = _resolve_confidential_output(
+        payload.tokenOut,
+        token_out_symbol,
+        payload.dstChainId,
+    )
+    execution_token_out = output_resolution["executionAddress"]
+    execution_token_out_symbol = output_resolution["executionSymbol"]
+    requested_native_output = output_resolution["requestedIsNative"]
 
     intent_id = str(uuid.uuid4())
     now = _utc_now()
@@ -594,14 +698,14 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
     onchain_submit = None
     enforcement_mode = "backend_scaffold_until_contract_wiring"
     amount_in_units = payload.amountInUnits or str(
-        _decimal_to_units(payload.amountIn, _token_decimals(payload.srcChainId, payload.tokenIn))
+        _decimal_to_units(payload.amountIn, _token_decimals(payload.srcChainId, resolved_token_in or payload.tokenIn))
     )
     quoted_amount_out_units = payload.quotedAmountOutUnits or str(
-        _decimal_to_units(payload.quotedAmountOut, _token_decimals(payload.dstChainId, payload.tokenOut))
+        _decimal_to_units(payload.quotedAmountOut, _token_decimals(payload.dstChainId, execution_token_out or payload.tokenOut))
     )
     estimated_fee_token = payload.estimatedFeeToken or "0"
     estimated_fee_token_units = payload.estimatedFeeTokenUnits or (
-        str(_decimal_to_units(estimated_fee_token, _token_decimals(payload.dstChainId, payload.tokenOut)))
+        str(_decimal_to_units(estimated_fee_token, _token_decimals(payload.dstChainId, execution_token_out or payload.tokenOut)))
         if _coerce_float(estimated_fee_token) > 0
         else "0"
     )
@@ -609,8 +713,8 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
     if contract_state["submissionReady"] and payload.plaintextMinOutForTesting:
         intent_payload = {
             "user": payload.user,
-            "tokenIn": payload.tokenIn,
-            "tokenOut": payload.tokenOut,
+            "tokenIn": resolved_token_in or payload.tokenIn,
+            "tokenOut": execution_token_out or payload.tokenOut,
             "amountIn": int(amount_in_units),
             "deadline": payload.deadline,
             "nonce": payload.nonce,
@@ -622,6 +726,7 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
                 payload.srcChainId,
                 intent_payload,
                 int(payload.plaintextMinOutForTesting),
+                requested_native_output,
             )
             enforcement_mode = "onchain_submit_plaintext_testing_helper"
         except Exception as exc:
@@ -649,10 +754,14 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
             else "Intent committed. Waiting for sponsored execution."
         ),
         "user": payload.user,
-        "tokenIn": payload.tokenIn,
-        "tokenOut": payload.tokenOut,
+        "tokenIn": resolved_token_in or payload.tokenIn,
+        "tokenOut": execution_token_out or payload.tokenOut,
         "tokenInSymbol": token_in_symbol,
-        "tokenOutSymbol": token_out_symbol,
+        "tokenOutSymbol": execution_token_out_symbol,
+        "requestedTokenOut": output_resolution["requestedAddress"] or payload.tokenOut,
+        "requestedTokenOutSymbol": output_resolution["requestedSymbol"],
+        "requestedTokenOutIsNative": requested_native_output,
+        "deliveryMode": output_resolution["deliveryMode"],
         "amountIn": payload.amountIn,
         "amountInUnits": amount_in_units,
         "quotedAmountOut": payload.quotedAmountOut,
@@ -696,6 +805,12 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
         "privacy": {
             "clientEncryptionMode": record["clientEncryptionMode"],
             "enforcementMode": record["enforcementMode"],
+        },
+        "delivery": {
+            "mode": record["deliveryMode"],
+            "requestedTokenOutSymbol": record["requestedTokenOutSymbol"],
+            "executionTokenOutSymbol": record["tokenOutSymbol"],
+            "willUnwrapNative": record["requestedTokenOutIsNative"],
         },
     }
 
@@ -891,6 +1006,11 @@ async def finalize_confidential_intent(payload: ConfidentialFinalizeRequest, req
             "verdict": verdict,
             "verdictSource": "onchain_fhenix_demo",
             "finalizeTxHash": finalize_result["finalizeTxHash"],
+            "deliveredAs": (
+                CHAIN_CONFIG.get(record["dstChainId"], {}).get("nativeSymbol")
+                if record.get("requestedTokenOutIsNative")
+                else record.get("requestedTokenOutSymbol")
+            ),
         }
 
         await _persist_intent(request, record)
@@ -901,6 +1021,12 @@ async def finalize_confidential_intent(payload: ConfidentialFinalizeRequest, req
             "stage": record["stage"],
             "statusMessage": record["statusMessage"],
             "result": record["result"],
+            "delivery": {
+                "mode": record.get("deliveryMode"),
+                "requestedTokenOutSymbol": record.get("requestedTokenOutSymbol"),
+                "executionTokenOutSymbol": record.get("tokenOutSymbol"),
+                "willUnwrapNative": record.get("requestedTokenOutIsNative", False),
+            },
         }
 
     if record["stage"] not in {"decryption_requested", "ready_to_finalize"}:
@@ -936,6 +1062,11 @@ async def finalize_confidential_intent(payload: ConfidentialFinalizeRequest, req
     record["result"] = {
         "verdict": verdict,
         "verdictSource": record.get("execution", {}).get("verdictSource", "unknown"),
+        "deliveredAs": (
+            CHAIN_CONFIG.get(record["dstChainId"], {}).get("nativeSymbol")
+            if verdict and record.get("requestedTokenOutIsNative")
+            else record.get("requestedTokenOutSymbol")
+        ),
     }
 
     await _persist_intent(request, record)
@@ -946,6 +1077,12 @@ async def finalize_confidential_intent(payload: ConfidentialFinalizeRequest, req
         "stage": record["stage"],
         "statusMessage": record["statusMessage"],
         "result": record["result"],
+        "delivery": {
+            "mode": record.get("deliveryMode"),
+            "requestedTokenOutSymbol": record.get("requestedTokenOutSymbol"),
+            "executionTokenOutSymbol": record.get("tokenOutSymbol"),
+            "willUnwrapNative": record.get("requestedTokenOutIsNative", False),
+        },
     }
 
 
@@ -986,6 +1123,12 @@ async def get_confidential_status(intent_id: str, request: Request):
         "privacy": {
             "clientEncryptionMode": record.get("clientEncryptionMode"),
             "enforcementMode": record.get("enforcementMode"),
+        },
+        "delivery": {
+            "mode": record.get("deliveryMode"),
+            "requestedTokenOutSymbol": record.get("requestedTokenOutSymbol"),
+            "executionTokenOutSymbol": record.get("tokenOutSymbol"),
+            "willUnwrapNative": record.get("requestedTokenOutIsNative", False),
         },
         "contract": {
             **_get_contract_state(

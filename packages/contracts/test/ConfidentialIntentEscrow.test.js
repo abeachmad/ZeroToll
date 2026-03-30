@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("ConfidentialIntentEscrow", function () {
-  let escrow, tokenIn, tokenOut;
+  let escrow, tokenIn, tokenOut, wrappedNative;
   let owner, operator, user, feeRecipient, executionTarget;
 
   const AMOUNT_IN = ethers.parseUnits("100", 6);
@@ -13,11 +13,13 @@ describe("ConfidentialIntentEscrow", function () {
     [owner, operator, user, feeRecipient, executionTarget] = await ethers.getSigners();
 
     const ERC20Mock = await ethers.getContractFactory("contracts/mocks/ERC20Mock.sol:ERC20Mock");
+    const MockWrappedNative = await ethers.getContractFactory("MockWrappedNative");
     tokenIn = await ERC20Mock.deploy("USDC", "USDC", 6);
     tokenOut = await ERC20Mock.deploy("zUSDC", "zUSDC", 6);
+    wrappedNative = await MockWrappedNative.deploy("Wrapped Ether", "WETH");
 
     const ConfidentialIntentEscrow = await ethers.getContractFactory("ConfidentialIntentEscrow");
-    escrow = await ConfidentialIntentEscrow.deploy(feeRecipient.address);
+    escrow = await ConfidentialIntentEscrow.deploy(feeRecipient.address, wrappedNative.target);
 
     await escrow.setTrustedOperator(operator.address, true);
 
@@ -42,7 +44,8 @@ describe("ConfidentialIntentEscrow", function () {
     const intent = buildIntent();
     const tx = await escrow.connect(user).submitIntentWithPlaintextMinOutForTesting(
       intent,
-      123n
+      123n,
+      false
     );
     const receipt = await tx.wait();
 
@@ -68,7 +71,7 @@ describe("ConfidentialIntentEscrow", function () {
     const intent = buildIntent();
     const intentId = await escrow.getIntentId(intent);
 
-    await escrow.connect(user).submitIntentWithPlaintextMinOutForTesting(intent, 111n);
+    await escrow.connect(user).submitIntentWithPlaintextMinOutForTesting(intent, 111n, false);
     await escrow.connect(operator).releaseInputForExecution(intentId, executionTarget.address);
 
     expect(await tokenIn.balanceOf(executionTarget.address)).to.equal(AMOUNT_IN);
@@ -92,13 +95,40 @@ describe("ConfidentialIntentEscrow", function () {
     expect(summary.stage).to.equal(5n); // FinalizedSuccess
   });
 
+  it("unwraps wrapped native output to native ETH on finalize", async function () {
+    const intent = buildIntent();
+    intent.tokenOut = wrappedNative.target;
+    const intentId = await escrow.getIntentId(intent);
+
+    await escrow.connect(user).submitIntentWithPlaintextMinOutForTesting(intent, 111n, true);
+    await escrow.connect(operator).releaseInputForExecution(intentId, executionTarget.address);
+
+    await wrappedNative.connect(operator).deposit({ value: GROSS_OUT });
+    await wrappedNative.connect(operator).transfer(escrow.target, GROSS_OUT);
+    await escrow.connect(operator).recordExecutionResult(intentId, GROSS_OUT, FEE_AMOUNT);
+    await escrow.connect(operator).requestDecryption(intentId);
+    await ethers.provider.send("evm_increaseTime", [11]);
+    await ethers.provider.send("evm_mine", []);
+
+    const userBalanceBefore = await ethers.provider.getBalance(user.address);
+    await escrow.connect(operator).finalizeSuccess(intentId);
+    const userBalanceAfter = await ethers.provider.getBalance(user.address);
+
+    expect(userBalanceAfter - userBalanceBefore).to.equal(GROSS_OUT - FEE_AMOUNT);
+    expect(await wrappedNative.balanceOf(feeRecipient.address)).to.equal(FEE_AMOUNT);
+
+    const summary = await escrow.getSettlementSummary(intentId);
+    expect(summary.deliverNative).to.equal(true);
+    expect(summary.stage).to.equal(5n);
+  });
+
   it("refunds an unexecuted expired intent", async function () {
     const intent = buildIntent();
     const latestBlock = await ethers.provider.getBlock("latest");
     intent.deadline = latestBlock.timestamp + 1;
 
     const intentId = await escrow.getIntentId(intent);
-    await escrow.connect(user).submitIntentWithPlaintextMinOutForTesting(intent, 999n);
+    await escrow.connect(user).submitIntentWithPlaintextMinOutForTesting(intent, 999n, false);
 
     await ethers.provider.send("evm_increaseTime", [5]);
     await ethers.provider.send("evm_mine", []);

@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@fhenixprotocol/cofhe-contracts/FHE.sol";
+import "../interfaces/IWETH.sol";
 import "./ConfidentialIntentLib.sol";
 
 /// @notice Confidential settlement scaffold for ZeroToll's future Fhenix path.
@@ -27,6 +28,7 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
         uint64 executedAt;
         uint64 finalizedAt;
         bool inputReleased;
+        bool deliverNative;
         address executionTarget;
     }
 
@@ -34,16 +36,19 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
     mapping(address => bool) public trustedOperators;
 
     address public feeRecipient;
+    address public wrappedNativeToken;
 
     event TrustedOperatorSet(address indexed operator, bool enabled);
     event FeeRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
+    event WrappedNativeTokenUpdated(address indexed oldWrappedNativeToken, address indexed newWrappedNativeToken);
     event ConfidentialIntentSubmitted(
         bytes32 indexed intentId,
         address indexed user,
         address indexed tokenIn,
         address tokenOut,
         uint256 amountIn,
-        uint256 encryptedMinOutHandle
+        uint256 encryptedMinOutHandle,
+        bool deliverNative
     );
     event InputReleasedForExecution(
         bytes32 indexed intentId,
@@ -75,8 +80,9 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
         _;
     }
 
-    constructor(address initialFeeRecipient) Ownable(msg.sender) {
+    constructor(address initialFeeRecipient, address initialWrappedNativeToken) Ownable(msg.sender) {
         feeRecipient = initialFeeRecipient;
+        wrappedNativeToken = initialWrappedNativeToken;
     }
 
     function setTrustedOperator(address operator, bool enabled) external onlyOwner {
@@ -90,6 +96,12 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
         emit FeeRecipientUpdated(oldRecipient, newRecipient);
     }
 
+    function setWrappedNativeToken(address newWrappedNativeToken) external onlyOwner {
+        address oldWrappedNativeToken = wrappedNativeToken;
+        wrappedNativeToken = newWrappedNativeToken;
+        emit WrappedNativeTokenUpdated(oldWrappedNativeToken, newWrappedNativeToken);
+    }
+
     function getIntentId(
         ConfidentialIntentLib.ConfidentialIntent calldata intent
     ) external pure returns (bytes32) {
@@ -98,10 +110,11 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
 
     function submitIntent(
         ConfidentialIntentLib.ConfidentialIntent calldata intent,
-        InEuint128 memory encryptedMinOut
+        InEuint128 memory encryptedMinOut,
+        bool deliverNative
     ) external nonReentrant returns (bytes32 intentId) {
         euint128 minOut = FHE.asEuint128(encryptedMinOut);
-        return _submitIntent(intent, minOut);
+        return _submitIntent(intent, minOut, deliverNative);
     }
 
     /// @notice Local-development helper for tests and scaffolding.
@@ -109,15 +122,17 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
     /// encryption is still being wired up. Do not market this path as private.
     function submitIntentWithPlaintextMinOutForTesting(
         ConfidentialIntentLib.ConfidentialIntent calldata intent,
-        uint128 plaintextMinOut
+        uint128 plaintextMinOut,
+        bool deliverNative
     ) external nonReentrant returns (bytes32 intentId) {
         euint128 minOut = FHE.asEuint128(uint256(plaintextMinOut));
-        return _submitIntent(intent, minOut);
+        return _submitIntent(intent, minOut, deliverNative);
     }
 
     function _submitIntent(
         ConfidentialIntentLib.ConfidentialIntent calldata intent,
-        euint128 encryptedMinOut
+        euint128 encryptedMinOut,
+        bool deliverNative
     ) internal returns (bytes32 intentId) {
         require(msg.sender == intent.user || trustedOperators[msg.sender], "Unauthorized submitter");
         require(intent.user != address(0), "Invalid user");
@@ -126,6 +141,10 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
         require(intent.amountIn > 0, "Invalid amountIn");
         require(intent.deadline >= block.timestamp, "Intent expired");
         require(intent.chainId == block.chainid, "Wrong chain");
+        if (deliverNative) {
+            require(wrappedNativeToken != address(0), "Wrapped native not configured");
+            require(intent.tokenOut == wrappedNativeToken, "Native delivery requires wrapped native tokenOut");
+        }
 
         intentId = ConfidentialIntentLib.hashIntent(intent);
         ConfidentialSettlement storage settlement = settlements[intentId];
@@ -135,6 +154,7 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
         settlement.stage = ConfidentialIntentLib.SettlementStage.Submitted;
         settlement.encryptedMinOut = encryptedMinOut;
         settlement.submittedAt = uint64(block.timestamp);
+        settlement.deliverNative = deliverNative;
 
         FHE.allowThis(settlement.encryptedMinOut);
         FHE.allow(settlement.encryptedMinOut, intent.user);
@@ -147,7 +167,8 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
             intent.tokenIn,
             intent.tokenOut,
             intent.amountIn,
-            euint128.unwrap(settlement.encryptedMinOut)
+            euint128.unwrap(settlement.encryptedMinOut),
+            settlement.deliverNative
         );
     }
 
@@ -236,7 +257,13 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
             IERC20(settlement.intent.tokenOut).safeTransfer(feeRecipient, settlement.feeAmount);
         }
 
-        IERC20(settlement.intent.tokenOut).safeTransfer(settlement.intent.user, settlement.netAmountOut);
+        if (settlement.deliverNative) {
+            IWETH(settlement.intent.tokenOut).withdraw(settlement.netAmountOut);
+            (bool success, ) = payable(settlement.intent.user).call{value: settlement.netAmountOut}("");
+            require(success, "Native transfer failed");
+        } else {
+            IERC20(settlement.intent.tokenOut).safeTransfer(settlement.intent.user, settlement.netAmountOut);
+        }
 
         emit ConfidentialIntentFinalized(
             intentId,
@@ -316,6 +343,7 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
             uint256 feeAmount,
             uint256 netAmountOut,
             bool inputReleased,
+            bool deliverNative,
             address executionTarget
         )
     {
@@ -329,6 +357,7 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
             settlement.feeAmount,
             settlement.netAmountOut,
             settlement.inputReleased,
+            settlement.deliverNative,
             settlement.executionTarget
         );
     }
@@ -338,4 +367,6 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
         require(settlement.submittedAt != 0, "Unknown intent");
         return FHE.getDecryptResultSafe(settlement.encryptedVerdict);
     }
+
+    receive() external payable {}
 }
