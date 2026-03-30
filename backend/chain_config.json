@@ -63,7 +63,7 @@
     "key": "sepolia",
     "name": "Ethereum Sepolia",
     "network": "sepolia",
-    "router": "0x2d188Edc1a9a9151f191560a79F55d749CCb1656",
+    "router": "0xEDEB7F0a335BdAeA933421701Ed49726649815fF",
     "routerHub": "0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84",
     "delegate": "0xcFE005B2E0013e0FF8cB0569d9b103094d423B36",
     "treasury": "0xA5e89F1485D56fd5dfA20B6FDC9874B8bCF0bd10",

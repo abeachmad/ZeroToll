@@ -298,7 +298,8 @@ async def get_quote(request: QuoteRequest, req: Request):
                             estimatedFee=f"{estimated_fee:.4f}",
                             feeUSD=f"${fee_usd:.2f}",
                             oracleSource=oracle_source,
-                            deadline=int(datetime.now().timestamp()) + 60
+                            deadline=int(datetime.now().timestamp()) + 60,
+                            netOut=net_out
                         )
             except:
                 pass

@@ -451,6 +451,48 @@ const Swap = () => {
   const isNativeOutput = tokenOut.isNative;
   const wrappedOutputSymbol = isNativeOutput ? tokenOut.symbol.replace(/^(POL|ETH)$/, 'W$1') : null;
 
+  const buildStandardQuoteIntent = () => ({
+    user: address || '0x1234567890123456789012345678901234567890',
+    tokenIn: tokenIn.symbol,
+    amtIn: parseFloat(amountIn),
+    tokenOut: tokenOut.symbol,
+    minOut: parseFloat(amountIn) * 0.995,
+    srcChainId: fromChain.id,
+    dstChainId: toChain.id,
+    feeMode,
+    feeCap: parseFloat(feeCap),
+    deadline: Math.floor(Date.now() / 1000) + 600,
+    nonce: Date.now()
+  });
+
+  const requestStandardQuote = async () => {
+    const response = await axios.post(`${API}/quote`, { intent: buildStandardQuoteIntent() });
+    const quoteData = response.data;
+
+    if (!quoteData?.success) {
+      throw new Error(quoteData?.reason || 'No quote available');
+    }
+
+    return quoteData;
+  };
+
+  const getQuotedMinOutUnits = (quoteData, decimalsOut, slippageBps = 9500n) => {
+    const numericNetOut = Number(quoteData?.netOut);
+    if (!Number.isFinite(numericNetOut) || numericNetOut <= 0) {
+      throw new Error('Quote did not include a usable output amount. Please refresh the quote and try again.');
+    }
+
+    const normalizedQuote = numericNetOut.toFixed(Math.min(decimalsOut, 12));
+    const quotedUnits = parseUnits(normalizedQuote, decimalsOut);
+    const minOutUnits = (quotedUnits * slippageBps) / 10000n;
+
+    if (minOutUnits <= 0n) {
+      throw new Error('Quoted minimum output is too small. Try a larger amount.');
+    }
+
+    return minOutUnits;
+  };
+
   const handleGetQuote = async () => {
     if (!isConnected) {
       toast.error('Please connect your wallet first');
@@ -501,40 +543,19 @@ const Swap = () => {
         return;
       }
 
-      const intent = {
-        user: address || '0x1234567890123456789012345678901234567890',
-        tokenIn: tokenIn.symbol,
-        amtIn: parseFloat(amountIn),
-        tokenOut: tokenOut.symbol,
-        minOut: parseFloat(amountIn) * 0.995,
-        srcChainId: fromChain.id,  // ✅ FIX: Send source chain ID
-        dstChainId: toChain.id,
-        feeMode,
-        feeCap: parseFloat(feeCap),
-        deadline: Math.floor(Date.now() / 1000) + 600,
-        nonce: Date.now()
-      };
+      const quoteData = await requestStandardQuote();
+      const numericNetOut = Number(quoteData.netOut);
 
-      const response = await axios.post(`${API}/quote`, { intent });
-      
-      if (response.data.success) {
-        const quoteData = response.data;
-        setQuote(quoteData);
-        
-        // CRITICAL: Use backend's netOut for correct price conversion
-        if (quoteData.netOut !== undefined) {
-          setAmountOut(quoteData.netOut.toFixed(6));
-        } else {
-          setAmountOut((parseFloat(amountIn) * 0.995).toFixed(6));
-        }
-        
-        toast.success('Quote received!');
-      } else {
-        toast.error(response.data.reason || 'No quote available');
+      setQuote(quoteData);
+      if (!Number.isFinite(numericNetOut) || numericNetOut <= 0) {
+        throw new Error('Quote response did not include a usable output amount.');
       }
+
+      setAmountOut(numericNetOut.toFixed(6));
+      toast.success('Quote received!');
     } catch (error) {
       console.error('Quote error:', error);
-      toast.error('Failed to get quote');
+      toast.error(error.message || 'Failed to get quote');
     } finally {
       setLoading(false);
     }
@@ -892,31 +913,17 @@ const Swap = () => {
         return;
       }
 
-      // Calculate minAmountOut with proper decimal conversion
-      // Router test mode formula:
-      //   fee = amountIn * 0.5%
-      //   amountAfterFee = amountIn - fee
-      //   if decimalsOut >= decimalsIn: amountOut = amountAfterFee * 10^(decimalsOut - decimalsIn)
-      //   if decimalsOut < decimalsIn:  amountOut = amountAfterFee / 10^(decimalsIn - decimalsOut)
-      const decimalsOut = tokenOut.decimals || 18;
-      const slippageTolerance = 0.90; // 10% slippage tolerance for test mode
-      
-      // amountWei is already in input token's smallest unit (wei)
-      // Router takes 0.5% fee
-      const amountAfterFeeWei = amountWei * 995n / 1000n;
-      
-      // Apply decimal conversion (same as router)
-      let expectedOutputWei;
-      if (decimalsOut >= decimals) {
-        // Output has more decimals - multiply
-        expectedOutputWei = amountAfterFeeWei * BigInt(10 ** (decimalsOut - decimals));
-      } else {
-        // Output has fewer decimals - divide
-        expectedOutputWei = amountAfterFeeWei / BigInt(10 ** (decimals - decimalsOut));
+      setGaslessStatus('Getting live quote...');
+      const quoteData = await requestStandardQuote();
+      setQuote(quoteData);
+
+      const numericNetOut = Number(quoteData.netOut);
+      if (Number.isFinite(numericNetOut) && numericNetOut > 0) {
+        setAmountOut(numericNetOut.toFixed(6));
       }
-      
-      // Apply slippage tolerance (multiply by 90, divide by 100)
-      const minOut = expectedOutputWei * 90n / 100n;
+
+      const decimalsOut = tokenOut.decimals || 18;
+      const minOut = getQuotedMinOutUnits(quoteData, decimalsOut, 9500n);
       const gaslessTokenOutAddress = tokenOut.isNative ? NATIVE_EIP7702_ADDRESS : tokenOut.address;
       let result;
 

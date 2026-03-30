@@ -170,4 +170,25 @@ describe("ZeroTollRouterV3 native output", function () {
       expect(error.message).to.include("Wrapped native not configured");
     }
   });
+
+  it("surfaces the primary adapter failure instead of retrying after prefunding", async function () {
+    const FailingAdapter = await ethers.getContractFactory("contracts/mocks/RouterV3NativeAdapterMock.sol:RouterV3NativeAdapterMock");
+    const fallbackAdapter = await ethers.getContractFactory("contracts/mocks/RouterV3NativeAdapterMock.sol:RouterV3NativeAdapterMock");
+
+    const failingAdapter = await FailingAdapter.deploy();
+    const workingFallback = await fallbackAdapter.deploy();
+
+    await wrappedNative.connect(owner).deposit({ value: AMOUNT_OUT });
+    await wrappedNative.connect(owner).transfer(await workingFallback.getAddress(), AMOUNT_OUT);
+    await workingFallback.setMockOutput(await wrappedNative.getAddress(), AMOUNT_OUT);
+
+    await router.setAdapters(await failingAdapter.getAddress(), await workingFallback.getAddress());
+
+    const intent = await buildIntent();
+    const signature = await signIntent(intent);
+
+    await expect(
+      router.connect(relayer).executeSwap(intent, signature)
+    ).to.be.revertedWith("Mock output not configured");
+  });
 });

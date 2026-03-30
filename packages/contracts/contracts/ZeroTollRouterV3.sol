@@ -402,60 +402,55 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
     }
 
     function _doSwapWithAmount(SwapIntent calldata intent, uint256 amount) internal returns (uint256 amountOut) {
-        // Try adapters in order
         if (primaryAdapter != address(0)) {
-            (bool success, uint256 result) = _tryAdapter(primaryAdapter, intent, amount);
-            if (success) {
-                if (_isNativeOutput(intent.tokenOut)) {
-                    _unwrapAndTransferNative(result, intent.user);
-                }
-                emit SwapRouted(primaryAdapter, "primary");
-                return result;
-            }
+            amountOut = _executeAdapterOrRevert(primaryAdapter, intent, amount, "primary");
+            return amountOut;
         }
-        
+
         if (fallbackAdapter != address(0)) {
-            (bool success, uint256 result) = _tryAdapter(fallbackAdapter, intent, amount);
-            if (success) {
-                if (_isNativeOutput(intent.tokenOut)) {
-                    _unwrapAndTransferNative(result, intent.user);
-                }
-                emit SwapRouted(fallbackAdapter, "fallback");
-                return result;
-            }
+            amountOut = _executeAdapterOrRevert(fallbackAdapter, intent, amount, "fallback");
+            return amountOut;
         }
-        
+
         if (dexAdapter != address(0)) {
-            (bool success, uint256 result) = _tryAdapter(dexAdapter, intent, amount);
-            if (success) {
-                if (_isNativeOutput(intent.tokenOut)) {
-                    _unwrapAndTransferNative(result, intent.user);
-                }
-                emit SwapRouted(dexAdapter, "legacy");
-                return result;
-            }
-            revert("All adapters failed");
+            amountOut = _executeAdapterOrRevert(dexAdapter, intent, amount, "legacy");
+            return amountOut;
         }
-        
+
         if (testMode) {
             amountOut = _doTestModeSwap(intent, amount);
             emit SwapRouted(address(0), "testMode");
             return amountOut;
         }
-        
+
         revert("No DEX adapter configured");
+    }
+
+    function _executeAdapterOrRevert(
+        address adapter,
+        SwapIntent calldata intent,
+        uint256 amount,
+        string memory route
+    ) internal returns (uint256 amountOut) {
+        amountOut = _tryAdapter(adapter, intent, amount);
+
+        if (_isNativeOutput(intent.tokenOut)) {
+            _unwrapAndTransferNative(amountOut, intent.user);
+        }
+
+        emit SwapRouted(adapter, route);
     }
 
     function _tryAdapter(
         address adapter, 
         SwapIntent calldata intent,
         uint256 amount
-    ) internal returns (bool success, uint256 amountOut) {
+    ) internal returns (uint256 amountOut) {
         address actualTokenOut = _resolveOutputToken(intent.tokenOut);
         address recipient = _isNativeOutput(intent.tokenOut) ? address(this) : intent.user;
 
         IERC20(intent.tokenIn).safeTransfer(adapter, amount);
-        
+
         (bool callSuccess, bytes memory result) = adapter.call(
             abi.encodeWithSignature(
                 "swap(address,address,uint256,uint256,address)",
@@ -466,15 +461,24 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
                 recipient
             )
         );
-        
-        if (callSuccess && result.length >= 32) {
-            amountOut = abi.decode(result, (uint256));
-            if (amountOut >= intent.minAmountOut) {
-                return (true, amountOut);
+
+        if (!callSuccess) {
+            _revertWithReason(result, "Adapter swap failed");
+        }
+
+        require(result.length >= 32, "Adapter returned no amountOut");
+        amountOut = abi.decode(result, (uint256));
+        require(amountOut >= intent.minAmountOut, "Adapter output below minAmountOut");
+    }
+
+    function _revertWithReason(bytes memory revertData, string memory fallbackMessage) internal pure {
+        if (revertData.length > 0) {
+            assembly {
+                revert(add(revertData, 32), mload(revertData))
             }
         }
-        
-        return (false, 0);
+
+        revert(fallbackMessage);
     }
 
     function _doTestModeSwap(SwapIntent calldata intent, uint256 amount) internal returns (uint256 amountOut) {
