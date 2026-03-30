@@ -17,6 +17,7 @@ import { useState, useCallback } from 'react';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { parseUnits, formatUnits, encodeFunctionData } from 'viem';
 import { signEip7702Authorization } from '../lib/eip7702';
+import { getBackendUrl } from '../lib/runtimeUrls';
 
 // Implementation contract addresses (BatchExecutor)
 const BATCH_EXECUTOR_ADDRESS = {
@@ -25,7 +26,7 @@ const BATCH_EXECUTOR_ADDRESS = {
 };
 
 // Backend API URL
-const API_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+const API_URL = getBackendUrl();
 
 // ERC20 ABI for approve
 const ERC20_ABI = [

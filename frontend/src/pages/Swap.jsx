@@ -18,8 +18,9 @@ import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
 import arbitrumSepoliaTokens from '../config/tokenlists/zerotoll.tokens.arbitrum-sepolia.json';
 import optimismSepoliaTokens from '../config/tokenlists/zerotoll.tokens.optimism-sepolia.json';
 import contractsConfig from '../config/contracts.json';
+import { getBackendUrl } from '../lib/runtimeUrls';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = getBackendUrl();
 const API = `${BACKEND_URL}/api`;
 
 const getConfiguredAddress = (value) => /^0x[a-fA-F0-9]{40}$/.test(value || '') ? value : null;

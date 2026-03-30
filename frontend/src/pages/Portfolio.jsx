@@ -3,6 +3,9 @@ import { useAccount } from 'wagmi';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription } from '../components/ui/alert';
+import { getBackendUrl } from '../lib/runtimeUrls';
+
+const BACKEND_URL = getBackendUrl();
 
 export default function Portfolio() {
   const { address, chain } = useAccount();
@@ -24,7 +27,7 @@ export default function Portfolio() {
     try {
       // Fetch swap history from backend
       const historyResponse = await fetch(
-        `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/history?user=${address}`
+        `${BACKEND_URL}/api/history?user=${address}`
       );
 
       if (historyResponse.ok) {

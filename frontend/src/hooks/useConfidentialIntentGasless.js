@@ -2,8 +2,9 @@ import { useCallback, useMemo, useState } from 'react';
 import { useAccount, useChainId, usePublicClient, useWalletClient } from 'wagmi';
 import { encryptUint128WithCofhe, getCofheSupportedChainIds } from '../lib/cofhe';
 import contractsConfig from '../config/contracts.json';
+import { getBackendUrl } from '../lib/runtimeUrls';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = getBackendUrl();
 const API = `${BACKEND_URL}/api/confidential`;
 const PERMIT2_ADDRESS = contractsConfig.permit2;
 

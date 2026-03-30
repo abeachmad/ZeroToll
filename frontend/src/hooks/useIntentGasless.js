@@ -14,27 +14,11 @@ import { useAccount, useChainId, useWalletClient } from 'wagmi';
 import contractsConfig from '../config/contracts.json';
 import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
 import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
+import { getRelayerUrl } from '../lib/runtimeUrls';
 
 // Relayer URL - Self-hosted paymaster (port 3002) using our VerifyingPaymasterV07.
 // Some older env files still point to :3001 or :8000, so normalize those here.
-const resolveRelayerUrl = () => {
-  const candidates = [
-    process.env.REACT_APP_RELAYER_URL,
-    process.env.REACT_APP_GASLESS_API_URL,
-    'http://localhost:3002',
-  ];
-
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    if (candidate === 'http://localhost:3001') continue;
-    if (candidate === 'http://localhost:8000') continue;
-    return candidate;
-  }
-
-  return 'http://localhost:3002';
-};
-
-const RELAYER_URL = resolveRelayerUrl();
+const RELAYER_URL = getRelayerUrl();
 const NATIVE_MARKER = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
 const normalizeSwapTokenAddress = (tokenAddress) => {
