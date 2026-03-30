@@ -135,12 +135,10 @@ export function useMetaMask7702() {
 
       setStatus('signing');
 
-      // MetaMask requires version 2.0.0 and atomicRequired as boolean
-      // Add paymasterService for TRUE GASLESS
-      const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY;
-      const paymasterUrl = `https://api.pimlico.io/v2/${chain.id}/rpc?apikey=${PIMLICO_API_KEY}`;
-      
-      console.log('🎯 Attempting TRUE GASLESS with paymaster:', paymasterUrl);
+      // MetaMask requires version 2.0.0 and atomicRequired as boolean.
+      // Do not request paymasterService here; MetaMask rejects unsupported
+      // non-optional capabilities and the wallet controls gas handling itself.
+      console.log('🎯 Sending wallet-native smart-account batch (no paymaster capability requested)');
       
       const result = await walletClient.request({
         method: 'wallet_sendCalls',
@@ -150,11 +148,6 @@ export function useMetaMask7702() {
           chainId: `0x${chain.id.toString(16)}`,
           calls: formattedCalls,
           atomicRequired: true,
-          capabilities: {
-            paymasterService: {
-              url: paymasterUrl
-            }
-          }
         }]
       });
 

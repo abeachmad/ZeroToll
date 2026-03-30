@@ -518,6 +518,16 @@ def execute_adapter_backed_execution(
     if not preflight.get("ready"):
         raise RuntimeError(preflight.get("reason") or "Adapter preflight failed.")
 
+    expected_output = int(preflight.get("expectedOutput") or 0)
+    if expected_output <= 0:
+        raise RuntimeError("Adapter preflight returned zero output.")
+
+    if int(plaintext_min_out) > expected_output:
+        raise RuntimeError(
+            "Live adapter quote cannot satisfy the confidential minimum output. "
+            "No funds were moved; get a fresh quote or lower the confidential threshold."
+        )
+
     w3: Web3 = client["web3"]
     account = client["account"]
     contract = client["contract"]

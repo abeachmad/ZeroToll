@@ -6,6 +6,8 @@
     "test": "hardhat test",
     "deploy:amoy": "hardhat run scripts/deploy-all-testnets.js --network amoy",
     "deploy:sepolia": "hardhat run scripts/deploy-all-testnets.js --network sepolia",
+    "deploy:routerv3:native:sepolia": "hardhat run scripts/deploy-routerv3-native-output.js --network sepolia",
+    "deploy:routerv3:native:amoy": "hardhat run scripts/deploy-routerv3-native-output.js --network amoy",
     "deploy:confidential:sepolia": "hardhat run scripts/deploy-confidential-intent-escrow.js --network sepolia",
     "prepare:confidential:sepolia": "hardhat run scripts/prepare-confidential-demo-sepolia.js --network sepolia",
     "deploy:confidential:amoy": "hardhat run scripts/deploy-confidential-intent-escrow.js --network amoy",

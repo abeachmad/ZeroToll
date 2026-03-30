@@ -8,6 +8,10 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+interface IWETH {
+    function withdraw(uint256 amount) external;
+}
+
 /**
  * @title IPermit2
  * @notice Interface for Uniswap's Permit2 contract
@@ -77,6 +81,7 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
     );
     
     address public constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+    address public constant NATIVE_MARKER = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     // ============================================
     // State Variables
@@ -99,6 +104,7 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
     address public treasury;
     uint256 public maxGaslessFeePercent = 100; // 1% max fee cap (in basis points)
     bool public gaslessFeeEnabled = true;
+    address public wrappedNativeToken;
 
     // Test mode
     bool public testMode = true;
@@ -127,6 +133,7 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
     event GaslessFeeConfigUpdated(uint256 maxFeePercent, bool enabled);
     event AdaptersConfigured(address indexed primaryAdapter, address indexed fallbackAdapter);
     event SwapRouted(address indexed adapter, string route);
+    event WrappedNativeTokenUpdated(address indexed oldWrappedNativeToken, address indexed newWrappedNativeToken);
 
     // ============================================
     // Constructor
@@ -399,6 +406,9 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
         if (primaryAdapter != address(0)) {
             (bool success, uint256 result) = _tryAdapter(primaryAdapter, intent, amount);
             if (success) {
+                if (_isNativeOutput(intent.tokenOut)) {
+                    _unwrapAndTransferNative(result, intent.user);
+                }
                 emit SwapRouted(primaryAdapter, "primary");
                 return result;
             }
@@ -407,6 +417,9 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
         if (fallbackAdapter != address(0)) {
             (bool success, uint256 result) = _tryAdapter(fallbackAdapter, intent, amount);
             if (success) {
+                if (_isNativeOutput(intent.tokenOut)) {
+                    _unwrapAndTransferNative(result, intent.user);
+                }
                 emit SwapRouted(fallbackAdapter, "fallback");
                 return result;
             }
@@ -415,6 +428,9 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
         if (dexAdapter != address(0)) {
             (bool success, uint256 result) = _tryAdapter(dexAdapter, intent, amount);
             if (success) {
+                if (_isNativeOutput(intent.tokenOut)) {
+                    _unwrapAndTransferNative(result, intent.user);
+                }
                 emit SwapRouted(dexAdapter, "legacy");
                 return result;
             }
@@ -435,16 +451,19 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
         SwapIntent calldata intent,
         uint256 amount
     ) internal returns (bool success, uint256 amountOut) {
+        address actualTokenOut = _resolveOutputToken(intent.tokenOut);
+        address recipient = _isNativeOutput(intent.tokenOut) ? address(this) : intent.user;
+
         IERC20(intent.tokenIn).safeTransfer(adapter, amount);
         
         (bool callSuccess, bytes memory result) = adapter.call(
             abi.encodeWithSignature(
                 "swap(address,address,uint256,uint256,address)",
                 intent.tokenIn,
-                intent.tokenOut,
+                actualTokenOut,
                 amount,
                 intent.minAmountOut,
-                intent.user
+                recipient
             )
         );
         
@@ -461,21 +480,26 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
     function _doTestModeSwap(SwapIntent calldata intent, uint256 amount) internal returns (uint256 amountOut) {
         uint256 fee = (amount * swapFeeBps) / 10000;
         uint256 amountAfterFee = amount - fee;
-        
+
+        address actualTokenOut = _resolveOutputToken(intent.tokenOut);
         uint8 decimalsIn = _getDecimals(intent.tokenIn);
-        uint8 decimalsOut = _getDecimals(intent.tokenOut);
+        uint8 decimalsOut = _getDecimals(actualTokenOut);
         
         if (decimalsOut >= decimalsIn) {
             amountOut = amountAfterFee * (10 ** (decimalsOut - decimalsIn));
         } else {
             amountOut = amountAfterFee / (10 ** (decimalsIn - decimalsOut));
         }
-        
-        uint256 tokenOutBalance = IERC20(intent.tokenOut).balanceOf(address(this));
-        
+
+        uint256 tokenOutBalance = IERC20(actualTokenOut).balanceOf(address(this));
+
         if (tokenOutBalance >= amountOut) {
-            IERC20(intent.tokenOut).safeTransfer(intent.user, amountOut);
-        } else if (intent.tokenIn == intent.tokenOut) {
+            if (_isNativeOutput(intent.tokenOut)) {
+                _unwrapAndTransferNative(amountOut, intent.user);
+            } else {
+                IERC20(actualTokenOut).safeTransfer(intent.user, amountOut);
+            }
+        } else if (intent.tokenIn == actualTokenOut) {
             IERC20(intent.tokenIn).safeTransfer(intent.user, amountAfterFee);
             amountOut = amountAfterFee;
         } else {
@@ -488,11 +512,35 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
     }
 
     function _getDecimals(address token) internal view returns (uint8) {
+        if (token == NATIVE_MARKER) {
+            token = _requireWrappedNative();
+        }
+
         try IERC20Metadata(token).decimals() returns (uint8 d) {
             return d;
         } catch {
             return 18;
         }
+    }
+
+    function _isNativeOutput(address tokenOut) internal pure returns (bool) {
+        return tokenOut == NATIVE_MARKER;
+    }
+
+    function _requireWrappedNative() internal view returns (address) {
+        require(wrappedNativeToken != address(0), "Wrapped native not configured");
+        return wrappedNativeToken;
+    }
+
+    function _resolveOutputToken(address tokenOut) internal view returns (address) {
+        return tokenOut == NATIVE_MARKER ? _requireWrappedNative() : tokenOut;
+    }
+
+    function _unwrapAndTransferNative(uint256 amountOut, address recipient) internal {
+        address wrappedNative = _requireWrappedNative();
+        IWETH(wrappedNative).withdraw(amountOut);
+        (bool success, ) = payable(recipient).call{value: amountOut}("");
+        require(success, "Native transfer failed");
     }
 
     function _recover(bytes32 digest, bytes memory sig) internal pure returns (address) {
@@ -528,6 +576,12 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
         maxGaslessFeePercent = _maxFeePercent;
         gaslessFeeEnabled = _enabled;
         emit GaslessFeeConfigUpdated(_maxFeePercent, _enabled);
+    }
+
+    function setWrappedNativeToken(address _wrappedNativeToken) external onlyOwner {
+        require(_wrappedNativeToken != address(0), "Invalid wrapped native");
+        emit WrappedNativeTokenUpdated(wrappedNativeToken, _wrappedNativeToken);
+        wrappedNativeToken = _wrappedNativeToken;
     }
 
     function setAdapters(address _primary, address _fallback) external onlyOwner {
@@ -573,4 +627,6 @@ contract ZeroTollRouterV3 is Ownable, ReentrancyGuard {
     function getGaslessFeeConfig() external view returns (uint256 maxPercent, bool enabled, address treasuryAddr) {
         return (maxGaslessFeePercent, gaslessFeeEnabled, treasury);
     }
+
+    receive() external payable {}
 }

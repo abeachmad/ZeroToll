@@ -28,6 +28,7 @@ from confidential_contract import (
     get_confidential_contract_client,
     get_settlement_summary,
     get_verdict_status,
+    probe_live_adapter_execution,
     simulate_inventory_backed_execution,
     submit_intent_with_plaintext_min_out,
 )
@@ -74,6 +75,28 @@ def _coerce_token_symbol(value: str, chain_id: int) -> str:
     return value.upper()
 
 
+def _is_native_symbol(symbol: Optional[str], chain_id: int) -> bool:
+    if not symbol:
+        return False
+
+    native_symbol = str(CHAIN_CONFIG.get(chain_id, {}).get("nativeSymbol") or "").upper()
+    normalized = symbol.upper()
+    return normalized == "NATIVE" or (native_symbol and normalized == native_symbol)
+
+
+def _ensure_confidential_erc20_only(
+    token_in_symbol: str,
+    token_out_symbol: str,
+    src_chain_id: int,
+    dst_chain_id: int,
+) -> None:
+    if _is_native_symbol(token_in_symbol, src_chain_id) or _is_native_symbol(token_out_symbol, dst_chain_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Confidential Gasless Intent currently supports wrapped/ERC-20 tokens only.",
+        )
+
+
 def _coerce_float(value: str | float | int) -> float:
     return float(value)
 
@@ -90,6 +113,10 @@ def _token_decimals(chain_id: int, token_address: str) -> int:
 def _decimal_to_units(value: str | float | int, decimals: int) -> int:
     scaled = Decimal(str(value)) * (Decimal(10) ** decimals)
     return int(scaled.quantize(Decimal("1")))
+
+
+def _units_to_decimal(value: int | str, decimals: int) -> float:
+    return float(Decimal(str(value)) / (Decimal(10) ** decimals))
 
 
 def _serialize(intent: Dict[str, Any]) -> Dict[str, Any]:
@@ -253,7 +280,73 @@ def _get_contract_state(chain_id: int, intent_id: Optional[str] = None) -> Dict[
     }
 
 
-def _build_quote(token_in_symbol: str, token_out_symbol: str, amount_in: float, chain_id: int) -> Dict[str, Any]:
+def _build_live_adapter_hint(
+    *,
+    chain_id: int,
+    token_in_address: Optional[str],
+    token_out_address: Optional[str],
+    token_in_symbol: str,
+    token_out_symbol: str,
+    amount_in: float,
+) -> Optional[Dict[str, Any]]:
+    if not (_is_address(token_in_address or "") and _is_address(token_out_address or "")):
+        return None
+
+    direct_adapter = _select_live_execution_adapter(
+        {
+            "srcChainId": chain_id,
+            "tokenInSymbol": token_in_symbol,
+            "tokenOutSymbol": token_out_symbol,
+        }
+    )
+    if not direct_adapter:
+        return None
+
+    try:
+        amount_in_units = _decimal_to_units(amount_in, _token_decimals(chain_id, token_in_address))
+        preflight = probe_live_adapter_execution(
+            chain_id=chain_id,
+            adapter_address=direct_adapter["address"],
+            adapter_kind=direct_adapter["kind"],
+            token_in_address=token_in_address,
+            token_out_address=token_out_address,
+            amount_in_units=amount_in_units,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to load live adapter hint for confidential quote on chain %s: %s",
+            chain_id,
+            exc,
+        )
+        return {
+            "ready": False,
+            "mode": direct_adapter["mode"],
+            "adapter": direct_adapter["label"],
+            "reason": str(exc),
+        }
+
+    expected_output_units = int(preflight.get("expectedOutput") or 0)
+    token_out_decimals = _token_decimals(chain_id, token_out_address)
+
+    return {
+        "ready": bool(preflight.get("ready")),
+        "mode": direct_adapter["mode"],
+        "adapter": direct_adapter["label"],
+        "expectedOutputUnits": str(expected_output_units),
+        "expectedOutput": _units_to_decimal(expected_output_units, token_out_decimals),
+        "adapterOutputBalanceUnits": preflight.get("adapterOutputBalance"),
+        "reason": preflight.get("reason"),
+    }
+
+
+def _build_quote(
+    token_in_symbol: str,
+    token_out_symbol: str,
+    amount_in: float,
+    chain_id: int,
+    token_in_address: Optional[str] = None,
+    token_out_address: Optional[str] = None,
+) -> Dict[str, Any]:
     contract_state = _get_contract_state(chain_id)
     price_in_data = pyth_oracle.get_price(token_in_symbol, chain_id)
     price_out_data = pyth_oracle.get_price(token_out_symbol, chain_id)
@@ -269,6 +362,18 @@ def _build_quote(token_in_symbol: str, token_out_symbol: str, amount_in: float, 
 
     usd_value = amount_in * price_in
     gross_out = usd_value / price_out
+
+    live_adapter_hint = _build_live_adapter_hint(
+        chain_id=chain_id,
+        token_in_address=token_in_address,
+        token_out_address=token_out_address,
+        token_in_symbol=token_in_symbol,
+        token_out_symbol=token_out_symbol,
+        amount_in=amount_in,
+    )
+
+    if live_adapter_hint and live_adapter_hint.get("ready") and live_adapter_hint.get("expectedOutput", 0) > 0:
+        gross_out = float(live_adapter_hint["expectedOutput"])
 
     sponsorship_fee_rate = 0.0075
     protocol_fee_rate = 0.0025
@@ -309,6 +414,7 @@ def _build_quote(token_in_symbol: str, token_out_symbol: str, amount_in: float, 
             ),
         },
         "contract": contract_state,
+        "liveExecutionHint": live_adapter_hint,
         "oracleSource": "Pyth",
         "priceStaleness": {
             token_in_symbol: price_in_data["stale"],
@@ -455,13 +561,32 @@ class ConfidentialFinalizeRequest(BaseModel):
 async def get_confidential_quote(request: ConfidentialQuoteRequest):
     token_in_symbol = _coerce_token_symbol(request.tokenIn, request.srcChainId)
     token_out_symbol = _coerce_token_symbol(request.tokenOut, request.dstChainId)
-    return _build_quote(token_in_symbol, token_out_symbol, request.amountIn, request.srcChainId)
+    _ensure_confidential_erc20_only(
+        token_in_symbol,
+        token_out_symbol,
+        request.srcChainId,
+        request.dstChainId,
+    )
+    return _build_quote(
+        token_in_symbol,
+        token_out_symbol,
+        request.amountIn,
+        request.srcChainId,
+        request.tokenIn,
+        request.tokenOut,
+    )
 
 
 @router.post("/submit")
 async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request: Request):
     token_in_symbol = _coerce_token_symbol(payload.tokenIn, payload.srcChainId)
     token_out_symbol = _coerce_token_symbol(payload.tokenOut, payload.dstChainId)
+    _ensure_confidential_erc20_only(
+        token_in_symbol,
+        token_out_symbol,
+        payload.srcChainId,
+        payload.dstChainId,
+    )
 
     intent_id = str(uuid.uuid4())
     now = _utc_now()
@@ -619,9 +744,13 @@ async def execute_confidential_intent(payload: ConfidentialExecuteRequest, reque
                 )
                 live_mode = direct_adapter["mode"]
             except Exception as exc:
+                status_code = 502
+                error_message = str(exc)
+                if "cannot satisfy the confidential minimum output" in error_message:
+                    status_code = 409
                 raise HTTPException(
-                    status_code=502,
-                    detail=f"On-chain confidential adapter execution failed: {exc}",
+                    status_code=status_code,
+                    detail=f"On-chain confidential adapter execution failed: {error_message}",
                 ) from exc
         else:
             try:
@@ -711,11 +840,29 @@ async def finalize_confidential_intent(payload: ConfidentialFinalizeRequest, req
         contract_intent_id = record["contractRef"]["contractIntentId"]
         contract_state = _get_contract_state(record["srcChainId"], contract_intent_id)
         verdict_status = contract_state.get("verdictStatus") or {}
+        enforcement_mode = record.get("enforcementMode")
 
         if not verdict_status.get("decrypted"):
             raise HTTPException(
                 status_code=409,
                 detail="On-chain decryption result is not ready yet",
+            )
+
+        if (
+            verdict_status.get("verdict") is False
+            and enforcement_mode in {
+                "cross_token_ztoken_adapter_live_demo",
+                "cross_token_adapter_live_demo",
+                "cross_token_inventory_live_demo",
+            }
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "The confidential threshold was not met by the live cross-token execution path. "
+                    "This demo path cannot safely refund after tokenIn has been released. "
+                    "Request a fresh quote or lower the confidential threshold before retrying."
+                ),
             )
 
         try:

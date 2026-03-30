@@ -1,5 +1,23 @@
 // Fund RouterV3 with zToken liquidity for test swaps
 const hre = require("hardhat");
+const fs = require("fs");
+const path = require("path");
+
+const SOURCE_OF_TRUTH_PATH = path.join(
+  __dirname,
+  "..",
+  "..",
+  "shared-config",
+  "src",
+  "source-of-truth.json"
+);
+
+const NETWORK_KEY_BY_CHAIN_ID = {
+  80002: "amoy",
+  11155111: "sepolia",
+  421614: "arbitrumSepolia",
+  11155420: "optimismSepolia",
+};
 
 async function main() {
   const [deployer] = await hre.ethers.getSigners();
@@ -11,11 +29,12 @@ async function main() {
   console.log("Deployer:", deployer.address);
   console.log("Chain ID:", chainId);
   
-  // RouterV3 addresses
-  const routerV3Addresses = {
-    80002: "0xD83D377E4698317731b2953854c01d39C60815d7",
-    11155111: "0xB54e95a30E4Aa355380798313E0791833C7F0BFF"
-  };
+  const sourceOfTruth = JSON.parse(fs.readFileSync(SOURCE_OF_TRUTH_PATH, "utf8"));
+  const networkKey = NETWORK_KEY_BY_CHAIN_ID[Number(chainId)];
+  const routerV3 =
+    networkKey
+      ? sourceOfTruth.chains?.[networkKey]?.contracts?.zeroTollRouterV3
+      : null;
   
   // zToken addresses
   const zTokens = {
@@ -33,7 +52,6 @@ async function main() {
     }
   };
   
-  const routerV3 = routerV3Addresses[chainId];
   if (!routerV3) {
     console.log("RouterV3 not deployed on this chain yet");
     return;

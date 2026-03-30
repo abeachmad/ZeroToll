@@ -49,6 +49,7 @@ if (!RELAYER_PRIVATE_KEY || !PIMLICO_API_KEY) {
 // EntryPoint v0.7
 const ENTRYPOINT_V07 = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 const SIMPLE_ACCOUNT_FACTORY = '0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985';
+const NATIVE_MARKER = getAddress('0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE');
 
 const RELAYER_PAYMASTER_ENV = {
   11155111: 'SEPOLIA_VERIFYING_PAYMASTER',
@@ -87,6 +88,7 @@ const CHAIN_CONFIG = Object.fromEntries(
 // ABIs
 const ROUTER_ABI = parseAbi([
   'function executeSwapWithPermit((address user, address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline, uint256 nonce, uint256 chainId) intent, bytes userSignature, uint256 permitDeadline, uint8 permitV, bytes32 permitR, bytes32 permitS) external returns (uint256)',
+  'function executeSwapWithPermit2((address user, address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline, uint256 nonce, uint256 chainId) intent, bytes userSignature, ((address token, uint160 amount, uint48 expiration, uint48 nonce) details, address spender, uint256 sigDeadline) permitSingle, bytes permit2Signature) external returns (uint256)',
   'function executeSwap((address user, address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline, uint256 nonce, uint256 chainId) intent, bytes userSignature) external returns (uint256)',
   'function nonces(address user) view returns (uint256)'
 ]);
@@ -94,6 +96,7 @@ const ROUTER_ABI = parseAbi([
 // RouterV3 ABI with fee support
 const ROUTER_V3_ABI = parseAbi([
   'function executeSwapWithPermitAndFee((address user, address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline, uint256 nonce, uint256 chainId) intent, bytes userSignature, uint256 permitDeadline, uint8 permitV, bytes32 permitR, bytes32 permitS, uint256 gaslessFee) external returns (uint256)',
+  'function executeSwapWithPermit2AndFee((address user, address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline, uint256 nonce, uint256 chainId) intent, bytes userSignature, ((address token, uint160 amount, uint48 expiration, uint48 nonce) details, address spender, uint256 sigDeadline) permitSingle, bytes permit2Signature, uint256 gaslessFee) external returns (uint256)',
   'function executeSwapWithPermit((address user, address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline, uint256 nonce, uint256 chainId) intent, bytes userSignature, uint256 permitDeadline, uint8 permitV, bytes32 permitR, bytes32 permitS) external returns (uint256)',
   'function nonces(address user) view returns (uint256)',
   'function getNonce(address user) view returns (uint256)'
@@ -153,11 +156,31 @@ const chainClients = {};
 const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || 'http://localhost:8000';
 
 function getTokenSymbol(chainId, tokenAddress) {
+  if (String(tokenAddress).toLowerCase() === NATIVE_MARKER.toLowerCase()) {
+    return CHAIN_CONFIG[chainId]?.nativeSymbol || 'NATIVE';
+  }
+
   return getConfiguredTokenSymbol(chainId, tokenAddress) || tokenAddress?.slice(0, 10) + '...';
 }
 
 function getTokenDecimals(chainId, tokenAddress) {
+  if (String(tokenAddress).toLowerCase() === NATIVE_MARKER.toLowerCase()) {
+    return 18;
+  }
+
   return getConfiguredTokenDecimals(chainId, tokenAddress);
+}
+
+function normalizeIntentTokenAddress(tokenAddress) {
+  if (typeof tokenAddress !== 'string' || !tokenAddress) {
+    throw new Error('Invalid token address');
+  }
+
+  if (tokenAddress.toUpperCase() === 'NATIVE') {
+    return NATIVE_MARKER;
+  }
+
+  return getAddress(tokenAddress);
 }
 
 // Fetch price from Pyth
@@ -613,8 +636,8 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
     // Verify intent signature
     const message = {
       user: getAddress(intent.user),
-      tokenIn: getAddress(intent.tokenIn),
-      tokenOut: getAddress(intent.tokenOut),
+      tokenIn: normalizeIntentTokenAddress(intent.tokenIn),
+      tokenOut: normalizeIntentTokenAddress(intent.tokenOut),
       amountIn: BigInt(intent.amountIn),
       minAmountOut: BigInt(intent.minAmountOut),
       deadline: BigInt(intent.deadline),
@@ -675,7 +698,7 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
     });
 
     // Store intent data for history (closure-safe)
-    const intentData = { ...intent };
+    const intentData = { ...intent, tokenIn: message.tokenIn, tokenOut: message.tokenOut };
     const storedFeeData = feeData;
     
     // Wait for receipt (non-blocking) and save history
@@ -744,6 +767,168 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
 
   } catch (error) {
     console.error('Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// Swap with Permit2 Endpoint (with fee support)
+// ============================================
+app.post('/api/intents/swap-with-permit2', async (req, res) => {
+  try {
+    const { chainId, intent, userSignature, permitSingle, permit2Signature } = req.body;
+
+    const chainConfig = CHAIN_CONFIG[chainId];
+    if (!chainConfig) {
+      return res.status(400).json({ error: `Chain ${chainId} not supported` });
+    }
+
+    if (!chainConfig.paymaster) {
+      return res.status(500).json({ error: `Paymaster not configured for ${chainConfig.name}` });
+    }
+
+    if (!permitSingle || !permit2Signature) {
+      return res.status(400).json({ error: 'Missing Permit2 data' });
+    }
+
+    const routerAddress = chainConfig.router;
+    const useV3 = chainConfig.routerV3 !== null;
+
+    const message = {
+      user: getAddress(intent.user),
+      tokenIn: normalizeIntentTokenAddress(intent.tokenIn),
+      tokenOut: normalizeIntentTokenAddress(intent.tokenOut),
+      amountIn: BigInt(intent.amountIn),
+      minAmountOut: BigInt(intent.minAmountOut),
+      deadline: BigInt(intent.deadline),
+      nonce: BigInt(intent.nonce),
+      chainId: BigInt(chainId)
+    };
+
+    const isValid = await verifyTypedData({
+      address: message.user,
+      domain: getDomain(routerAddress, chainId),
+      types: SWAP_INTENT_TYPES,
+      primaryType: 'SwapIntent',
+      message,
+      signature: userSignature
+    });
+
+    if (!isValid) {
+      return res.status(400).json({ error: 'Invalid signature' });
+    }
+    console.log('✓ Verified Permit2 swap intent from:', intent.user);
+
+    const permit2Data = {
+      details: {
+        token: getAddress(permitSingle.details.token),
+        amount: BigInt(permitSingle.details.amount),
+        expiration: BigInt(permitSingle.details.expiration),
+        nonce: BigInt(permitSingle.details.nonce)
+      },
+      spender: getAddress(permitSingle.spender),
+      sigDeadline: BigInt(permitSingle.sigDeadline)
+    };
+
+    let feeData = null;
+    let routerCallData;
+
+    if (useV3) {
+      feeData = await calculateGaslessFee(chainId, intent.tokenIn);
+      console.log(`💰 Permit2 gasless fee: ${feeData.feeInToken} (${feeData.tokenSymbol}) = $${feeData.feeUSD.toFixed(4)}`);
+
+      routerCallData = encodeFunctionData({
+        abi: ROUTER_V3_ABI,
+        functionName: 'executeSwapWithPermit2AndFee',
+        args: [message, userSignature, permit2Data, permit2Signature, feeData.feeInToken]
+      });
+    } else {
+      routerCallData = encodeFunctionData({
+        abi: ROUTER_ABI,
+        functionName: 'executeSwapWithPermit2',
+        args: [message, userSignature, permit2Data, permit2Signature]
+      });
+    }
+
+    console.log('Building and sending Permit2 UserOp...');
+    const { userOpHash, smartAccountAddress } = await buildAndSendUserOp(chainId, routerCallData);
+    console.log('Permit2 UserOp submitted:', userOpHash);
+
+    const requestId = `phase2_permit2_${Date.now()}`;
+    intents.set(requestId, {
+      userOpHash,
+      status: 'pending',
+      chainId,
+      smartAccount: smartAccountAddress,
+      feeData
+    });
+
+    const intentData = { ...intent, tokenIn: message.tokenIn, tokenOut: message.tokenOut };
+    const storedFeeData = feeData;
+
+    waitForReceipt(userOpHash, chainId, 30000)
+      .then(receipt => {
+        const data = intents.get(requestId);
+        if (data && receipt) {
+          data.txHash = receipt.receipt?.transactionHash;
+          data.status = receipt.success ? 'confirmed' : 'failed';
+          intents.set(requestId, data);
+
+          const tokenInSymbol = getTokenSymbol(chainId, intentData.tokenIn);
+          const tokenOutSymbol = getTokenSymbol(chainId, intentData.tokenOut);
+          const decimalsIn = getTokenDecimals(chainId, intentData.tokenIn);
+          const decimalsOut = getTokenDecimals(chainId, intentData.tokenOut);
+          const amountInFormatted = (Number(intentData.amountIn) / Math.pow(10, decimalsIn)).toFixed(4);
+          const amountOutFormatted = (Number(intentData.minAmountOut) / Math.pow(10, decimalsOut)).toFixed(4);
+
+          const feeFormatted = storedFeeData
+            ? (Number(storedFeeData.feeInToken) / Math.pow(10, storedFeeData.tokenDecimals)).toFixed(6)
+            : '0';
+          const feeUSDFormatted = storedFeeData ? storedFeeData.feeUSD.toFixed(4) : '0';
+
+          saveSwapHistory({
+            user: intentData.user,
+            fromChain: chainConfig.name === 'polygon-amoy' ? 'Polygon Amoy' : 'Sepolia',
+            toChain: chainConfig.name === 'polygon-amoy' ? 'Polygon Amoy' : 'Sepolia',
+            tokenIn: tokenInSymbol,
+            tokenOut: tokenOutSymbol,
+            amountIn: amountInFormatted,
+            amountOut: amountOutFormatted,
+            feeMode: storedFeeData ? 'GASLESS_FEE' : 'GASLESS',
+            feePaid: feeFormatted,
+            feeToken: storedFeeData ? tokenInSymbol : 'SPONSORED',
+            feeUSD: feeUSDFormatted,
+            status: receipt.success ? 'success' : 'failed',
+            txHash: data.txHash,
+            userOpHash,
+            explorerUrl: `${chainConfig.explorer}${data.txHash}`,
+            sponsor: 'ZeroToll Paymaster',
+            treasury: chainConfig.treasury
+          });
+        }
+      })
+      .catch(e => console.log('Permit2 receipt fetch failed:', e.message));
+
+    res.json({
+      success: true,
+      requestId,
+      userOpHash,
+      smartAccount: smartAccountAddress,
+      explorerUrl: `${chainConfig.explorer}${userOpHash}`,
+      sponsor: 'ZeroToll Paymaster (Phase 2B)',
+      message: feeData
+        ? `Permit2 gas sponsored! Service fee: $${feeData.feeUSD.toFixed(4)} (${feeData.feeInToken} ${feeData.tokenSymbol})`
+        : 'Permit2 gas sponsored by ZeroToll!',
+      fee: feeData ? {
+        usd: feeData.feeUSD,
+        amount: feeData.feeInToken.toString(),
+        token: feeData.tokenSymbol,
+        treasury: chainConfig.treasury
+      } : null
+    });
+
+  } catch (error) {
+    console.error('Permit2 error:', error);
     res.status(500).json({ error: error.message });
   }
 });

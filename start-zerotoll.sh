@@ -92,16 +92,21 @@ echo "🔧 Starting Python Backend (port 8000)..."
 cd "$SCRIPT_DIR/backend"
 
 if [ -f "venv/bin/python" ]; then
-    setsid ./venv/bin/python -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload > "$SCRIPT_DIR/.pids/backend.log" 2>&1 &
-    BACKEND_PID=$!
+    BACKEND_PYTHON="./venv/bin/python"
 elif [ -f "venv/bin/python3" ]; then
-    setsid ./venv/bin/python3 -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload > "$SCRIPT_DIR/.pids/backend.log" 2>&1 &
-    BACKEND_PID=$!
+    BACKEND_PYTHON="./venv/bin/python3"
 else
-    setsid python3 -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload > "$SCRIPT_DIR/.pids/backend.log" 2>&1 &
-    BACKEND_PID=$!
+    BACKEND_PYTHON="python3"
 fi
-echo $BACKEND_PID > "$SCRIPT_DIR/.pids/backend.pid"
+
+start_backend() {
+    local reload_flag="$1"
+    setsid $BACKEND_PYTHON -m uvicorn server:app --host 0.0.0.0 --port 8000 $reload_flag > "$SCRIPT_DIR/.pids/backend.log" 2>&1 &
+    BACKEND_PID=$!
+    echo $BACKEND_PID > "$SCRIPT_DIR/.pids/backend.pid"
+}
+
+start_backend "--reload"
 
 # Wait for backend
 echo "⏳ Waiting for Python backend..."
@@ -115,6 +120,26 @@ for i in {1..30}; do
     fi
     sleep 1
 done
+
+if ! curl -s http://localhost:8000/api/ > /dev/null 2>&1; then
+    if grep -q "Address already in use" "$SCRIPT_DIR/.pids/backend.log" || grep -q "Errno 98" "$SCRIPT_DIR/.pids/backend.log"; then
+        echo "   🔁 Backend reload mode hit a bind race. Retrying without --reload..."
+        kill "$BACKEND_PID" > /dev/null 2>&1 || true
+        sleep 1
+        start_backend ""
+
+        for i in {1..20}; do
+            if curl -s http://localhost:8000/api/ > /dev/null 2>&1; then
+                echo "✅ Python Backend ready (PID: $BACKEND_PID, reload disabled)"
+                break
+            fi
+            if [ $i -eq 20 ]; then
+                echo "⚠️  Python Backend fallback start failed - check logs"
+            fi
+            sleep 1
+        done
+    fi
+fi
 
 # Check if node_modules exists
 cd "$SCRIPT_DIR/backend"

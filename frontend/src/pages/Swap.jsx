@@ -477,6 +477,11 @@ const Swap = () => {
     setLoading(true);
     try {
       if (isConfidentialMode) {
+        if (tokenIn.isNative || tokenOut.isNative) {
+          toast.error('Confidential Gasless Intent currently supports wrapped ERC-20 tokens only.');
+          return;
+        }
+
         const confidentialQuote = await confidentialGasless.getQuote({
           user: address || '0x1234567890123456789012345678901234567890',
           tokenIn: tokenIn.address,
@@ -861,6 +866,11 @@ const Swap = () => {
       return;
     }
 
+    if (tokenIn.isNative) {
+      toast.error('ZeroToll gasless currently supports wrapped/ERC-20 input tokens only.');
+      return;
+    }
+
     // Check permit type for the token
     const permitType = intentGasless.getPermitType(tokenIn.address);
     
@@ -907,16 +917,20 @@ const Swap = () => {
       
       // Apply slippage tolerance (multiply by 90, divide by 100)
       const minOut = expectedOutputWei * 90n / 100n;
+      const gaslessTokenOutAddress = tokenOut.isNative ? NATIVE_EIP7702_ADDRESS : tokenOut.address;
       let result;
 
       if (permitType === 'erc2612') {
         // ERC-2612 permit - fully gasless
         setGaslessStatus('Sign Permit + Swap Intent in MetaMask (NO GAS!)...');
         toast.info('⚡ Sign 2 messages in MetaMask - you pay ZERO gas!');
+        if (tokenOut.isNative) {
+          toast.info(`💰 ZeroToll will route through ${wrappedOutputSymbol} internally, then unwrap to native ${tokenOut.symbol} before delivery.`);
+        }
         
         result = await intentGasless.submitSwapWithPermit({
           tokenIn: tokenIn.address,
-          tokenOut: tokenOut.address,
+          tokenOut: gaslessTokenOutAddress,
           amountIn: amountWei.toString(),
           minAmountOut: minOut.toString(),
           deadlineMinutes: 30
@@ -925,10 +939,13 @@ const Swap = () => {
         // Permit2 - gasless after one-time approval
         setGaslessStatus('Sign Permit2 + Swap Intent in MetaMask...');
         toast.info('🔄 Sign 2 messages in MetaMask - gasless via Permit2!');
+        if (tokenOut.isNative) {
+          toast.info(`💰 ZeroToll will route through ${wrappedOutputSymbol} internally, then unwrap to native ${tokenOut.symbol} before delivery.`);
+        }
         
         result = await intentGasless.submitSwapWithPermit2({
           tokenIn: tokenIn.address,
-          tokenOut: tokenOut.address,
+          tokenOut: gaslessTokenOutAddress,
           amountIn: amountWei.toString(),
           minAmountOut: minOut.toString(),
           deadlineMinutes: 30

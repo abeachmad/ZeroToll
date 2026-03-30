@@ -35,6 +35,43 @@ const resolveRelayerUrl = () => {
 };
 
 const RELAYER_URL = resolveRelayerUrl();
+const NATIVE_MARKER = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+
+const normalizeSwapTokenAddress = (tokenAddress) => {
+  if (!tokenAddress) return tokenAddress;
+  if (tokenAddress === 'NATIVE') return NATIVE_MARKER;
+  return tokenAddress;
+};
+
+const parseApiResponse = async (response, fallbackMessage) => {
+  const contentType = response.headers.get('content-type') || '';
+
+  if (contentType.includes('application/json')) {
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json.error || json.details || json.detail || fallbackMessage);
+    }
+    return json;
+  }
+
+  const text = await response.text();
+  const trimmed = text.trim();
+  const snippet = trimmed ? trimmed.slice(0, 160) : '';
+
+  if (!response.ok) {
+    throw new Error(
+      snippet
+        ? `${fallbackMessage} (HTTP ${response.status}): ${snippet}`
+        : `${fallbackMessage} (HTTP ${response.status})`
+    );
+  }
+
+  throw new Error(
+    snippet
+      ? `Unexpected non-JSON response from relayer: ${snippet}`
+      : 'Unexpected non-JSON response from relayer.'
+  );
+};
 
 const FRONTEND_CHAIN_CONFIG = {
   11155111: { key: 'sepolia', tokens: sepoliaTokens.tokens },
@@ -400,6 +437,7 @@ export function useIntentGasless() {
 
     try {
       const deadline = Math.floor(Date.now() / 1000) + (deadlineMinutes * 60);
+      const normalizedTokenOut = normalizeSwapTokenAddress(tokenOut);
       
       // Get nonce from relayer
       let nonce = 0;
@@ -420,7 +458,7 @@ export function useIntentGasless() {
       const intent = {
         user: address,
         tokenIn,
-        tokenOut,
+        tokenOut: normalizedTokenOut,
         amountIn: amountIn.toString(),
         minAmountOut: minAmountOut.toString(),
         deadline: deadline.toString(),
@@ -469,10 +507,7 @@ export function useIntentGasless() {
         body: JSON.stringify({ chainId, intent, userSignature: signature, permit })
       });
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || result.details || 'Swap failed');
-
-      return result;
+      return await parseApiResponse(response, 'ZeroToll gasless swap failed');
     } catch (err) {
       setError(err.message);
       throw err;
@@ -484,7 +519,7 @@ export function useIntentGasless() {
   // Check swap status
   const checkStatus = useCallback(async (requestId) => {
     const response = await fetch(`${RELAYER_URL}/api/intents/${requestId}/status`);
-    return response.json();
+    return parseApiResponse(response, 'Failed to fetch ZeroToll gasless status');
   }, []);
 
   // Submit gasless swap with Permit2 (for USDC, WETH, LINK, etc.)
@@ -499,6 +534,7 @@ export function useIntentGasless() {
 
     try {
       const deadline = Math.floor(Date.now() / 1000) + (deadlineMinutes * 60);
+      const normalizedTokenOut = normalizeSwapTokenAddress(tokenOut);
       
       // Get nonce from relayer
       let nonce = 0;
@@ -524,7 +560,7 @@ export function useIntentGasless() {
       const intent = {
         user: address,
         tokenIn,
-        tokenOut,
+        tokenOut: normalizedTokenOut,
         amountIn: amountIn.toString(),
         minAmountOut: minAmountOut.toString(),
         deadline: deadline.toString(),
@@ -571,10 +607,7 @@ export function useIntentGasless() {
         })
       });
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || result.details || 'Swap failed');
-
-      return result;
+      return await parseApiResponse(response, 'ZeroToll Permit2 gasless swap failed');
     } catch (err) {
       setError(err.message);
       throw err;

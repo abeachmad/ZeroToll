@@ -36,22 +36,17 @@ const SMART_ACCOUNT_STATUS = {
   CHECKING: 'CHECKING'
 };
 
-// Pimlico API Key for paymaster (must be set in environment)
-const PIMLICO_API_KEY = process.env.REACT_APP_PIMLICO_API_KEY;
-
 // Supported chains for EIP-7702
 const SUPPORTED_CHAINS = {
   80002: { 
     name: 'Polygon Amoy',
     delegator: '0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B', // MetaMask Stateless Delegator
     explorer: 'https://amoy.polygonscan.com',
-    paymasterUrl: `https://api.pimlico.io/v2/80002/rpc?apikey=${PIMLICO_API_KEY}`
   },
   11155111: { 
     name: 'Ethereum Sepolia',
     delegator: '0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B', // MetaMask Stateless Delegator
     explorer: 'https://sepolia.etherscan.io',
-    paymasterUrl: `https://api.pimlico.io/v2/11155111/rpc?apikey=${PIMLICO_API_KEY}`
   },
 };
 
@@ -319,7 +314,7 @@ export function useGaslessSwap() {
         isUpgraded: accountStatus.status === SMART_ACCOUNT_STATUS.UPGRADED,
         needsUpgrade: accountStatus.status === SMART_ACCOUNT_STATUS.NOT_UPGRADED,
         upgradeGasCost: '~21,000 gas (one-time)',
-        afterUpgrade: 'Transactions will be batched and potentially gasless'
+        afterUpgrade: 'Transactions will be batched via the wallet. Gas handling remains wallet-controlled.'
       }
     };
   }, [chain, isConnected, checkSmartAccountStatus, walletCapabilities]);
@@ -392,20 +387,14 @@ export function useGaslessSwap() {
       console.log('   Chain:', chainId);
       console.log('   To:', routerHub);
       console.log('   Smart Account Status:', accountStatus.status);
-      console.log('   Paymaster URL:', SUPPORTED_CHAINS[chainId].paymasterUrl);
+      console.log('   Wallet-controlled batch mode: no paymaster capability requested');
 
       setStatus('signing');
       setStatusMessage('Please confirm in MetaMask...');
 
-      // Try with paymasterService capability (may be ignored by MetaMask)
       const result = await sendCallsAsync({ 
         calls,
         chainId,
-        capabilities: {
-          paymasterService: {
-            url: SUPPORTED_CHAINS[chainId].paymasterUrl
-          }
-        }
       });
 
       console.log('✅ Calls submitted, ID:', result);
@@ -482,20 +471,14 @@ export function useGaslessSwap() {
 
       console.log('📤 Sending approval via useSendCalls (EIP-5792)');
       console.log('   Smart Account Status:', accountStatus.status);
-      console.log('   Paymaster URL:', SUPPORTED_CHAINS[chainId].paymasterUrl);
+      console.log('   Wallet-controlled batch mode: no paymaster capability requested');
 
       setStatus('signing');
       setStatusMessage('Please confirm approval in MetaMask...');
 
-      // Try with paymasterService capability (may be ignored by MetaMask)
       const result = await sendCallsAsync({ 
         calls,
         chainId,
-        capabilities: {
-          paymasterService: {
-            url: SUPPORTED_CHAINS[chainId].paymasterUrl
-          }
-        }
       });
 
       console.log('✅ Approval submitted, ID:', result);
@@ -584,20 +567,14 @@ export function useGaslessSwap() {
       console.log('📤 Sending batch via useSendCalls (EIP-5792)');
       console.log('   Calls:', calls.length, '(approve + swap)');
       console.log('   Smart Account Status:', accountStatus.status);
-      console.log('   Paymaster URL:', SUPPORTED_CHAINS[chainId].paymasterUrl);
+      console.log('   Wallet-controlled batch mode: no paymaster capability requested');
 
       setStatus('signing');
       setStatusMessage('Please confirm batch transaction in MetaMask...');
 
-      // Try with paymasterService capability (may be ignored by MetaMask)
       const result = await sendCallsAsync({ 
         calls,
         chainId,
-        capabilities: {
-          paymasterService: {
-            url: SUPPORTED_CHAINS[chainId].paymasterUrl
-          }
-        }
       });
 
       console.log('✅ Batch submitted, ID:', result);
