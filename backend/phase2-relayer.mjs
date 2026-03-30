@@ -16,6 +16,7 @@ import {
   verifyTypedData,
   encodeFunctionData,
   parseAbi,
+  decodeAbiParameters,
   getAddress,
   toHex,
   concat,
@@ -120,6 +121,9 @@ const ENTRYPOINT_ABI = parseAbi([
 const PAYMASTER_ABI = parseAbi([
   'function getHash((address sender, uint256 nonce, bytes initCode, bytes callData, bytes32 accountGasLimits, uint256 preVerificationGas, bytes32 gasFees, bytes paymasterAndData, bytes signature) userOp) view returns (bytes32)'
 ]);
+
+const USER_OPERATION_REVERT_REASON_TOPIC =
+  '0x1c4fada7374c0a9ee8841fc38afe82932dc0f8e69012e927f061a8bae611a201';
 
 const SWAP_INTENT_TYPES = {
   SwapIntent: [
@@ -573,6 +577,55 @@ async function waitForReceipt(userOpHash, chainId, timeout = 60000) {
   return null;
 }
 
+function decodeRevertReasonHex(revertData) {
+  if (!revertData || revertData === '0x') {
+    return null;
+  }
+
+  try {
+    if (revertData.startsWith('0x08c379a0')) {
+      const [reason] = decodeAbiParameters(
+        [{ type: 'string' }],
+        `0x${revertData.slice(10)}`
+      );
+      return reason;
+    }
+
+    if (revertData.startsWith('0x4e487b71')) {
+      return `Panic(${BigInt(`0x${revertData.slice(10)}`).toString()})`;
+    }
+  } catch {
+    return revertData;
+  }
+
+  return revertData;
+}
+
+function extractFailureReason(receiptResult) {
+  const logs = receiptResult?.receipt?.logs || [];
+  const revertLog = logs.find(
+    (log) => log?.topics?.[0]?.toLowerCase() === USER_OPERATION_REVERT_REASON_TOPIC
+  );
+
+  if (!revertLog?.data) {
+    return null;
+  }
+
+  try {
+    const decoded = decodeAbiParameters(
+      [
+        { type: 'uint256', name: 'nonce' },
+        { type: 'bytes', name: 'revertReason' }
+      ],
+      revertLog.data
+    );
+
+    return decodeRevertReasonHex(decoded[1]);
+  } catch {
+    return null;
+  }
+}
+
 // ============================================
 // Fee Estimation Endpoint
 // ============================================
@@ -708,6 +761,7 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
         if (data && receipt) {
           data.txHash = receipt.receipt?.transactionHash;
           data.status = receipt.success ? 'confirmed' : 'failed';
+          data.reason = receipt.success ? null : extractFailureReason(receipt);
           intents.set(requestId, data);
           
           // Save to history with token symbols and fee info
@@ -872,6 +926,7 @@ app.post('/api/intents/swap-with-permit2', async (req, res) => {
         if (data && receipt) {
           data.txHash = receipt.receipt?.transactionHash;
           data.status = receipt.success ? 'confirmed' : 'failed';
+          data.reason = receipt.success ? null : extractFailureReason(receipt);
           intents.set(requestId, data);
 
           const tokenInSymbol = getTokenSymbol(chainId, intentData.tokenIn);
@@ -946,6 +1001,7 @@ app.get('/api/intents/:id/status', async (req, res) => {
     status: data.status,
     userOpHash: data.userOpHash,
     txHash: data.txHash,
+    reason: data.reason || null,
     explorerUrl: data.txHash ? `${chainConfig.explorer}${data.txHash}` : null
   });
 });

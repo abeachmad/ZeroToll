@@ -4,21 +4,37 @@ async function main() {
   const ADAPTER = "0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa";
   const WETH = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14";
   const USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
+  const TARGET_WETH_LIQUIDITY = hre.ethers.parseEther("0.25");
+  const TARGET_USDC_LIQUIDITY = hre.ethers.parseUnits("1000", 6);
 
   const [deployer] = await hre.ethers.getSigners();
   console.log("Deployer:", deployer.address);
 
   // Check deployer balances
-  const wethContract = await hre.ethers.getContractAt("IERC20", WETH);
+  const wethContract = await hre.ethers.getContractAt(
+    ["function deposit() payable", "function balanceOf(address) view returns (uint256)", "function approve(address,uint256) returns (bool)"],
+    WETH
+  );
   const usdcContract = await hre.ethers.getContractAt("IERC20", USDC);
   
-  const wethBal = await wethContract.balanceOf(deployer.address);
+  let wethBal = await wethContract.balanceOf(deployer.address);
   const usdcBal = await usdcContract.balanceOf(deployer.address);
+  const ethBal = await hre.ethers.provider.getBalance(deployer.address);
   
+  console.log("Deployer ETH:", hre.ethers.formatEther(ethBal));
   console.log("Deployer WETH:", hre.ethers.formatEther(wethBal));
   console.log("Deployer USDC:", hre.ethers.formatUnits(usdcBal, 6));
 
   const adapter = await hre.ethers.getContractAt("SmartDexAdapter", ADAPTER);
+  const currentWethLiquidity = await adapter.liquidity(WETH);
+  const currentUsdcLiquidity = await adapter.liquidity(USDC);
+  const adapterWethBalance = await wethContract.balanceOf(ADAPTER);
+  const adapterUsdcBalance = await usdcContract.balanceOf(ADAPTER);
+
+  console.log("\nCurrent adapter WETH balance:", hre.ethers.formatEther(adapterWethBalance));
+  console.log("Current adapter WETH liquidity:", hre.ethers.formatEther(currentWethLiquidity));
+  console.log("Current adapter USDC balance:", hre.ethers.formatUnits(adapterUsdcBalance, 6));
+  console.log("Current adapter USDC liquidity:", hre.ethers.formatUnits(currentUsdcLiquidity, 6));
 
   // Set price for WETH/USDC (1 WETH = 2000 USDC approximately)
   // Price is in 1e18 format, but USDC has 6 decimals
@@ -33,21 +49,33 @@ async function main() {
   await (await adapter.setPrice(WETH, USDC, wethToUsdcPrice)).wait();
   console.log("✓ Price set");
 
-  // If deployer has WETH/USDC, add as liquidity
-  if (wethBal > 0n) {
-    const wethToAdd = wethBal / 2n; // Add half
-    console.log("\nAdding WETH liquidity:", hre.ethers.formatEther(wethToAdd));
-    await (await wethContract.approve(ADAPTER, wethToAdd)).wait();
-    await (await adapter.addLiquidity(WETH, wethToAdd)).wait();
+  if (adapterWethBalance < TARGET_WETH_LIQUIDITY) {
+    const wethNeeded = TARGET_WETH_LIQUIDITY - adapterWethBalance;
+
+    if (wethBal < wethNeeded) {
+      const wrapAmount = wethNeeded - wethBal;
+      console.log("\nWrapping ETH to WETH:", hre.ethers.formatEther(wrapAmount));
+      await (await wethContract.deposit({ value: wrapAmount })).wait();
+      wethBal = await wethContract.balanceOf(deployer.address);
+      console.log("✓ Wrapped ETH. New deployer WETH:", hre.ethers.formatEther(wethBal));
+    }
+
+    console.log("\nAdding WETH liquidity:", hre.ethers.formatEther(wethNeeded));
+    await (await wethContract.approve(ADAPTER, wethNeeded)).wait();
+    await (await adapter.addLiquidity(WETH, wethNeeded)).wait();
     console.log("✓ WETH liquidity added");
+  } else {
+    console.log("\n✓ WETH liquidity already at or above target");
   }
 
-  if (usdcBal > 0n) {
-    const usdcToAdd = usdcBal / 2n; // Add half
+  if (adapterUsdcBalance < TARGET_USDC_LIQUIDITY && usdcBal > 0n) {
+    const usdcToAdd = TARGET_USDC_LIQUIDITY - adapterUsdcBalance;
     console.log("\nAdding USDC liquidity:", hre.ethers.formatUnits(usdcToAdd, 6));
     await (await usdcContract.approve(ADAPTER, usdcToAdd)).wait();
     await (await adapter.addLiquidity(USDC, usdcToAdd)).wait();
     console.log("✓ USDC liquidity added");
+  } else {
+    console.log("✓ USDC liquidity already at or above target");
   }
 
   // Check final liquidity

@@ -979,8 +979,11 @@ const Swap = () => {
           toast.success('🎉 Gasless swap confirmed! You paid $0 in gas!');
           return;
         } else if (status.status === 'failed') {
-          setGaslessStatus('Swap failed on-chain');
-          toast.error('Swap failed on-chain');
+          const failureMessage = status.reason
+            ? `Swap failed on-chain: ${status.reason}`
+            : 'Swap failed on-chain';
+          setGaslessStatus(failureMessage);
+          toast.error(failureMessage);
           return;
         }
       }
