@@ -312,7 +312,7 @@
         "wrappedToken": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
         "feeVault": "TBD_AFTER_DEPLOYMENT",
         "feeRebalancer": "TBD_AFTER_DEPLOYMENT",
-        "confidentialIntentEscrow": null,
+        "confidentialIntentEscrow": "0xCeA4c47fdE94536A291860D67DF9999A102Db56e",
         "adapters": {
           "uniswapV2": "0x86D1AA2228F3ce649d415F19fC71134264D0E84B",
           "uniswapV3": "0x86D1AA2228F3ce649d415F19fC71134264D0E84B",

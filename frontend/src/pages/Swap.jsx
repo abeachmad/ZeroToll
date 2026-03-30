@@ -226,6 +226,14 @@ const Swap = () => {
   
   // Get RouterHub address for current chain
   const routerHubAddress = ROUTER_HUB_ADDRESSES[fromChain?.id];
+  const confidentialEscrowAddress = getConfiguredAddress(
+    getChainContracts(fromChain?.id)?.confidentialIntentEscrow
+  );
+  const approvalSpenderAddress =
+    isConfidentialMode && confidentialEscrowAddress
+      ? confidentialEscrowAddress
+      : routerHubAddress;
+  const confidentialApprovalRequired = Boolean(isConfidentialMode && confidentialEscrowAddress);
   
   // Wagmi hooks for approval
   const { writeContract: approveToken, data: approveHash } = useWriteContract();
@@ -243,8 +251,8 @@ const Swap = () => {
     address: tokenIn?.address,
     abi: ERC20_ABI,
     functionName: 'allowance',
-    args: address && routerHubAddress ? [address, routerHubAddress] : undefined,
-    enabled: Boolean(address && routerHubAddress && tokenIn && !tokenIn.isNative),
+    args: address && approvalSpenderAddress ? [address, approvalSpenderAddress] : undefined,
+    enabled: Boolean(address && approvalSpenderAddress && tokenIn && !tokenIn.isNative),
   });
 
   const activateExecutionMode = (mode) => {
@@ -394,7 +402,7 @@ const Swap = () => {
       currentAllowance: currentAllowance?.toString(),
       amountIn,
       tokenSymbol: tokenIn?.symbol,
-      routerHub: routerHubAddress
+      spender: approvalSpenderAddress
     });
     
     try {
@@ -528,7 +536,7 @@ const Swap = () => {
   };
 
   const handleApprove = async () => {
-    if (!tokenIn || tokenIn.isNative || !routerHubAddress) return;
+    if (!tokenIn || tokenIn.isNative || !approvalSpenderAddress) return;
     
     setApprovalPending(true);
     
@@ -575,7 +583,7 @@ const Swap = () => {
         try {
           await gaslessSwap.executeApproval({
             tokenAddress: tokenIn.address,
-            spender: routerHubAddress,
+            spender: approvalSpenderAddress,
             amount: amountWei.toString(),
             targetChainId: fromChain.id
           });
@@ -603,7 +611,7 @@ const Swap = () => {
         address: tokenIn.address,
         abi: ERC20_ABI,
         functionName: 'approve',
-        args: [routerHubAddress, 0n],
+        args: [approvalSpenderAddress, 0n],
       };
       
       // For Amoy testnet, add minimum gas price
@@ -629,7 +637,7 @@ const Swap = () => {
         address: tokenIn.address,
         abi: ERC20_ABI,
         functionName: 'approve',
-        args: [routerHubAddress, amountWei],
+        args: [approvalSpenderAddress, amountWei],
       };
       
       // For Amoy testnet, add minimum gas price to avoid 0 gas price rejection
@@ -769,6 +777,27 @@ const Swap = () => {
       const suggestedMinOut = Number(
         confidentialQuote.suggestedConfidentialMinOut || quotedAmountOut * 0.95
       );
+      const amountInUnits = parseUnits(
+        amountIn,
+        tokenIn.decimals || 18
+      ).toString();
+      const quotedAmountOutDisplay = quotedAmountOut.toFixed(
+        Math.min(tokenOut.decimals || 18, 6)
+      );
+      const quotedAmountOutUnits = parseUnits(
+        quotedAmountOutDisplay,
+        tokenOut.decimals || 18
+      ).toString();
+      const estimatedFeeToken = Number(confidentialQuote.estimatedFeeToken || 0);
+      const estimatedFeeTokenDisplay = estimatedFeeToken.toFixed(
+        Math.min(tokenOut.decimals || 18, 6)
+      );
+      const estimatedFeeTokenUnits = estimatedFeeToken > 0
+        ? parseUnits(
+            estimatedFeeTokenDisplay,
+            tokenOut.decimals || 18
+          ).toString()
+        : '0';
       const minAmountOutDisplay = suggestedMinOut.toFixed(
         Math.min(tokenOut.decimals || 18, 6)
       );
@@ -785,7 +814,11 @@ const Swap = () => {
         tokenIn: tokenIn.address,
         tokenOut: tokenOut.address,
         amountIn,
+        amountInUnits,
         quotedAmountOut: quotedAmountOut.toString(),
+        quotedAmountOutUnits,
+        estimatedFeeToken: estimatedFeeTokenDisplay,
+        estimatedFeeTokenUnits,
         minAmountOut: minAmountOutDisplay,
         minAmountOutUnits,
         srcChainId: fromChain.id,
@@ -1396,8 +1429,16 @@ const Swap = () => {
                 <div>
                   <span className="text-cyan-300">🔐 Confidential Gasless Intent active - staged settlement path for the Fhenix buildathon track.</span>
                   <span className="block mt-1 text-zt-paper/50">
-                    Sepolia runtime now uses real CoFHE browser encryption for `minOut`, while the staged backend lifecycle remains explicit about what is scaffolded versus on-chain.
+                    Sepolia runtime now uses real CoFHE browser encryption for `minOut`, and the live path can now drive escrow settlement demos on-chain.
                   </span>
+                  <span className="block mt-1 text-cyan-200">
+                    Live today: same-token escrow demo, plus cross-token inventory-backed demo when the operator has enough `tokenOut` inventory.
+                  </span>
+                  {confidentialApprovalRequired && (
+                    <span className="block mt-1 text-yellow-300">
+                      One ERC20 approval to the escrow contract is currently required before sponsored submit can proceed.
+                    </span>
+                  )}
                   {confidentialGasless.quote?.estimatedFeeUSD && (
                     <span className="block mt-1 text-cyan-200">
                       Estimated sponsored cost + protocol fee: ~${Number(confidentialGasless.quote.estimatedFeeUSD).toFixed(4)}
@@ -1645,7 +1686,7 @@ const Swap = () => {
                       This mode is staged on purpose: encrypt a private threshold, sponsor execution, wait for decryption readiness, then finalize success or refund.
                     </div>
                     <div className="mt-1 text-zt-paper/60">
-                      Runtime today: real CoFHE encryption on Sepolia + backend lifecycle tracking. Contract-side FHE settlement already lives in `packages/contracts`, but the live app has not been switched to full on-chain enforcement yet.
+                      Runtime today: real CoFHE encryption on Sepolia + escrow-backed lifecycle tracking. Same-token and inventory-backed cross-token demos can now complete on-chain, while the general swap path remains hybrid until live adapter execution is wired in.
                     </div>
                     {confidentialGasless.intentId && (
                       <div className="mt-2 rounded bg-black/20 p-2 text-cyan-100">
@@ -1663,7 +1704,13 @@ const Swap = () => {
                       <div className="mt-2 rounded bg-black/20 p-2 text-zt-paper/75">
                         ConfidentialIntentEscrow: {quote.contract.confidentialIntentEscrow || 'not deployed in shared config'}
                         <br />
-                        Runtime path: {quote.contract.ready ? 'contract address configured' : 'backend staged scaffold still active'}
+                        Runtime path: {quote.contract.liveSubmitMode || (quote.contract.ready ? 'contract address configured' : 'backend staged scaffold still active')}
+                        {confidentialApprovalRequired && (
+                          <>
+                            <br />
+                            Approval spender: {confidentialEscrowAddress}
+                          </>
+                        )}
                       </div>
                     )}
                     {gaslessStatus && (
@@ -2013,8 +2060,8 @@ const Swap = () => {
             </button>
             
             {/* Show Approve button if needed, otherwise Execute */}
-            {/* Skip approval for mode-managed flows: ZeroToll gasless, Confidential Intent, Smart Wallet Batch, and Custom EIP-7702 */}
-            {needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && !isConfidentialMode ? (
+            {/* Confidential Intent with a live escrow currently needs an ERC20 approval to the escrow contract. */}
+            {needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && (!isConfidentialMode || confidentialApprovalRequired) ? (
               <button
                 onClick={handleApprove}
                 disabled={approvalPending || loading}
@@ -2027,18 +2074,22 @@ const Swap = () => {
                     Approving...
                   </>
                 ) : (
-                  `Approve ${tokenIn.symbol}`
+                  confidentialApprovalRequired
+                    ? `Approve ${tokenIn.symbol} to Escrow`
+                    : `Approve ${tokenIn.symbol}`
                 )}
               </button>
             ) : (
               <button
                 onClick={handleExecute}
-                disabled={(loading || gaslessSwap.isLoading || intentGasless.isLoading || eip7702Swap.loading || confidentialGasless.isLoading) || (!quote && !isZeroTollGasless && !isEIP7702Mode && !isGaslessMode && !isConfidentialMode) || (needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && !isConfidentialMode) || (fromChain.id !== toChain.id)}
+                disabled={(loading || gaslessSwap.isLoading || intentGasless.isLoading || eip7702Swap.loading || confidentialGasless.isLoading) || (!quote && !isZeroTollGasless && !isEIP7702Mode && !isGaslessMode && !isConfidentialMode) || (needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && (!isConfidentialMode || confidentialApprovalRequired)) || (fromChain.id !== toChain.id)}
                 className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 data-testid="execute-swap-btn"
                 title={
                   fromChain.id !== toChain.id ? 'Cross-chain swaps not yet supported' :
-                  needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && !isConfidentialMode ? 'Please approve token first' : 
+                  needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && (!isConfidentialMode || confidentialApprovalRequired)
+                    ? (confidentialApprovalRequired ? 'Please approve the ConfidentialIntentEscrow spender first' : 'Please approve token first')
+                    :
                   ''
                 }
               >

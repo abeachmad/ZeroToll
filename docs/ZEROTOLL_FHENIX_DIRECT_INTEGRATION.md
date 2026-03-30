@@ -348,18 +348,36 @@ The repo now has a first staged runtime scaffold for this path:
 - frontend now has `useConfidentialIntentGasless.js`
 - the Swap UI exposes a separate **Confidential Gasless Intent** mode
 - shared config now has a `confidentialIntentEscrow` slot and the contracts package has a deploy script for it
+- `ConfidentialIntentEscrow` is now deployed on Sepolia and synced into shared config
+- the active backend can now attempt a live on-chain submit into `ConfidentialIntentEscrow` through the contract's plaintext testing helper
+- the active frontend now redirects ERC-20 approval for confidential mode to the escrow contract when the live contract path is enabled
+- for `same-token` confidential demos on Sepolia, the active backend can now drive the full escrow lifecycle on-chain:
+  - submit
+  - release input
+  - return same-token funds to escrow
+  - record execution result
+  - request decryption
+  - finalize on-chain
+- for `cross-token` confidential demos on Sepolia, the active backend can now drive a live **inventory-backed** escrow lifecycle on-chain when the operator has enough `tokenOut` inventory:
+  - submit
+  - release `tokenIn`
+  - fund escrow with operator-held `tokenOut`
+  - record execution result
+  - request decryption
+  - finalize on-chain
 
 What is still intentionally unfinished:
 
 - CoFHE browser encryption is only wired for Sepolia right now
-- settlement verdicts in the active app are still staged backend scaffolding
-- the real FHE enforcement path currently lives in the contracts package, not the live swap runtime
-- the live app still does not submit directly to `ConfidentialIntentEscrow` on a deployed Fhenix-ready address
+- general cross-token settlement that sources liquidity from real adapters is still hybrid/backend scaffolding
+- the live app does not yet send the real encrypted `InEuint128` payload into the live contract path
+- the confidential live path still needs one ERC-20 approval to `ConfidentialIntentEscrow`, because the contract currently uses `transferFrom`-based escrow funding
+- the fully live cross-token path is currently limited to an inventory-backed demo route; it is not yet performing a real confidential adapter swap against live pool liquidity
 
 This means the product is now honest in both directions:
 
-- the confidential mode is real enough to demonstrate staged lifecycle UX and real browser-side encryption on Sepolia
-- but it does **not** yet claim that the live frontend/backend path is enforcing `minOut` with Fhenix on-chain
+- the confidential mode is now real enough to demonstrate staged lifecycle UX, real browser-side encryption on Sepolia, a live escrow submit path, a fully on-chain `same-token` demo lifecycle, and a fully on-chain `cross-token inventory-backed` demo lifecycle
+- but it does **not** yet claim that the live frontend/backend path is already enforcing `minOut` with Fhenix end-to-end on-chain
 
 ## Bottom Line
 

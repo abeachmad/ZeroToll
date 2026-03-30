@@ -31,6 +31,10 @@ async function main() {
   const address = await escrow.getAddress();
   console.log(`✅ ConfidentialIntentEscrow: ${address}`);
 
+  const trustedOperatorTx = await escrow.setTrustedOperator(deployer.address, true);
+  await trustedOperatorTx.wait();
+  console.log(`✅ Trusted operator enabled for deployer: ${deployer.address}`);
+
   const deployment = {
     network: networkName,
     networkKey: key,
@@ -39,6 +43,7 @@ async function main() {
     deployer: deployer.address,
     feeRecipient,
     confidentialIntentEscrow: address,
+    trustedOperator: deployer.address,
   };
 
   const deploymentsDir = path.join(__dirname, '..', 'deployments');
