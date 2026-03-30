@@ -104,7 +104,7 @@ The solution uses a backend proxy that properly integrates with Pimlico:
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    BACKEND (Node.js - gasless_api.mjs)               │
+│              BACKEND (Node.js - backend/legacy/gasless_api.mjs)      │
 │                                                                      │
 │   /api/gasless/prepare:                                             │
 │   - Verify Smart Account is enabled                                 │
@@ -268,7 +268,7 @@ After fix:
 
 ### 6.2 Backend (No changes needed)
 
-The backend `gasless_api.mjs` was already correctly implemented. It uses:
+The backend `backend/legacy/gasless_api.mjs` was already correctly implemented. It uses:
 - `@metamask/smart-accounts-kit` for UserOp formatting
 - `permissionless` for Pimlico client
 - Proper EIP-712 typed data generation

@@ -1,31 +1,135 @@
 {
-  "11155111": {
-    "name": "Sepolia",
-    "tokens": {
-      "ETH": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-      "WETH": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
-      "USDC": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
-      "PYUSD": "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9",
-      "LINK": "0x779877A7B0D9E8603169DdbD7836e478b4624789",
-      "ZUSDC": "0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C",
-      "ZETH": "0x8153FA09Be1689D44C343f119C829F6702A8720b",
-      "ZPOL": "0x63c31C4247f6AA40B676478226d6FEB5707649D6",
-      "ZLINK": "0x4e2dbcCc07D8e5a8C9f420ea60d1e3aEc7B64D2C"
-    }
-  },
   "80002": {
     "name": "Amoy",
     "tokens": {
-      "POL": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-      "WMATIC": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
-      "WPOL": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
-      "USDC": "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582",
-      "LINK": "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904",
-      "WETH": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
       "ZUSDC": "0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD",
       "ZETH": "0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9",
       "ZPOL": "0xB0A04aB21faAe4A5399938c07EDdfA0FB41d2B9d",
-      "ZLINK": "0x51f6c79e5cA4ACF086d0954AfAAf5c72Be56CBb1"
+      "ZLINK": "0x51f6c79e5cA4ACF086d0954AfAAf5c72Be56CBb1",
+      "POL": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+      "WMATIC": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+      "WPOL": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+      "USDC": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
+      "LINK": "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904",
+      "WETH": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
+    },
+    "metadataByAddress": {
+      "0x257fb36cd940d1f6a0a4659e8245d3c3fcecb8bd": {
+        "symbol": "zUSDC",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": "USDC"
+      },
+      "0xfae5fb760917682d67bc2082667c2c5e55a193f9": {
+        "symbol": "zETH",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": "ETH"
+      },
+      "0xb0a04ab21faae4a5399938c07eddfa0fb41d2b9d": {
+        "symbol": "zPOL",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": "POL"
+      },
+      "0x51f6c79e5ca4acf086d0954afaaf5c72be56cbb1": {
+        "symbol": "zLINK",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": "LINK"
+      },
+      "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+        "symbol": "POL",
+        "decimals": 18,
+        "isNative": true,
+        "pythPriceSymbol": null
+      },
+      "0x360ad4f9a9a8efe9a8dcb5f461c4cc1047e1dcf9": {
+        "symbol": "WMATIC",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582": {
+        "symbol": "USDC",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "0x0fd9e8d3af1aaee056eb9e802c3a762a667b1904": {
+        "symbol": "LINK",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619": {
+        "symbol": "WETH",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      }
+    },
+    "metadataBySymbol": {
+      "ZUSDC": {
+        "symbol": "zUSDC",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": "USDC"
+      },
+      "ZETH": {
+        "symbol": "zETH",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": "ETH"
+      },
+      "ZPOL": {
+        "symbol": "zPOL",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": "POL"
+      },
+      "ZLINK": {
+        "symbol": "zLINK",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": "LINK"
+      },
+      "POL": {
+        "symbol": "POL",
+        "decimals": 18,
+        "isNative": true,
+        "pythPriceSymbol": null
+      },
+      "WMATIC": {
+        "symbol": "WMATIC",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "WPOL": {
+        "symbol": "WMATIC",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "USDC": {
+        "symbol": "USDC",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "LINK": {
+        "symbol": "LINK",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "WETH": {
+        "symbol": "WETH",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      }
     }
   },
   "421614": {
@@ -35,6 +139,184 @@
       "WETH": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
       "USDC": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
       "LINK": "0xb1D4538B4571d411F07960EF2838Ce337FE1E80E"
+    },
+    "metadataByAddress": {
+      "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+        "symbol": "ETH",
+        "decimals": 18,
+        "isNative": true,
+        "pythPriceSymbol": null
+      },
+      "0x980b62da83eff3d4576c647993b0c1d7faf17c73": {
+        "symbol": "WETH",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d": {
+        "symbol": "USDC",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "0xb1d4538b4571d411f07960ef2838ce337fe1e80e": {
+        "symbol": "LINK",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      }
+    },
+    "metadataBySymbol": {
+      "ETH": {
+        "symbol": "ETH",
+        "decimals": 18,
+        "isNative": true,
+        "pythPriceSymbol": null
+      },
+      "WETH": {
+        "symbol": "WETH",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "USDC": {
+        "symbol": "USDC",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "LINK": {
+        "symbol": "LINK",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      }
+    }
+  },
+  "11155111": {
+    "name": "Sepolia",
+    "tokens": {
+      "ZUSDC": "0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C",
+      "ZETH": "0x8153FA09Be1689D44C343f119C829F6702A8720b",
+      "ZPOL": "0x63c31C4247f6AA40B676478226d6FEB5707649D6",
+      "ZLINK": "0x4e2dbcCc07D8e5a8C9f420ea60d1e3aEc7B64D2C",
+      "ETH": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+      "WETH": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+      "USDC": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      "PYUSD": "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9",
+      "LINK": "0x779877A7B0D9E8603169DdBD7836e478b4624789"
+    },
+    "metadataByAddress": {
+      "0x5f43d1fc4faad0dfe097fc3bb32d66a9864c730c": {
+        "symbol": "zUSDC",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": "USDC"
+      },
+      "0x8153fa09be1689d44c343f119c829f6702a8720b": {
+        "symbol": "zETH",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": "ETH"
+      },
+      "0x63c31c4247f6aa40b676478226d6feb5707649d6": {
+        "symbol": "zPOL",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": "POL"
+      },
+      "0x4e2dbccc07d8e5a8c9f420ea60d1e3aec7b64d2c": {
+        "symbol": "zLINK",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": "LINK"
+      },
+      "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+        "symbol": "ETH",
+        "decimals": 18,
+        "isNative": true,
+        "pythPriceSymbol": null
+      },
+      "0xfff9976782d46cc05630d1f6ebab18b2324d6b14": {
+        "symbol": "WETH",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238": {
+        "symbol": "USDC",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "0xcac524bca292aaade2df8a05cc58f0a65b1b3bb9": {
+        "symbol": "PYUSD",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "0x779877a7b0d9e8603169ddbd7836e478b4624789": {
+        "symbol": "LINK",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      }
+    },
+    "metadataBySymbol": {
+      "ZUSDC": {
+        "symbol": "zUSDC",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": "USDC"
+      },
+      "ZETH": {
+        "symbol": "zETH",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": "ETH"
+      },
+      "ZPOL": {
+        "symbol": "zPOL",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": "POL"
+      },
+      "ZLINK": {
+        "symbol": "zLINK",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": "LINK"
+      },
+      "ETH": {
+        "symbol": "ETH",
+        "decimals": 18,
+        "isNative": true,
+        "pythPriceSymbol": null
+      },
+      "WETH": {
+        "symbol": "WETH",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "USDC": {
+        "symbol": "USDC",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "PYUSD": {
+        "symbol": "PYUSD",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "LINK": {
+        "symbol": "LINK",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      }
     }
   },
   "11155420": {
@@ -44,6 +326,58 @@
       "WETH": "0x4200000000000000000000000000000000000006",
       "USDC": "0x5fd84259d66Cd46123540766Be93DFE6D43130D7",
       "LINK": "0xE4aB69C077896252FAFBD49EFD26B5D171A32410"
+    },
+    "metadataByAddress": {
+      "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+        "symbol": "ETH",
+        "decimals": 18,
+        "isNative": true,
+        "pythPriceSymbol": null
+      },
+      "0x4200000000000000000000000000000000000006": {
+        "symbol": "WETH",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "0x5fd84259d66cd46123540766be93dfe6d43130d7": {
+        "symbol": "USDC",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "0xe4ab69c077896252fafbd49efd26b5d171a32410": {
+        "symbol": "LINK",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      }
+    },
+    "metadataBySymbol": {
+      "ETH": {
+        "symbol": "ETH",
+        "decimals": 18,
+        "isNative": true,
+        "pythPriceSymbol": null
+      },
+      "WETH": {
+        "symbol": "WETH",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "USDC": {
+        "symbol": "USDC",
+        "decimals": 6,
+        "isNative": false,
+        "pythPriceSymbol": null
+      },
+      "LINK": {
+        "symbol": "LINK",
+        "decimals": 18,
+        "isNative": false,
+        "pythPriceSymbol": null
+      }
     }
   }
 }

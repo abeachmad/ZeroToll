@@ -2,12 +2,11 @@
 Real DEX Swap Service with Liquidity Checking
 """
 import os
-import json
-from pathlib import Path
 from web3 import Web3
 from eth_account import Account
 from dotenv import load_dotenv
 import logging
+from generated_config import get_explorer_tx_base, get_rpc_url, get_token_map
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +15,16 @@ load_dotenv()
 
 class DEXSwapService:
     def __init__(self):
-        # Load RPC URLs from .env with fallbacks
+        # Load generated primary RPCs and keep public backups for resilience.
         self.rpc_urls = {
-            80002: [os.getenv("RPC_AMOY", "https://rpc-amoy.polygon.technology"), "https://polygon-amoy.drpc.org"],
-            11155111: [os.getenv("RPC_SEPOLIA", "https://ethereum-sepolia-rpc.publicnode.com"), "https://sepolia.drpc.org"],
-            421614: [os.getenv("RPC_ARBITRUM_SEPOLIA", "https://sepolia-rollup.arbitrum.io/rpc"), "https://arbitrum-sepolia.blockpi.network/v1/rpc/public"],
-            11155420: [os.getenv("RPC_OPTIMISM_SEPOLIA", "https://sepolia.optimism.io"), "https://optimism-sepolia.blockpi.network/v1/rpc/public"]
+            80002: [get_rpc_url(80002), "https://polygon-amoy.drpc.org"],
+            11155111: [get_rpc_url(11155111), "https://sepolia.drpc.org"],
+            421614: [get_rpc_url(421614) or "https://sepolia-rollup.arbitrum.io/rpc", "https://arbitrum-sepolia.blockpi.network/v1/rpc/public"],
+            11155420: [get_rpc_url(11155420) or "https://sepolia.optimism.io", "https://optimism-sepolia.blockpi.network/v1/rpc/public"]
+        }
+        self.rpc_urls = {
+            chain_id: [rpc for rpc in rpc_urls if rpc]
+            for chain_id, rpc_urls in self.rpc_urls.items()
         }
         
         # Load DEX router addresses from .env
@@ -32,15 +35,10 @@ class DEXSwapService:
             11155420: {"router": os.getenv("OP_SEPOLIA_DEX_ROUTER", "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4"), "name": "Uniswap V3"}
         }
         
-        # Load token addresses from JSON file
-        token_file = Path(__file__).parent / "token_addresses.json"
-        with open(token_file, 'r') as f:
-            token_data = json.load(f)
-        
-        # Convert to old format for backward compatibility
-        self.tokens = {}
-        for chain_id, data in token_data.items():
-            self.tokens[int(chain_id)] = data["tokens"]
+        self.tokens = {
+            chain_id: get_token_map(chain_id)
+            for chain_id in [80002, 11155111, 421614, 11155420]
+        }
         
         self.private_key = os.getenv('RELAYER_PRIVATE_KEY')
         
@@ -156,18 +154,13 @@ class DEXSwapService:
                 tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
                 receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
                 
-                explorers = {
-                    80002: "https://amoy.polygonscan.com/tx/",
-                    11155111: "https://sepolia.etherscan.io/tx/",
-                    421614: "https://sepolia.arbiscan.io/tx/",
-                    11155420: "https://sepolia-optimism.etherscan.io/tx/"
-                }
+                explorer_base = get_explorer_tx_base(src_chain)
                 
                 return {
                     'success': receipt.status == 1,
                     'txHash': tx_hash.hex(),
                     'status': 'confirmed' if receipt.status == 1 else 'failed',
-                    'explorerUrl': f"{explorers[src_chain]}{tx_hash.hex()}",
+                    'explorerUrl': f"{explorer_base}{tx_hash.hex()}" if explorer_base else None,
                     'gasUsed': receipt.gasUsed,
                     'blockNumber': receipt.blockNumber,
                     'chainId': src_chain,

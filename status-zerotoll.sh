@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "📊 ZeroToll Service Status"
 echo "=========================="
 echo ""
@@ -44,39 +46,36 @@ echo ""
 # Check Backend
 if check_port 8000 "Backend"; then
     check_http "http://localhost:8000/api/" "Backend API"
+    check_http "http://localhost:8000/api/eip7702/info" "Backend EIP-7702 API"
 fi
 
 echo ""
 
-# Check Bundler
-if check_port 3000 "Bundler"; then
-    if curl -s http://localhost:3000/rpc -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"eth_supportedEntryPoints","params":[]}' | grep -q "0x0000000071727De22E5E9d8BAf0edAc6f37da032" 2>/dev/null; then
-        echo "   🌐 Bundler RPC accessible and working"
-    else
-        echo "   ⚠️  Bundler RPC not responding correctly"
-    fi
+# Check Relayer
+if check_port 3002 "ZeroToll Relayer"; then
+    check_http "http://localhost:3002/health" "ZeroToll Relayer"
 fi
 
 echo ""
 
 # Check Frontend
-if check_port 3001 "Frontend"; then
-    echo "   🌐 Frontend should be accessible at: http://localhost:3001"
+if check_port 3000 "Frontend"; then
+    echo "   🌐 Frontend should be accessible at: http://localhost:3000"
 fi
 
 echo ""
 
-# Check Policy Server
-if check_port 3002 "Policy Server"; then
-    check_http "http://localhost:3002/api/health" "Policy Server"
+# Check Delegation API
+if check_port 3003 "Delegation API"; then
+    check_http "http://localhost:3003/api/delegation/delegate-info" "Delegation API"
 fi
 
 echo ""
 echo "📄 Logs:"
-echo "   Backend:       tail -f /tmp/zerotoll_backend.log"
-echo "   Bundler:       tail -f /tmp/zerotoll_bundler.log"
-echo "   Frontend:      tail -f /tmp/zerotoll_frontend.log"
-echo "   Policy Server: tail -f /tmp/zerotoll_policy_server.log"
+echo "   Backend:       tail -f $SCRIPT_DIR/.pids/backend.log"
+echo "   Relayer:       tail -f $SCRIPT_DIR/.pids/relayer.log"
+echo "   Delegation:    tail -f $SCRIPT_DIR/.pids/delegation.log"
+echo "   Frontend:      tail -f $SCRIPT_DIR/.pids/frontend.log"
 echo ""
 
 # Summary
@@ -85,9 +84,9 @@ RUNNING=0
 
 pgrep -x mongod > /dev/null && ((RUNNING++))
 lsof -ti:8000 > /dev/null 2>&1 && ((RUNNING++))
-lsof -ti:3000 > /dev/null 2>&1 && ((RUNNING++))
-lsof -ti:3001 > /dev/null 2>&1 && ((RUNNING++))
 lsof -ti:3002 > /dev/null 2>&1 && ((RUNNING++))
+lsof -ti:3003 > /dev/null 2>&1 && ((RUNNING++))
+lsof -ti:3000 > /dev/null 2>&1 && ((RUNNING++))
 
 echo "📈 Summary: $RUNNING/$TOTAL services running"
 echo ""
@@ -95,8 +94,9 @@ echo ""
 if [ $RUNNING -eq $TOTAL ]; then
     echo "✅ All services operational!"
 elif [ $RUNNING -eq 0 ]; then
-    echo "❌ No services running. Start with: ./start-zerotoll.sh"
+    echo "❌ No services running. Start with: bash ./start-zerotoll.sh"
 else
-    echo "⚠️  Some services not running. Restart with: ./stop-zerotoll.sh && ./start-zerotoll.sh"
+    echo "⚠️  Some services not running. Restart with: bash ./stop-zerotoll.sh && bash ./start-zerotoll.sh"
 fi
+echo "ℹ️  Legacy policy-server/bundler utilities are not included in this status check."
 echo ""

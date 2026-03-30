@@ -11,59 +11,73 @@
  */
 import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useChainId, useWalletClient } from 'wagmi';
+import contractsConfig from '../config/contracts.json';
+import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
+import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
 
-// Relayer URL - Self-hosted paymaster (port 3002) using our VerifyingPaymasterV07
-// This is the ONLY relayer we use - no Pimlico fallback
-const RELAYER_URL = process.env.REACT_APP_RELAYER_URL || 'http://localhost:3002';
+// Relayer URL - Self-hosted paymaster (port 3002) using our VerifyingPaymasterV07.
+// Some older env files still point to :3001 or :8000, so normalize those here.
+const resolveRelayerUrl = () => {
+  const candidates = [
+    process.env.REACT_APP_RELAYER_URL,
+    process.env.REACT_APP_GASLESS_API_URL,
+    'http://localhost:3002',
+  ];
 
-// ZeroToll Router addresses per chain (RouterV3 with fee support)
-const ZEROTOLL_ROUTERS = {
-  11155111: '0xB54e95a30E4Aa355380798313E0791833C7F0BFF', // Sepolia RouterV3 (with fee)
-  80002: '0xD83D377E4698317731b2953854c01d39C60815d7', // Amoy RouterV3 (with fee)
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (candidate === 'http://localhost:3001') continue;
+    if (candidate === 'http://localhost:8000') continue;
+    return candidate;
+  }
+
+  return 'http://localhost:3002';
 };
+
+const RELAYER_URL = resolveRelayerUrl();
+
+const FRONTEND_CHAIN_CONFIG = {
+  11155111: { key: 'sepolia', tokens: sepoliaTokens.tokens },
+  80002: { key: 'amoy', tokens: amoyTokens.tokens },
+};
+
+const isConfiguredAddress = (value) => /^0x[a-fA-F0-9]{40}$/.test(value || '');
+
+const buildTokenAddressMap = (predicate) => Object.fromEntries(
+  Object.entries(FRONTEND_CHAIN_CONFIG).map(([chainId, config]) => [
+    chainId,
+    Object.fromEntries(
+      config.tokens
+        .filter(predicate)
+        .map((token) => [token.symbol, token.address])
+    ),
+  ])
+);
+
+const ZEROTOLL_ROUTERS = Object.fromEntries(
+  Object.entries(FRONTEND_CHAIN_CONFIG)
+    .map(([chainId, config]) => [
+      chainId,
+      contractsConfig[config.key]?.zeroTollRouterV3,
+    ])
+    .filter(([, address]) => isConfiguredAddress(address))
+);
 
 // Permit2 contract address (same on all chains)
-const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
+const PERMIT2_ADDRESS = contractsConfig.permit2;
 
 // ERC-2612 Permit tokens (fully gasless)
-const ERC2612_TOKENS = {
-  11155111: {
-    zUSDC: '0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C',
-    zETH: '0x8153FA09Be1689D44C343f119C829F6702A8720b',
-    zPOL: '0x63c31C4247f6AA40B676478226d6FEB5707649D6',
-    zLINK: '0x4e2dbcCc07D8e5a8C9f420ea60d1e3aEc7B64D2C',
-  },
-  80002: {
-    zUSDC: '0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD',
-    zETH: '0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9',
-    zPOL: '0xB0A04aB21faAe4A5399938c07EDdfA0FB41d2B9d',
-    zLINK: '0x51f6c79e5cA4ACF086d0954AfAAf5c72Be56CBb1',
-  }
-};
+const ERC2612_TOKENS = buildTokenAddressMap(
+  (token) => token.permitType === 'ERC2612'
+);
 
 // Permit2 supported tokens (gasless after one-time Permit2 approval)
-const PERMIT2_TOKENS = {
-  11155111: {
-    USDC: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
-    WETH: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14',
-    LINK: '0x779877A7B0D9E8603169DdBD7836e478b4624789',
-  },
-  80002: {
-    USDC: '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582',
-    WMATIC: '0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9',
-    LINK: '0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904',
-  }
-};
+const PERMIT2_TOKENS = buildTokenAddressMap(
+  (token) => token.permitType === 'permit2' && !token.isNative
+);
 
 // Legacy gasless tokens (for backwards compatibility)
-const GASLESS_TOKENS = {
-  11155111: {
-    ...ERC2612_TOKENS[11155111],
-  },
-  80002: {
-    ...ERC2612_TOKENS[80002],
-  }
-};
+const GASLESS_TOKENS = ERC2612_TOKENS;
 
 // EIP-712 types for SwapIntent
 const SWAP_INTENT_TYPES = {

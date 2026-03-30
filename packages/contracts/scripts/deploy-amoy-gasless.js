@@ -87,10 +87,9 @@ async function main() {
   console.log(`  SmartDexAdapter:  ${adapterAddress}`);
   console.log(`  ZeroTollRouterV2: ${routerAddress}`);
   console.log('\nNext Steps:');
-  console.log('1. Add these addresses to frontend/src/config/contracts.json');
-  console.log('2. Add ZTA/ZTB to frontend/src/config/tokenlists/zerotoll.tokens.amoy.json');
-  console.log('3. Update backend/pimlico-v3-relayer.mjs with Amoy router address');
-  console.log('4. Update frontend/src/hooks/useIntentGasless.js with Amoy addresses');
+  console.log('1. Update packages/shared-config/src/source-of-truth.json');
+  console.log('2. Run npm run sync:shared-config');
+  console.log('3. Review backend/phase2-relayer.mjs and frontend hooks only if custom behavior is needed');
   console.log('\nFaucet:');
   console.log(`  Call faucet() on ZTA: ${ztaAddress}`);
   console.log(`  Call faucet() on ZTB: ${ztbAddress}`);

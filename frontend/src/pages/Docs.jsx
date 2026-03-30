@@ -2,6 +2,26 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Zap, Users, ArrowRight, CheckCircle, Circle, Code, Database, Globe, Shield, Layers, GitBranch } from 'lucide-react';
 import ConnectButton from '../components/ConnectButton';
+import contractsConfig from '../config/contracts.json';
+
+const DOC_CHAIN_ADDRESSES = [
+  { key: 'amoy', label: 'Polygon Amoy', accent: 'text-cyan-400' },
+  { key: 'sepolia', label: 'Ethereum Sepolia', accent: 'text-violet-400' },
+];
+
+const DOC_ADDRESS_FIELDS = [
+  { label: 'RouterHub', field: 'routerHub' },
+  { label: 'RouterV3', field: 'zeroTollRouterV3' },
+  { label: 'Delegate', field: 'zeroTollDelegate' },
+];
+
+const formatAddress = (value) => {
+  if (!value) return 'Not available';
+  if (/^0x[a-fA-F0-9]{40}$/.test(value)) {
+    return `${value.slice(0, 6)}...${value.slice(-4)}`;
+  }
+  return value;
+};
 
 export default function Docs() {
   const navigate = useNavigate();
@@ -88,22 +108,22 @@ export default function Docs() {
             <div className="p-6 rounded-xl bg-white/5 border border-white/10">
               <h3 className="text-xl font-semibold text-white mb-4">Contract Addresses</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <h4 className="text-cyan-400 font-semibold mb-2">Polygon Amoy</h4>
-                  <div className="space-y-1 font-mono text-gray-400">
-                    <div>RouterHub: <span className="text-white">0x49AD...4881</span></div>
-                    <div>MockDexAdapter: <span className="text-white">0xc8A7...15d1</span></div>
-                    <div>BridgeAdapter: <span className="text-white">0x3494...bE50</span></div>
-                  </div>
-                </div>
-                <div>
-                  <h4 className="text-violet-400 font-semibold mb-2">Ethereum Sepolia</h4>
-                  <div className="space-y-1 font-mono text-gray-400">
-                    <div>RouterHub: <span className="text-white">0x8Bf6...4e84</span></div>
-                    <div>MockDexAdapter: <span className="text-white">0x86D1...E84B</span></div>
-                    <div>BridgeAdapter: <span className="text-white">0x73F0...6A4C</span></div>
-                  </div>
-                </div>
+                {DOC_CHAIN_ADDRESSES.map(({ key, label, accent }) => {
+                  const chainContracts = contractsConfig[key] || {};
+
+                  return (
+                    <div key={key}>
+                      <h4 className={`${accent} font-semibold mb-2`}>{label}</h4>
+                      <div className="space-y-1 font-mono text-gray-400">
+                        {DOC_ADDRESS_FIELDS.map(({ label: fieldLabel, field }) => (
+                          <div key={field}>
+                            {fieldLabel}: <span className="text-white">{formatAddress(chainContracts[field])}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

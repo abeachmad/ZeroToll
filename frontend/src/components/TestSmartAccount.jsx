@@ -10,16 +10,22 @@ import React, { useState } from 'react';
 import { useAccount } from 'wagmi';
 import { usePimlico7702 } from '../hooks/usePimlico7702';
 import { parseUnits } from 'viem';
+import contractsConfig from '../config/contracts.json';
+import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
+import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
+
+const findTokenAddress = (tokenList, symbol) =>
+  tokenList.tokens.find((token) => token.symbol === symbol)?.address;
 
 // Test tokens
 const TEST_TOKENS = {
   80002: { // Amoy
-    USDC: '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582',
-    routerHub: '0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881'
+    USDC: findTokenAddress(amoyTokens, 'USDC'),
+    routerHub: contractsConfig.amoy.routerHub
   },
   11155111: { // Sepolia
-    USDC: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
-    routerHub: '0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84'
+    USDC: findTokenAddress(sepoliaTokens, 'USDC'),
+    routerHub: contractsConfig.sepolia.routerHub
   }
 };
 

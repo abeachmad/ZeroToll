@@ -4,19 +4,35 @@ import { polygonAmoy, sepolia } from 'wagmi/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { injected, walletConnect } from 'wagmi/connectors';
 
-const projectId = process.env.REACT_APP_WALLETCONNECT_PROJECT_ID || 'demo-project-id';
+const walletConnectProjectId = process.env.REACT_APP_WALLETCONNECT_PROJECT_ID?.trim();
+const hasWalletConnectProjectId =
+  walletConnectProjectId && walletConnectProjectId !== 'demo-project-id';
+
+const connectors = [
+  injected({
+    shimDisconnect: true,
+    // Don't auto-switch chains
+    target: 'metaMask'
+  })
+];
+
+if (hasWalletConnectProjectId) {
+  connectors.push(
+    walletConnect({
+      projectId: walletConnectProjectId,
+      showQrModal: true
+    })
+  );
+} else {
+  console.info(
+    'WalletConnect disabled: set REACT_APP_WALLETCONNECT_PROJECT_ID to enable it.'
+  );
+}
 
 const config = createConfig({
   // Sepolia first - wagmi uses first chain as default
   chains: [sepolia, polygonAmoy],
-  connectors: [
-    injected({ 
-      shimDisconnect: true,
-      // Don't auto-switch chains
-      target: 'metaMask'
-    }),
-    walletConnect({ projectId, showQrModal: true })
-  ],
+  connectors,
   transports: {
     [sepolia.id]: http(process.env.REACT_APP_RPC_SEPOLIA),
     [polygonAmoy.id]: http(process.env.REACT_APP_RPC_AMOY)

@@ -5,6 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from contextlib import asynccontextmanager
 import os
+import json
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, field_validator
@@ -19,9 +20,16 @@ from web3_tx_builder import execute_intent_on_chain
 from token_registry import get_token_address, address_to_symbol
 from pyth_rest_oracle import pyth_oracle  # NEW: LIVE prices from Pyth REST API (off-chain)
 from routes.eip7702 import router as eip7702_router  # EIP-7702 integration
+from routes.confidential import router as confidential_router  # Confidential Fhenix scaffold
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+CHAIN_CONFIG_FILE = ROOT_DIR / 'chain_config.json'
+with open(CHAIN_CONFIG_FILE, 'r') as chain_config_handle:
+    CHAIN_CONFIG = {
+        int(chain_id): value for chain_id, value in json.load(chain_config_handle).items()
+    }
 
 # MongoDB client and db will be initialized in lifespan
 client = None
@@ -47,6 +55,9 @@ async def lifespan(app: FastAPI):
         logger.warning("History will not be saved. Install MongoDB or set MONGO_URL/MONGODB_URI")
         client = None
         db = None
+
+    app.state.mongo_client = client
+    app.state.db = db
     
     yield
     
@@ -54,6 +65,8 @@ async def lifespan(app: FastAPI):
     if client:
         client.close()
         logger.info("MongoDB connection closed")
+    app.state.mongo_client = None
+    app.state.db = None
 
 app = FastAPI(lifespan=lifespan)
 
@@ -268,7 +281,7 @@ async def get_quote(request: QuoteRequest, req: Request):
         confidence = 0.15 if oracle_source == "Pyth" else None
         
         async with httpx.AsyncClient() as client:
-            relayer_url = os.getenv('RELAYER_URL', 'http://localhost:3001')
+            relayer_url = os.getenv('RELAYER_URL', 'http://localhost:3002')
             try:
                 response = await client.post(
                     f"{relayer_url}/api/quote",
@@ -444,15 +457,8 @@ async def execute_intent(request: ExecuteRequest, req: Request):
         from web3 import Web3
         from eth_abi import encode
         
-        # Get RouterHub address for this chain (UPGRADED - v1.4 sends output to user, not relayer!)
-        # IMPORTANT: Load from .env to avoid hardcoded stale addresses!
-        router_hub_addresses = {
-            80002: os.getenv("AMOY_ROUTERHUB", "0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881"),
-            11155111: os.getenv("SEPOLIA_ROUTERHUB", "0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84"),  # Phase 1: Gasless
-            421614: os.getenv("ARB_SEPOLIA_ROUTERHUB"),
-            11155420: os.getenv("OP_SEPOLIA_ROUTERHUB"),
-        }
-        router_hub_address = router_hub_addresses.get(src_chain_id)
+        # Get RouterHub address for this chain from generated config.
+        router_hub_address = CHAIN_CONFIG.get(src_chain_id, {}).get("routerHub")
         if not router_hub_address:
             raise HTTPException(status_code=400, detail=f"RouterHub not deployed on chain {src_chain_id}")
         
@@ -503,13 +509,8 @@ async def execute_intent(request: ExecuteRequest, req: Request):
             error_reason = None
         
         # Step 6: Build explorer URL
-        explorer_urls = {
-            11155111: f"https://sepolia.etherscan.io/tx/{tx_hash}",
-            80002: f"https://amoy.polygonscan.com/tx/{tx_hash}",
-            421614: f"https://sepolia.arbiscan.io/tx/{tx_hash}",
-            11155420: f"https://sepolia-optimism.etherscan.io/tx/{tx_hash}",
-        }
-        explorer_url = explorer_urls.get(src_chain_id, f"https://etherscan.io/tx/{tx_hash}")
+        explorer_tx_base = CHAIN_CONFIG.get(src_chain_id, {}).get("explorerTx")
+        explorer_url = f"{explorer_tx_base}{tx_hash}" if explorer_tx_base else f"https://etherscan.io/tx/{tx_hash}"
         
         # Calculate amounts for response
         amount_out = float(best_route.expected_out) / 1e18
@@ -802,36 +803,24 @@ async def get_oracle_health():
 @api_router.get("/config/{chain_id}")
 async def get_config(chain_id: int):
     """Get configuration for a specific chain (for frontend compatibility)"""
-    # ZeroToll Router addresses per chain
-    routers = {
-        11155111: '0xB54e95a30E4Aa355380798313E0791833C7F0BFF',  # Sepolia RouterV3
-        80002: '0xD83D377E4698317731b2953854c01d39C60815d7',     # Amoy RouterV3
-    }
-    
-    # Delegate addresses for EIP-7702
-    delegates = {
-        11155111: '0xcFE005B2E0013e0FF8cB0569d9b103094d423B36',  # Sepolia
-        80002: '0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C',     # Amoy
-    }
-    
-    if chain_id not in routers:
+    chain_config = CHAIN_CONFIG.get(chain_id)
+
+    if not chain_config or not chain_config.get("router"):
         raise HTTPException(status_code=404, detail=f"Chain {chain_id} not supported")
-    
+
     return {
         "success": True,
         "chainId": chain_id,
-        "router": routers[chain_id],
-        "delegate": delegates.get(chain_id),
-        "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
-        "features": {
-            "gasless": True,
-            "eip7702": chain_id in delegates,
-            "permit2": True
-        }
+        "router": chain_config["router"],
+        "delegate": chain_config.get("delegate"),
+        "confidentialIntentEscrow": chain_config.get("confidentialIntentEscrow"),
+        "permit2": chain_config["permit2"],
+        "features": chain_config.get("features", {})
     }
 
 app.include_router(api_router)
 app.include_router(eip7702_router, prefix="/api")  # EIP-7702 routes
+app.include_router(confidential_router, prefix="/api")  # Confidential staged-settlement routes
 
 logging.basicConfig(
     level=logging.INFO,

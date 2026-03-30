@@ -22,7 +22,12 @@ import {
   pad
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { sepolia, polygonAmoy } from 'viem/chains';
+import {
+  getConfiguredChain,
+  getPythPriceId,
+  getTokenDecimals as getConfiguredTokenDecimals,
+  getTokenSymbol as getConfiguredTokenSymbol
+} from './generated-config.mjs';
 
 // Load env
 config({ path: '.env' });
@@ -45,33 +50,39 @@ if (!RELAYER_PRIVATE_KEY || !PIMLICO_API_KEY) {
 const ENTRYPOINT_V07 = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 const SIMPLE_ACCOUNT_FACTORY = '0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985';
 
-// Chain config - Phase 2B with RouterV3 and fee support
-const CHAIN_CONFIG = {
-  11155111: {
-    name: 'sepolia',
-    chain: sepolia,
-    router: '0xB54e95a30E4Aa355380798313E0791833C7F0BFF', // V3 with fee support
-    routerV3: '0xB54e95a30E4Aa355380798313E0791833C7F0BFF',
-    treasury: '0xA5e89F1485D56fd5dfA20B6FDC9874B8bCF0bd10',
-    paymaster: process.env.SEPOLIA_VERIFYING_PAYMASTER || '0xaf7e002447b790f212ea435f9387509cd1ef0054',
-    pimlicoUrl: `https://api.pimlico.io/v2/sepolia/rpc?apikey=${PIMLICO_API_KEY}`,
-    rpc: 'https://ethereum-sepolia-rpc.publicnode.com',
-    explorer: 'https://sepolia.etherscan.io/tx/',
-    nativeSymbol: 'ETH'
-  },
-  80002: {
-    name: 'polygon-amoy',
-    chain: polygonAmoy,
-    router: '0xD83D377E4698317731b2953854c01d39C60815d7', // V3 with fee support
-    routerV3: '0xD83D377E4698317731b2953854c01d39C60815d7',
-    treasury: '0xD6a7294445F34d0F7244b2072696106904ea807B',
-    paymaster: process.env.AMOY_VERIFYING_PAYMASTER || '0xaad1211a722ee04b6980724586b6b5b7b0c86fee',
-    pimlicoUrl: `https://api.pimlico.io/v2/polygon-amoy/rpc?apikey=${PIMLICO_API_KEY}`,
-    rpc: 'https://rpc-amoy.polygon.technology',
-    explorer: 'https://amoy.polygonscan.com/tx/',
-    nativeSymbol: 'POL'
-  }
+const RELAYER_PAYMASTER_ENV = {
+  11155111: 'SEPOLIA_VERIFYING_PAYMASTER',
+  80002: 'AMOY_VERIFYING_PAYMASTER'
 };
+
+// Chain config - generated from packages/shared-config
+const CHAIN_CONFIG = Object.fromEntries(
+  Object.keys(RELAYER_PAYMASTER_ENV)
+    .map((chainId) => {
+      const generated = getConfiguredChain(Number(chainId), { pimlicoApiKey: PIMLICO_API_KEY });
+
+      if (!generated?.router || !generated?.rpc || !generated?.pimlicoRpc) {
+        return null;
+      }
+
+      return [
+        Number(chainId),
+        {
+          name: generated.network,
+          chain: generated.chain,
+          router: generated.router,
+          routerV3: generated.router,
+          treasury: generated.treasury,
+          paymaster: process.env[RELAYER_PAYMASTER_ENV[chainId]] || generated.paymaster,
+          pimlicoUrl: generated.pimlicoRpc,
+          rpc: generated.rpc,
+          explorer: generated.explorerTx,
+          nativeSymbol: generated.nativeSymbol
+        }
+      ];
+    })
+    .filter(Boolean)
+);
 
 // ABIs
 const ROUTER_ABI = parseAbi([
@@ -141,53 +152,20 @@ const chainClients = {};
 // Python backend URL for history saving
 const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || 'http://localhost:8000';
 
-// Token address to symbol mapping
-const TOKEN_SYMBOLS = {
-  // Amoy (80002)
-  '0x257fb36cd940d1f6a0a4659e8245d3c3fcecb8bd': 'zUSDC',
-  '0xfae5fb760917682d67bc2082667c2c5e55a193f9': 'zETH',
-  '0xb0a04ab21faae4a5399938c07eddfA0fb41d2b9d': 'zPOL',
-  '0x51f6c79e5ca4acf086d0954afaaf5c72be56cbb1': 'zLINK',
-  // Sepolia (11155111)
-  '0x5f43d1fc4faad0dfe097fc3bb32d66a9864c730c': 'zUSDC',
-  '0x8153fa09be1689d44c343f119c829f6702a8720b': 'zETH',
-  '0x63c31c4247f6aa40b676478226d6feb5707649d6': 'zPOL',
-  '0x4e2dbcc07d8e5a8c9f420ea60d1e3aec7b64d2c': 'zLINK',
-};
-
-// Get token symbol from address
-function getTokenSymbol(address) {
-  return TOKEN_SYMBOLS[address?.toLowerCase()] || address?.slice(0, 10) + '...';
+function getTokenSymbol(chainId, tokenAddress) {
+  return getConfiguredTokenSymbol(chainId, tokenAddress) || tokenAddress?.slice(0, 10) + '...';
 }
 
-// Token decimals
-const TOKEN_DECIMALS = {
-  'zUSDC': 6,
-  'zETH': 18,
-  'zPOL': 18,
-  'zLINK': 18,
-};
-
-function getTokenDecimals(tokenAddress) {
-  const symbol = getTokenSymbol(tokenAddress);
-  return TOKEN_DECIMALS[symbol] || 18;
+function getTokenDecimals(chainId, tokenAddress) {
+  return getConfiguredTokenDecimals(chainId, tokenAddress);
 }
-
-// Pyth price feed IDs (verified working)
-const PYTH_PRICE_IDS = {
-  'ETH': '0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace',
-  'POL': '0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68153335374ec10722edd70472', // MATIC/POL (verified)
-  'MATIC': '0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68153335374ec10722edd70472',
-  'USDC': '0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a',
-  'LINK': '0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221',
-};
 
 // Fetch price from Pyth
 async function getPythPrice(symbol) {
   try {
     // Map zTokens to base symbols
     const baseSymbol = symbol.replace(/^z/, '').toUpperCase();
-    const priceId = PYTH_PRICE_IDS[baseSymbol];
+    const priceId = getPythPriceId(baseSymbol);
     
     if (!priceId) {
       console.log(`⚠️ No Pyth price ID for ${symbol}, using fallback`);
@@ -264,11 +242,11 @@ async function calculateGaslessFee(chainId, tokenIn) {
     const feeUSD = gasCostUSD * 2;
     
     // 5. Get input token price in USD
-    const tokenSymbol = getTokenSymbol(tokenIn);
+    const tokenSymbol = getTokenSymbol(chainId, tokenIn);
     const tokenPrice = await getPythPrice(tokenSymbol);
     
     // 6. Convert fee to input token amount
-    const tokenDecimals = getTokenDecimals(tokenIn);
+    const tokenDecimals = getTokenDecimals(chainId, tokenIn);
     const feeInToken = BigInt(Math.ceil(feeUSD / tokenPrice * (10 ** tokenDecimals)));
     
     console.log(`💰 Fee calculation: gas=$${gasCostUSD.toFixed(6)}, fee=$${feeUSD.toFixed(6)}, ${feeInToken} ${tokenSymbol}`);
@@ -284,13 +262,13 @@ async function calculateGaslessFee(chainId, tokenIn) {
   } catch (e) {
     console.error('Fee calculation error:', e);
     // Return minimal fee on error
-    const tokenDecimals = getTokenDecimals(tokenIn);
+    const tokenDecimals = getTokenDecimals(chainId, tokenIn);
     return {
       feeUSD: 0.01,
       feeInToken: BigInt(Math.ceil(0.01 * (10 ** tokenDecimals))),
       gasCostUSD: 0.005,
       gasCostWei: '0',
-      tokenSymbol: getTokenSymbol(tokenIn),
+      tokenSymbol: getTokenSymbol(chainId, tokenIn),
       tokenDecimals
     };
   }
@@ -710,10 +688,10 @@ app.post('/api/intents/swap-with-permit', async (req, res) => {
           intents.set(requestId, data);
           
           // Save to history with token symbols and fee info
-          const tokenInSymbol = getTokenSymbol(intentData.tokenIn);
-          const tokenOutSymbol = getTokenSymbol(intentData.tokenOut);
-          const decimalsIn = tokenInSymbol.includes('USDC') ? 6 : 18;
-          const decimalsOut = tokenOutSymbol.includes('USDC') ? 6 : 18;
+          const tokenInSymbol = getTokenSymbol(chainId, intentData.tokenIn);
+          const tokenOutSymbol = getTokenSymbol(chainId, intentData.tokenOut);
+          const decimalsIn = getTokenDecimals(chainId, intentData.tokenIn);
+          const decimalsOut = getTokenDecimals(chainId, intentData.tokenOut);
           const amountInFormatted = (Number(intentData.amountIn) / Math.pow(10, decimalsIn)).toFixed(4);
           const amountOutFormatted = (Number(intentData.minAmountOut) / Math.pow(10, decimalsOut)).toFixed(4);
           

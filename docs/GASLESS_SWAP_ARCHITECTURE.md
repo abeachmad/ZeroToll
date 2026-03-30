@@ -219,7 +219,7 @@ bytes32 constant LINK_USD = 0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc0
 
 | Component | File | Description |
 |-----------|------|-------------|
-| Relayer | `backend/pimlico-v3-relayer.mjs` | Pimlico paymaster |
+| Relayer | `backend/legacy/pimlico-v3-relayer.mjs` | Pimlico paymaster (legacy) |
 | Chains | Sepolia + Amoy | Multi-chain support |
 | Features | Permit detection | Handles permit/permit2/traditional |
 

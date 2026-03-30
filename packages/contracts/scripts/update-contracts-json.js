@@ -1,17 +1,53 @@
 /**
- * Update frontend contracts.json with deployed zToken and adapter addresses
- * 
+ * Update shared ZeroToll source config with deployed zToken and adapter addresses.
+ *
  * Usage:
  *   node scripts/update-contracts-json.js <deployment-file>
- * 
+ *
  * Example:
  *   node scripts/update-contracts-json.js deployments/ztokens-sepolia-1234567890.json
  */
 
 const fs = require("fs");
 const path = require("path");
+const {
+  getChainConfig,
+  loadSharedConfig,
+  saveSharedConfig,
+  syncSharedConfig,
+  upsertToken,
+} = require("../../shared-config/scripts/shared-config.cjs");
 
-const CONTRACTS_JSON_PATH = "../../../frontend/src/config/contracts.json";
+function applyZTokenDeployment(config, deployment) {
+  const { key, chain } = getChainConfig(config, deployment.network);
+
+  if (deployment.adapter) {
+    if (!chain.contracts.adapters) {
+      chain.contracts.adapters = {};
+    }
+    chain.contracts.adapters.zeroToll = deployment.adapter;
+  }
+
+  const updatedTokens = [];
+  for (const [symbol, data] of Object.entries(deployment.tokens || {})) {
+    const token = upsertToken(chain, symbol, {
+      symbol,
+      name: data.name,
+      address: data.address,
+      decimals: data.decimals,
+      isNative: false,
+      isGasless: true,
+      permitType: "ERC2612",
+    });
+    updatedTokens.push({ symbol, address: token.address });
+  }
+
+  return {
+    networkKey: key,
+    adapter: deployment.adapter || null,
+    updatedTokens,
+  };
+}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -35,37 +71,31 @@ async function main() {
   }
 
   const deployment = JSON.parse(fs.readFileSync(deploymentFile, "utf8"));
-  const network = deployment.network;
-  
-  console.log(`\n📝 Updating contracts.json for ${network}...\n`);
+  const sharedConfig = loadSharedConfig();
 
-  const contractsFile = path.join(__dirname, CONTRACTS_JSON_PATH);
-  const contracts = JSON.parse(fs.readFileSync(contractsFile, "utf8"));
-  
-  if (!contracts[network]) {
-    console.error(`Network ${network} not found in contracts.json`);
-    process.exit(1);
-  }
+  console.log(`\n📝 Updating shared source config for ${deployment.network}...\n`);
 
-  // Add ZeroTollAdapter
-  contracts[network].adapters.zeroToll = deployment.adapter;
+  const result = applyZTokenDeployment(sharedConfig, deployment);
+  saveSharedConfig(sharedConfig);
+
+  console.log("♻️  Regenerating frontend/backend artifacts...\n");
+  syncSharedConfig();
   
-  // Update gaslessTokens with zTokens (replace ZTA/ZTB)
-  contracts[network].gaslessTokens = {};
-  for (const [symbol, data] of Object.entries(deployment.tokens)) {
-    contracts[network].gaslessTokens[symbol] = data.address;
+  console.log(`✅ Updated shared source config for ${result.networkKey}`);
+  if (result.adapter) {
+    console.log(`  adapters.zeroToll: ${result.adapter}`);
   }
-  
-  // Save updated contracts.json
-  fs.writeFileSync(contractsFile, JSON.stringify(contracts, null, 2));
-  
-  console.log(`✅ Updated ${contractsFile}`);
-  console.log(`\nChanges for ${network}:`);
-  console.log(`  adapters.zeroToll: ${deployment.adapter}`);
-  console.log(`  gaslessTokens:`);
-  for (const [symbol, data] of Object.entries(deployment.tokens)) {
-    console.log(`    ${symbol}: ${data.address}`);
+  console.log(`  zTokens:`);
+  for (const token of result.updatedTokens) {
+    console.log(`    ${token.symbol}: ${token.address}`);
   }
 }
 
-main().catch(console.error);
+if (require.main === module) {
+  main().catch(console.error);
+}
+
+module.exports = {
+  applyZTokenDeployment,
+  main,
+};

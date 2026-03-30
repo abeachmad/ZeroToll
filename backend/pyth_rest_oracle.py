@@ -12,44 +12,20 @@ Konsep:
 import requests
 import time
 import logging
+import json
 from typing import Dict, Any, Optional
 from datetime import datetime
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 # Pyth Hermes API endpoint
 PYTH_HERMES_API = "https://hermes.pyth.network"
 
-# Pyth Price Feed IDs (dari https://pyth.network/developers/price-feed-ids)
-# Mainnet price feeds yang digunakan untuk SEMUA chain (testnet dan mainnet)
-PYTH_FEED_IDS = {
-    # Crypto majors
-    "ETH": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",  # Crypto.ETH/USD
-    "WETH": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",  # Same as ETH
-    
-    "POL": "0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68153335374ec10722edd70472",  # Crypto.MATIC/USD (verified)
-    "WPOL": "0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68153335374ec10722edd70472",  # Same as POL
-    "WMATIC": "0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68153335374ec10722edd70472",  # POL is MATIC rebranded
-    "MATIC": "0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68153335374ec10722edd70472",  # MATIC/USD (verified)
-    
-    "BTC": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",  # Crypto.BTC/USD
-    "WBTC": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",  # Same as BTC
-    
-    # Stablecoins
-    "USDC": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a",  # Crypto.USDC/USD
-    "USDT": "0x2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b",  # Crypto.USDT/USD
-    "DAI": "0xb0948a5e5313200c632b51bb5ca32f6de0d36e9950a942d19751e833f70dabfd",  # Crypto.DAI/USD
-    
-    # DeFi tokens
-    "LINK": "0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221",  # Crypto.LINK/USD
-    "ARB": "0x3fa4252848f9f0a1480be62745a4629d9eb1322aebab8a791e344b3b9c1adcf5",  # Crypto.ARB/USD
-    "OP": "0x385f64d993f7b77d8182ed5003d97c60aa3361f3cecfe711544d2d59165e9bdf",  # Crypto.OP/USD
-    "AVAX": "0x93da3352f9f1d105fdfe4971cfa80e9dd777bfc5d0f683ebb6e1294b92137bb7",  # Crypto.AVAX/USD
-    "BNB": "0x2f95862b045670cd22bee3114c39763a4a08beeb663b145d283c31d7d1101c4f",  # Crypto.BNB/USD
-    
-    # Layer 2s
-    "STRK": "0x6a182399ff70ccf3e06024898942028204125a819e519a335ffa4579e66cd870",  # Crypto.STRK/USD
-}
+# Pyth Price Feed IDs (dari source-of-truth shared config)
+PYTH_FEED_IDS_FILE = Path(__file__).parent / "pyth_feed_ids.json"
+with open(PYTH_FEED_IDS_FILE, "r") as pyth_feed_handle:
+    PYTH_FEED_IDS = json.load(pyth_feed_handle)
 
 # Cache settings
 CACHE_TTL_SECONDS = 15  # Cache valid for 15 seconds

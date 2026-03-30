@@ -1,0 +1,612 @@
+{
+  "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+  "services": {
+    "mongodb": {
+      "port": 27017,
+      "url": "mongodb://localhost:27017"
+    },
+    "backend": {
+      "port": 8000,
+      "url": "http://localhost:8000"
+    },
+    "relayer": {
+      "port": 3002,
+      "url": "http://localhost:3002",
+      "healthPath": "/health"
+    },
+    "delegationApi": {
+      "port": 3003,
+      "url": "http://localhost:3003",
+      "infoPath": "/api/delegation/delegate-info"
+    },
+    "frontend": {
+      "port": 3000,
+      "url": "http://localhost:3000"
+    }
+  },
+  "pythFeeds": {
+    "USDC": {
+      "symbol": "USDC",
+      "name": "USD Coin",
+      "priceId": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a",
+      "logo": "💵"
+    },
+    "USDT": {
+      "symbol": "USDT",
+      "name": "Tether USD",
+      "priceId": "0x2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b",
+      "logo": "💵"
+    },
+    "DAI": {
+      "symbol": "DAI",
+      "name": "Dai",
+      "priceId": "0xb0948a5e5313200c632b51bb5ca32f6de0d36e9950a942d19751e833f70dabfd",
+      "logo": "💵"
+    },
+    "POL": {
+      "symbol": "POL",
+      "name": "Polygon",
+      "priceId": "0xffd11c5a1cfd42f80afb2df4d9f264c15f956d68153335374ec10722edd70472",
+      "logo": "🔷"
+    },
+    "ETH": {
+      "symbol": "ETH",
+      "name": "Ethereum",
+      "priceId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+      "logo": "⭐"
+    },
+    "WBTC": {
+      "symbol": "WBTC",
+      "name": "Wrapped Bitcoin",
+      "priceId": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+      "logo": "₿"
+    },
+    "AVAX": {
+      "symbol": "WAVAX",
+      "name": "Wrapped AVAX",
+      "priceId": "0x93da3352f9f1d105fdfe4971cfa80e9dd777bfc5d0f683ebb6e1294b92137bb7",
+      "logo": "🔺"
+    },
+    "LINK": {
+      "symbol": "LINK",
+      "name": "Chainlink",
+      "priceId": "0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221",
+      "logo": "🔗"
+    },
+    "ARB": {
+      "symbol": "ARB",
+      "name": "Arbitrum",
+      "priceId": "0x3fa4252848f9f0a1480be62745a4629d9eb1322aebab8a791e344b3b9c1adcf5",
+      "logo": "🔵"
+    },
+    "OP": {
+      "symbol": "OP",
+      "name": "Optimism",
+      "priceId": "0x385f64d993f7b77d8182ed5003d97c60aa3361f3cecfe711544d2d59165e9bdf",
+      "logo": "🔴"
+    },
+    "STRK": {
+      "symbol": "STRK",
+      "name": "Starknet",
+      "priceId": "0x6a182399ff70ccf3e06024898942028204125a819e519a335ffa4579e66cd870",
+      "logo": "🟣"
+    },
+    "BNB": {
+      "symbol": "WBNB",
+      "name": "Wrapped BNB",
+      "priceId": "0x2f95862b045670cd22bee3114c39763a4a08beeb663b145d283c31d7d1101c4f",
+      "logo": "🟡"
+    },
+    "DOGE": {
+      "symbol": "wDOGE",
+      "name": "Wrapped DOGE",
+      "priceId": "0xdcef50dd0a4cd2dcc17e45df1676dcb336a11a61c69df7a0299b0150c672d25c",
+      "logo": "🐕"
+    },
+    "ATOM": {
+      "symbol": "WATOM",
+      "name": "Wrapped ATOM",
+      "priceId": "0xb00b60f88b03a6a625a8d1c048c3f66653edf217439983d037e7222c4e612819",
+      "logo": "⚛️"
+    },
+    "PEPE": {
+      "symbol": "WPEPE",
+      "name": "Wrapped PEPE",
+      "priceId": "0xd69731a2e74ac1ce884fc3890f7ee324b6deb66147055249568869ed700882e4",
+      "logo": "🐸"
+    },
+    "TON": {
+      "symbol": "WTON",
+      "name": "Wrapped TON",
+      "priceId": "0x8963217838ab4cf5cadc172203c1f0b763fbaa45f346d8ee50ba994bbcac3026",
+      "logo": "💎"
+    }
+  },
+  "chains": {
+    "amoy": {
+      "chainId": 80002,
+      "name": "Polygon Amoy",
+      "backendName": "Amoy",
+      "network": "polygon-amoy",
+      "tokenlistNetwork": "amoy",
+      "tokenlistFile": "zerotoll.tokens.amoy.json",
+      "nativeSymbol": "POL",
+      "rpcUrl": "https://rpc-amoy.polygon.technology",
+      "explorerBaseUrl": "https://amoy.polygonscan.com",
+      "pimlicoNetwork": "polygon-amoy",
+      "contracts": {
+        "routerHub": "0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881",
+        "zeroTollRouter": "0xD83D377E4698317731b2953854c01d39C60815d7",
+        "zeroTollRouterV2": "0xc75df1943d6EFE04b422b9bB45509782609Fc67a",
+        "zeroTollRouterV3": "0xD83D377E4698317731b2953854c01d39C60815d7",
+        "zeroTollDelegate": "0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C",
+        "verifyingPaymaster": "0xaad1211a722ee04b6980724586b6b5b7b0c86fee",
+        "treasury": "0xD6a7294445F34d0F7244b2072696106904ea807B",
+        "smartDexAdapter": "0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84",
+        "feeSink": "0x1F679D174A9fBe4158EABcD24d4A63D6Bcf8f700",
+        "wrappedToken": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+        "feeVault": "TBD_AFTER_DEPLOYMENT",
+        "feeRebalancer": "TBD_AFTER_DEPLOYMENT",
+        "confidentialIntentEscrow": null,
+        "adapters": {
+          "quickswapV2": "0xbe6F932465D5155c1564FF0AD7Cc9D2D2a4316d5",
+          "mockDex": "0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1",
+          "mockBridge": "TBD_AFTER_DEPLOYMENT",
+          "zeroToll": "0x30bbFff2e090EF88A41C9e8909c197d4bdb47C87"
+        }
+      },
+      "tokens": [
+        {
+          "symbol": "zUSDC",
+          "name": "ZeroToll USDC",
+          "logo": "💵",
+          "address": "0x257Fb36CD940D1f6a0a4659e8245D3C3FCecB8bD",
+          "decimals": 6,
+          "isNative": false,
+          "isGasless": true,
+          "permitType": "ERC2612",
+          "pythPriceSymbol": "USDC",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "zETH",
+          "name": "ZeroToll ETH",
+          "logo": "💎",
+          "address": "0xfAE5Fb760917682d67Bc2082667C2C5E55A193f9",
+          "decimals": 18,
+          "isNative": false,
+          "isGasless": true,
+          "permitType": "ERC2612",
+          "pythPriceSymbol": "ETH",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "zPOL",
+          "name": "ZeroToll POL",
+          "logo": "🔷",
+          "address": "0xB0A04aB21faAe4A5399938c07EDdfA0FB41d2B9d",
+          "decimals": 18,
+          "isNative": false,
+          "isGasless": true,
+          "permitType": "ERC2612",
+          "pythPriceSymbol": "POL",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "zLINK",
+          "name": "ZeroToll LINK",
+          "logo": "🔗",
+          "address": "0x51f6c79e5cA4ACF086d0954AfAAf5c72Be56CBb1",
+          "decimals": 18,
+          "isNative": false,
+          "isGasless": true,
+          "permitType": "ERC2612",
+          "pythPriceSymbol": "LINK",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "POL",
+          "name": "Polygon",
+          "logo": "🔷",
+          "address": "NATIVE",
+          "wrappedAddress": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+          "decimals": 18,
+          "isNative": true,
+          "feeModes": [
+            "NATIVE",
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "WMATIC",
+          "name": "Wrapped MATIC",
+          "logo": "💜",
+          "address": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+          "decimals": 18,
+          "isNative": false,
+          "permitType": "permit2",
+          "backendAliases": [
+            "WPOL"
+          ],
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "logo": "💵",
+          "address": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
+          "decimals": 6,
+          "isNative": false,
+          "permitType": "permit2",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT",
+            "STABLE"
+          ]
+        },
+        {
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "logo": "🔗",
+          "address": "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904",
+          "decimals": 18,
+          "isNative": false,
+          "permitType": "permit2",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "WETH",
+          "name": "Wrapped Ether",
+          "logo": "💎",
+          "address": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+          "decimals": 18,
+          "isNative": false,
+          "frontend": false,
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        }
+      ]
+    },
+    "sepolia": {
+      "chainId": 11155111,
+      "name": "Ethereum Sepolia",
+      "backendName": "Sepolia",
+      "network": "sepolia",
+      "tokenlistNetwork": "sepolia",
+      "tokenlistFile": "zerotoll.tokens.sepolia.json",
+      "nativeSymbol": "ETH",
+      "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+      "explorerBaseUrl": "https://sepolia.etherscan.io",
+      "pimlicoNetwork": "sepolia",
+      "contracts": {
+        "routerHub": "0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84",
+        "zeroTollRouter": "0xB54e95a30E4Aa355380798313E0791833C7F0BFF",
+        "zeroTollRouterV2": "0x577560699EF88e99f15d04df57c9552056d2a10D",
+        "zeroTollRouterV3": "0xB54e95a30E4Aa355380798313E0791833C7F0BFF",
+        "zeroTollDelegate": "0xcFE005B2E0013e0FF8cB0569d9b103094d423B36",
+        "verifyingPaymaster": "0xaf7e002447b790f212ea435f9387509cd1ef0054",
+        "treasury": "0xA5e89F1485D56fd5dfA20B6FDC9874B8bCF0bd10",
+        "smartDexAdapter": "0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa",
+        "feeSink": "0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130",
+        "wrappedToken": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+        "feeVault": "TBD_AFTER_DEPLOYMENT",
+        "feeRebalancer": "TBD_AFTER_DEPLOYMENT",
+        "confidentialIntentEscrow": null,
+        "adapters": {
+          "uniswapV2": "0x86D1AA2228F3ce649d415F19fC71134264D0E84B",
+          "uniswapV3": "0x86D1AA2228F3ce649d415F19fC71134264D0E84B",
+          "mockDex": "0x86D1AA2228F3ce649d415F19fC71134264D0E84B",
+          "mockBridge": "TBD_AFTER_DEPLOYMENT",
+          "zeroToll": "0x4E6A591459F0724E19f9B06A584B26fFB724a2a3"
+        }
+      },
+      "tokens": [
+        {
+          "symbol": "zUSDC",
+          "name": "ZeroToll USDC",
+          "logo": "💵",
+          "address": "0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C",
+          "decimals": 6,
+          "isNative": false,
+          "isGasless": true,
+          "permitType": "ERC2612",
+          "pythPriceSymbol": "USDC",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "zETH",
+          "name": "ZeroToll ETH",
+          "logo": "💎",
+          "address": "0x8153FA09Be1689D44C343f119C829F6702A8720b",
+          "decimals": 18,
+          "isNative": false,
+          "isGasless": true,
+          "permitType": "ERC2612",
+          "pythPriceSymbol": "ETH",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "zPOL",
+          "name": "ZeroToll POL",
+          "logo": "🔷",
+          "address": "0x63c31C4247f6AA40B676478226d6FEB5707649D6",
+          "decimals": 18,
+          "isNative": false,
+          "isGasless": true,
+          "permitType": "ERC2612",
+          "pythPriceSymbol": "POL",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "zLINK",
+          "name": "ZeroToll LINK",
+          "logo": "🔗",
+          "address": "0x4e2dbcCc07D8e5a8C9f420ea60d1e3aEc7B64D2C",
+          "decimals": 18,
+          "isNative": false,
+          "isGasless": true,
+          "permitType": "ERC2612",
+          "pythPriceSymbol": "LINK",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "ETH",
+          "name": "Ethereum",
+          "logo": "⭐",
+          "address": "NATIVE",
+          "wrappedAddress": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+          "decimals": 18,
+          "isNative": true,
+          "feeModes": [
+            "NATIVE",
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "WETH",
+          "name": "Wrapped Ether",
+          "logo": "💎",
+          "address": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+          "decimals": 18,
+          "isNative": false,
+          "permitType": "permit2",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "logo": "💵",
+          "address": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+          "decimals": 6,
+          "isNative": false,
+          "permitType": "permit2",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT",
+            "STABLE"
+          ]
+        },
+        {
+          "symbol": "PYUSD",
+          "name": "PayPal USD",
+          "logo": "💲",
+          "address": "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9",
+          "decimals": 6,
+          "isNative": false,
+          "permitType": "none",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT",
+            "STABLE"
+          ]
+        },
+        {
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "logo": "🔗",
+          "address": "0x779877A7B0D9E8603169DdBD7836e478b4624789",
+          "decimals": 18,
+          "isNative": false,
+          "permitType": "permit2",
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        }
+      ]
+    },
+    "arbitrumSepolia": {
+      "chainId": 421614,
+      "name": "Arbitrum Sepolia",
+      "backendName": "Arbitrum Sepolia",
+      "network": "arbitrum-sepolia",
+      "tokenlistNetwork": "arbitrum-sepolia",
+      "tokenlistFile": "zerotoll.tokens.arbitrum-sepolia.json",
+      "nativeSymbol": "ETH",
+      "rpcUrl": null,
+      "explorerBaseUrl": null,
+      "pimlicoNetwork": null,
+      "contracts": {
+        "routerHub": "TBD_AFTER_DEPLOYMENT",
+        "feeSink": "TBD_AFTER_DEPLOYMENT",
+        "wrappedToken": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+        "feeVault": "TBD_AFTER_DEPLOYMENT",
+        "feeRebalancer": "TBD_AFTER_DEPLOYMENT",
+        "confidentialIntentEscrow": null,
+        "adapters": {
+          "uniswapV3": "TBD_AFTER_DEPLOYMENT",
+          "mockDex": "TBD_AFTER_DEPLOYMENT",
+          "mockBridge": "TBD_AFTER_DEPLOYMENT"
+        }
+      },
+      "tokens": [
+        {
+          "symbol": "ETH",
+          "name": "Ethereum",
+          "logo": "⭐",
+          "address": "NATIVE",
+          "wrappedAddress": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+          "decimals": 18,
+          "isNative": true,
+          "feeModes": [
+            "NATIVE",
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "WETH",
+          "name": "Wrapped Ether",
+          "logo": "💎",
+          "address": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+          "decimals": 18,
+          "isNative": false,
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "logo": "💵",
+          "address": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+          "decimals": 6,
+          "isNative": false,
+          "feeModes": [
+            "INPUT",
+            "OUTPUT",
+            "STABLE"
+          ]
+        },
+        {
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "logo": "🔗",
+          "address": "0xb1D4538B4571d411F07960EF2838Ce337FE1E80E",
+          "decimals": 18,
+          "isNative": false,
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        }
+      ]
+    },
+    "optimismSepolia": {
+      "chainId": 11155420,
+      "name": "Optimism Sepolia",
+      "backendName": "Optimism Sepolia",
+      "network": "optimism-sepolia",
+      "tokenlistNetwork": "optimism-sepolia",
+      "tokenlistFile": "zerotoll.tokens.optimism-sepolia.json",
+      "nativeSymbol": "ETH",
+      "rpcUrl": null,
+      "explorerBaseUrl": null,
+      "pimlicoNetwork": null,
+      "contracts": {
+        "routerHub": "TBD_AFTER_DEPLOYMENT",
+        "feeSink": "TBD_AFTER_DEPLOYMENT",
+        "wrappedToken": "0x4200000000000000000000000000000000000006",
+        "feeVault": "TBD_AFTER_DEPLOYMENT",
+        "feeRebalancer": "TBD_AFTER_DEPLOYMENT",
+        "confidentialIntentEscrow": null,
+        "adapters": {
+          "uniswapV3": "TBD_AFTER_DEPLOYMENT",
+          "mockDex": "TBD_AFTER_DEPLOYMENT",
+          "mockBridge": "TBD_AFTER_DEPLOYMENT"
+        }
+      },
+      "tokens": [
+        {
+          "symbol": "ETH",
+          "name": "Ethereum",
+          "logo": "⭐",
+          "address": "NATIVE",
+          "wrappedAddress": "0x4200000000000000000000000000000000000006",
+          "decimals": 18,
+          "isNative": true,
+          "feeModes": [
+            "NATIVE",
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "WETH",
+          "name": "Wrapped Ether",
+          "logo": "💎",
+          "address": "0x4200000000000000000000000000000000000006",
+          "decimals": 18,
+          "isNative": false,
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        },
+        {
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "logo": "💵",
+          "address": "0x5fd84259d66Cd46123540766Be93DFE6D43130D7",
+          "decimals": 6,
+          "isNative": false,
+          "feeModes": [
+            "INPUT",
+            "OUTPUT",
+            "STABLE"
+          ]
+        },
+        {
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "logo": "🔗",
+          "address": "0xE4aB69C077896252FAFBD49EFD26B5D171A32410",
+          "decimals": 18,
+          "isNative": false,
+          "feeModes": [
+            "INPUT",
+            "OUTPUT"
+          ]
+        }
+      ]
+    }
+  }
+}

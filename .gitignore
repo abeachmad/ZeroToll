@@ -91,7 +91,8 @@ files.txt
 **/mnemonicfile.txt
 *.mnemonic
 
-# Backup/broken folders
+# Local-only sandbox frontends kept outside tracked cleanup.
+# These are intentionally ignored and are not part of the official runtime.
 frontend-nextjs-broken/
 frontend-cra-backup/
 

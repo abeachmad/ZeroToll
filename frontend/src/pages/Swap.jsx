@@ -1,18 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowDownUp, Loader2, CheckCircle, Info, HelpCircle, Zap, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchChain } from 'wagmi';
+import { useAccount, useWalletClient, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchChain } from 'wagmi';
 import { parseUnits, maxUint256 } from 'viem';
 import { ethers } from 'ethers';
 import FeeModeExplainer from '../components/FeeModeExplainer';
 import ConnectButton from '../components/ConnectButton';
 import GaslessSwapStatus from '../components/GaslessSwapStatus';
 import { useGaslessSwap } from '../hooks/useGaslessSwap';
-import { useTrueGaslessSwap } from '../hooks/useTrueGaslessSwap';
-import { useWorkingGasless, EIP7702_SUPPORTED_CHAINS } from '../hooks/useWorkingGasless';
 import { useIntentGasless } from '../hooks/useIntentGasless';
+import { useConfidentialIntentGasless } from '../hooks/useConfidentialIntentGasless';
 import { useEIP7702Swap } from '../hooks/useEIP7702Swap';
 import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
 import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
@@ -23,13 +22,15 @@ import contractsConfig from '../config/contracts.json';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 const API = `${BACKEND_URL}/api`;
 
+const getConfiguredAddress = (value) => /^0x[a-fA-F0-9]{40}$/.test(value || '') ? value : null;
+
 // RouterHub addresses per chain (UPGRADED Nov 6-8, 2025 - Bug Fix: Transfer to user)
 // Load from config file to avoid hardcoding
 const ROUTER_HUB_ADDRESSES = {
-  80002: contractsConfig.amoy.routerHub,          // Amoy RouterHub v1.4
-  11155111: contractsConfig.sepolia.routerHub,    // Sepolia RouterHub v1.4 (Nov 8)
-  421614: "0x...",  // Arbitrum Sepolia (if deployed)
-  11155420: "0x..."  // Optimism Sepolia (if deployed)
+  80002: getConfiguredAddress(contractsConfig.amoy.routerHub),
+  11155111: getConfiguredAddress(contractsConfig.sepolia.routerHub),
+  421614: getConfiguredAddress(contractsConfig.arbitrumSepolia.routerHub),
+  11155420: getConfiguredAddress(contractsConfig.optimismSepolia.routerHub)
 };
 
 // ERC20 ABI (minimal for approve/allowance)
@@ -64,6 +65,52 @@ const feeModes = [
   { id: 'STABLE', label: 'Stable', desc: 'Pay in stablecoins' }
 ];
 
+const EXECUTION_MODES = {
+  TRADITIONAL: 'traditional',
+  ZEROTOLL: 'zerotoll',
+  CONFIDENTIAL: 'confidential_intent',
+  SMART_WALLET: 'smart_wallet',
+  CUSTOM_7702: 'custom_7702',
+};
+
+const CHAIN_CONFIG_KEYS = {
+  80002: 'amoy',
+  11155111: 'sepolia',
+  421614: 'arbitrumSepolia',
+  11155420: 'optimismSepolia',
+};
+
+const NATIVE_EIP7702_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+
+const ROUTER_HUB_ABI = [
+  "function executeRoute(tuple(address user, address tokenIn, uint256 amtIn, address tokenOut, uint256 minOut, uint64 dstChainId, uint64 deadline, address feeToken, uint8 feeMode, uint256 feeCapToken, bytes routeHint, uint256 nonce) intent, address adapter, bytes routeData) external returns (uint256)"
+];
+
+const ADAPTER_SWAP_ABI = [
+  "function swap(address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, address recipient, uint256 deadline) external payable returns (uint256 amountOut)"
+];
+
+const getChainContracts = (chainId) => {
+  const key = CHAIN_CONFIG_KEYS[chainId];
+  return key ? contractsConfig[key] : null;
+};
+
+const getPreferredAdapterAddress = (chainId) => {
+  const chainContracts = getChainContracts(chainId);
+  if (!chainContracts) return null;
+
+  const adapterCandidates = [
+    chainContracts.adapters?.zeroToll,
+    chainContracts.adapters?.mockDex,
+    chainContracts.adapters?.uniswapV2,
+    chainContracts.adapters?.quickswapV2,
+    chainContracts.adapters?.uniswapV3,
+    chainContracts.smartDexAdapter,
+  ];
+
+  return adapterCandidates.find((value) => getConfiguredAddress(value)) || null;
+};
+
 // Helper function to get permit type indicator
 const getPermitIndicator = (token) => {
   if (token?.permitType === 'ERC2612') return '⚡';
@@ -81,7 +128,8 @@ const getPermitTooltip = (token) => {
 
 const Swap = () => {
   const navigate = useNavigate();
-  const { address, isConnected, chain } = useAccount();
+  const { address, isConnected, chain, connector } = useAccount();
+  const { data: activeWalletClient } = useWalletClient();
   
   // Initialize fromChain - Sepolia is now chains[0]
   const [fromChain, setFromChain] = useState(chains[0]); // Sepolia
@@ -97,20 +145,21 @@ const Swap = () => {
   const [txHash, setTxHash] = useState(null);
   const [showExplainer, setShowExplainer] = useState(false);
   
-  // Gasless mode toggle
-  const [isGaslessMode, setIsGaslessMode] = useState(false);
-  const [isTrueGasless, setIsTrueGasless] = useState(true); // Default to TRUE gasless
-  const [isZeroTollGasless, setIsZeroTollGasless] = useState(false); // ZeroToll intent-based gasless (Phase 2)
-  const [isEIP7702Mode, setIsEIP7702Mode] = useState(false); // EIP-7702 gasless (Phase 3A - 50% cheaper!)
+  const [executionMode, setExecutionMode] = useState(EXECUTION_MODES.TRADITIONAL);
   const [gaslessStatus, setGaslessStatus] = useState('');
   const gaslessSwap = useGaslessSwap();
-  const trueGaslessSwap = useTrueGaslessSwap();
-  const workingGasless = useWorkingGasless(); // NEW: Actually working gasless hook
   const intentGasless = useIntentGasless(); // ZeroToll gasless (works on Sepolia and Amoy)
-  const eip7702Swap = useEIP7702Swap(); // EIP-7702 gasless (Phase 3A - 50% gas savings!)
-  
-  // Check if current chain supports true gasless (Gnosis/Base only)
-  const isGaslessChain = EIP7702_SUPPORTED_CHAINS.includes(chain?.id);
+  const confidentialGasless = useConfidentialIntentGasless(); // Staged confidential lifecycle for the Fhenix buildathon path
+  const eip7702Swap = useEIP7702Swap(); // Custom EIP-7702 path for embedded/programmatic wallets
+  const [smartWalletAvailability, setSmartWalletAvailability] = useState(null);
+
+  const isGaslessMode = executionMode === EXECUTION_MODES.SMART_WALLET;
+  const isZeroTollGasless = executionMode === EXECUTION_MODES.ZEROTOLL;
+  const isConfidentialMode = executionMode === EXECUTION_MODES.CONFIDENTIAL;
+  const isEIP7702Mode = executionMode === EXECUTION_MODES.CUSTOM_7702;
+  const isCustomEip7702Eligible =
+    Boolean(activeWalletClient?.account?.type) &&
+    activeWalletClient.account.type !== 'json-rpc';
   
   // Fetch fee estimate when ZeroToll gasless is enabled
   useEffect(() => {
@@ -118,6 +167,55 @@ const Swap = () => {
       intentGasless.getFeeEstimate(tokenIn.address);
     }
   }, [isZeroTollGasless, tokenIn?.address, intentGasless.getFeeEstimate]);
+
+  useEffect(() => {
+    if (isConfidentialMode && confidentialGasless.statusMessage) {
+      setGaslessStatus(confidentialGasless.statusMessage);
+    }
+  }, [isConfidentialMode, confidentialGasless.statusMessage]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!isGaslessMode) {
+      setSmartWalletAvailability(null);
+      return undefined;
+    }
+
+    const loadAvailability = async () => {
+      try {
+        const availability = await gaslessSwap.checkAvailability();
+        if (!cancelled) {
+          setSmartWalletAvailability(availability);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSmartWalletAvailability({
+            available: false,
+            reason: error.message || 'Failed to load smart wallet capabilities.',
+          });
+        }
+      }
+    };
+
+    loadAvailability();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isGaslessMode, gaslessSwap.checkAvailability, address, chain?.id]);
+
+  useEffect(() => {
+    if (isGaslessMode && gaslessSwap.txHash) {
+      setTxHash(gaslessSwap.txHash);
+    }
+  }, [isGaslessMode, gaslessSwap.txHash]);
+
+  useEffect(() => {
+    if (isGaslessMode && gaslessSwap.statusMessage) {
+      setGaslessStatus(gaslessSwap.statusMessage);
+    }
+  }, [isGaslessMode, gaslessSwap.statusMessage]);
   
   // Approval state
   const [needsApproval, setNeedsApproval] = useState(false);
@@ -148,6 +246,88 @@ const Swap = () => {
     args: address && routerHubAddress ? [address, routerHubAddress] : undefined,
     enabled: Boolean(address && routerHubAddress && tokenIn && !tokenIn.isNative),
   });
+
+  const activateExecutionMode = (mode) => {
+    if (mode === EXECUTION_MODES.CUSTOM_7702 && !isCustomEip7702Eligible) {
+      toast.error(
+        'Custom EIP-7702 currently needs an embedded/programmatic wallet that exposes raw authorization signing. The current browser-wallet connection is not suitable.'
+      );
+      return;
+    }
+
+    setExecutionMode((currentMode) =>
+      currentMode === mode ? EXECUTION_MODES.TRADITIONAL : mode
+    );
+    setGaslessStatus('');
+    setTxHash(null);
+    setQuote(null);
+    setAmountOut('');
+    confidentialGasless.reset();
+  };
+
+  const buildRouterExecution = ({
+    tokenInAddress,
+    tokenOutAddress,
+    amountWei,
+    minOutWei,
+  }) => {
+    const chainContracts = getChainContracts(fromChain.id);
+    const routerHub = getConfiguredAddress(chainContracts?.routerHub);
+    const adapter = getPreferredAdapterAddress(fromChain.id);
+
+    if (!address) {
+      throw new Error('Wallet not connected');
+    }
+
+    if (!routerHub) {
+      throw new Error(`RouterHub not configured for ${fromChain.name}`);
+    }
+
+    if (!adapter) {
+      throw new Error(`No same-chain adapter configured for ${fromChain.name}`);
+    }
+
+    const routerHubInterface = new ethers.Interface(ROUTER_HUB_ABI);
+    const adapterInterface = new ethers.Interface(ADAPTER_SWAP_ABI);
+    const deadline = Math.floor(Date.now() / 1000) + 600;
+
+    const intent = {
+      user: address,
+      tokenIn: tokenInAddress,
+      amtIn: amountWei,
+      tokenOut: tokenOutAddress,
+      minOut: minOutWei,
+      dstChainId: fromChain.id,
+      deadline,
+      feeToken: tokenInAddress,
+      feeMode: 1,
+      feeCapToken: parseUnits(feeCap || '3', 18),
+      routeHint: '0x',
+      nonce: BigInt(Date.now()),
+    };
+
+    const routeData = adapterInterface.encodeFunctionData('swap', [
+      tokenInAddress,
+      tokenOutAddress,
+      amountWei,
+      minOutWei,
+      routerHub,
+      intent.deadline,
+    ]);
+
+    const swapCallData = routerHubInterface.encodeFunctionData('executeRoute', [
+      intent,
+      adapter,
+      routeData,
+    ]);
+
+    return {
+      routerHub,
+      adapter,
+      routeData,
+      swapCallData,
+    };
+  };
 
   useEffect(() => {
     setTokenIn(fromChain.tokens[0]);
@@ -288,6 +468,26 @@ const Swap = () => {
 
     setLoading(true);
     try {
+      if (isConfidentialMode) {
+        const confidentialQuote = await confidentialGasless.getQuote({
+          user: address || '0x1234567890123456789012345678901234567890',
+          tokenIn: tokenIn.address,
+          tokenOut: tokenOut.address,
+          amountIn: parseFloat(amountIn),
+          srcChainId: fromChain.id,
+          dstChainId: toChain.id,
+          feeMode,
+          feeCap: parseFloat(feeCap),
+        });
+
+        setQuote(confidentialQuote);
+        if (confidentialQuote.netOut !== undefined) {
+          setAmountOut(Number(confidentialQuote.netOut).toFixed(6));
+        }
+        toast.success('Confidential quote received!');
+        return;
+      }
+
       const intent = {
         user: address || '0x1234567890123456789012345678901234567890',
         tokenIn: tokenIn.symbol,
@@ -357,55 +557,20 @@ const Swap = () => {
       const decimals = tokenIn.decimals || 6;
       const amountWei = parseUnits(amountIn, decimals);
 
-      // If gasless mode, use TRUE gasless approval via ZeroToll paymaster
-      if (isGaslessMode && isTrueGasless) {
-        // Check TRUE gasless availability first
-        const availability = await trueGaslessSwap.checkAvailability();
-        console.log('🔍 TRUE Gasless availability:', availability);
-        
-        if (!availability.available || !availability.gasless) {
-          toast.error(`TRUE Gasless not available: ${availability.reason}`);
-          setApprovalPending(false);
-          return;
-        }
-        
-        toast.info(`🎉 TRUE GASLESS approval on ${availability.chain} - You pay $0 in gas!`);
-        
-        try {
-          // Use TRUE gasless approval via ZeroToll paymaster
-          await trueGaslessSwap.executeGaslessApproval({
-            tokenAddress: tokenIn.address,
-            spender: routerHubAddress,
-            amount: amountWei.toString()
-          });
-
-          toast.success('🎉 TRUE GASLESS approval successful! You paid $0 in gas!');
-          
-          // Wait for approval to be confirmed
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          await refetchAllowance();
-          
-          setApprovalPending(false);
-        } catch (gaslessError) {
-          console.error('TRUE gasless approval error:', gaslessError);
-          toast.error(gaslessError.message || 'TRUE gasless approval failed');
-          setApprovalPending(false);
-        }
-        return;
-      }
-      
-      // Fallback to EIP-5792 batch mode (still requires gas but batches calls)
+      // Smart Wallet Batch approval path via wallet_sendCalls.
+      // In normal UX we batch approve+swap together and do not show the approve button,
+      // but keep this path as a fallback if approval is triggered explicitly.
       if (isGaslessMode) {
         const availability = await gaslessSwap.checkAvailability();
-        console.log('🔍 Batch mode availability:', availability);
+        console.log('🔍 Smart wallet batch availability:', availability);
         
         if (!availability.available) {
-          toast.error(`Batch mode not available: ${availability.reason}`);
+          toast.error(`Smart wallet batch not available: ${availability.reason}`);
           setApprovalPending(false);
           return;
         }
         
-        toast.info(`⚡ Batch approval on ${availability.chain} (requires gas)`);
+        toast.info(`⚡ Smart wallet approval via ${availability.chain}`);
         
         try {
           await gaslessSwap.executeApproval({
@@ -420,8 +585,8 @@ const Swap = () => {
           await refetchAllowance();
           setApprovalPending(false);
         } catch (gaslessError) {
-          console.error('Batch approval error:', gaslessError);
-          toast.error(gaslessError.message || 'Batch approval failed');
+          console.error('Smart wallet approval error:', gaslessError);
+          toast.error(gaslessError.message || 'Smart wallet approval failed');
           setApprovalPending(false);
         }
         return;
@@ -490,128 +655,38 @@ const Swap = () => {
     }
   };
 
-  // TRUE GASLESS execution using ZeroToll paymaster - USER PAYS $0 GAS!
-  const handleTrueGaslessExecute = async () => {
-    try {
-      toast.info('🎉 Executing TRUE GASLESS swap - You pay $0 in gas!');
-      
-      // Native tokens don't work with gasless
-      if (tokenIn.isNative) {
-        toast.error('❌ Native tokens cannot be used with gasless. Use WPOL/WETH instead.');
-        return;
-      }
-
-      // Validate addresses
-      if (!tokenIn.address?.startsWith('0x') || !tokenOut.address?.startsWith('0x')) {
-        toast.error('❌ Invalid token addresses');
-        return;
-      }
-
-      const decimals = tokenIn.decimals || 6;
-      const amountWei = parseUnits(amountIn, decimals);
-      const minAmountOut = parseUnits((parseFloat(amountOut) * 0.50).toString(), tokenOut.decimals || 6);
-      
-      // Build swap callData
-      const routerHubInterface = new ethers.Interface([
-        "function executeRoute(tuple(address user, address tokenIn, uint256 amtIn, address tokenOut, uint256 minOut, uint64 dstChainId, uint64 deadline, address feeToken, uint8 feeMode, uint256 feeCapToken, bytes routeHint, uint256 nonce) intent, address adapter, bytes routeData) external returns (uint256)"
-      ]);
-      
-      const adapterInterface = new ethers.Interface([
-        "function swap(address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, address recipient, uint256 deadline) external payable returns (uint256 amountOut)"
-      ]);
-      
-      const intent = {
-        user: address,
-        tokenIn: tokenIn.address,
-        amtIn: amountWei,
-        tokenOut: tokenOut.address,
-        minOut: minAmountOut,
-        dstChainId: toChain.id,
-        deadline: Math.floor(Date.now() / 1000) + 600,
-        feeToken: tokenIn.address,
-        feeMode: 1,
-        feeCapToken: parseUnits(feeCap, 18),
-        routeHint: '0x',
-        nonce: BigInt(Date.now())
-      };
-
-      const mockAdapter = fromChain.id === 80002 
-        ? '0xc8A7e30E3Ea68A2eaBA3428aCbf535F3320715d1'
-        : '0x86D1AA2228F3ce649d415F19fC71134264D0E84B';
-      
-      const routeData = adapterInterface.encodeFunctionData("swap", [
-        tokenIn.address,
-        tokenOut.address,
-        amountWei,
-        minAmountOut,
-        routerHubAddress,
-        intent.deadline
-      ]);
-      
-      const swapCallData = routerHubInterface.encodeFunctionData("executeRoute", [
-        intent,
-        mockAdapter,
-        routeData
-      ]);
-
-      // Execute TRUE gasless batch (approve + swap) - $0 gas!
-      console.log('📤 Executing TRUE GASLESS batch via ZeroToll paymaster');
-      
-      await trueGaslessSwap.executeGaslessBatch({
-        tokenAddress: tokenIn.address,
-        spender: routerHubAddress,
-        amount: amountWei.toString(),
-        routerHub: routerHubAddress,
-        swapCallData
-      });
-
-      toast.success('🎉 TRUE GASLESS swap successful! You paid $0 in gas!');
-      
-    } catch (error) {
-      console.error('TRUE gasless error:', error);
-      toast.error(error.message || 'TRUE gasless swap failed');
-    }
-  };
-
   const handleGaslessExecute = async () => {
-    // Relayer mode now uses the same backend relayer as ZeroToll mode
-    // Both modes achieve TRUE gasless swaps via the backend Smart Account + ZeroToll paymaster
+    // Smart Wallet Batch mode:
+    // the wallet manages smart-account / batching behavior via wallet_sendCalls.
     try {
-      // Native tokens (POL/ETH) don't work with gasless swaps - need wrapped version
       if (tokenIn.isNative) {
-        toast.error('❌ Native tokens (POL/ETH) cannot be used with gasless swaps. Please use WPOL/WETH instead.');
+        toast.error('Use the wrapped input token for Smart Wallet Batch mode.');
         return;
       }
 
-      // Validate token addresses
-      if (!tokenIn.address || tokenIn.address === 'NATIVE' || !tokenIn.address.startsWith('0x')) {
-        toast.error('❌ Invalid input token address. Please select a different token.');
-        return;
-      }
-      if (!tokenOut.address || tokenOut.address === 'NATIVE' || !tokenOut.address.startsWith('0x')) {
-        toast.error('❌ Invalid output token address. Please select a different token.');
+      if (tokenOut.isNative) {
+        toast.error('Smart Wallet Batch currently supports ERC-20 / wrapped-token output only. Use WETH/WPOL instead of native output.');
         return;
       }
 
-      // Check permit type for the token
-      const permitType = intentGasless.getPermitType(tokenIn.address);
-      
-      if (permitType === 'none') {
-        toast.error(`${tokenIn.symbol} doesn't support gasless. Use zTokens (⚡) or Permit2 tokens (🔄).`);
+      if (!tokenIn.address?.startsWith('0x') || !tokenOut.address?.startsWith('0x')) {
+        toast.error('Invalid token addresses for smart wallet batch.');
         return;
       }
 
-      // Use the same backend relayer as ZeroToll mode
-      toast.info('🔄 Relayer mode - submitting gasless swap via backend relayer...');
-      
+      const availability = await gaslessSwap.checkAvailability();
+      if (!availability.available) {
+        toast.error(availability.reason || 'Smart wallet batch is not available.');
+        return;
+      }
+
+      toast.info('⚡ Smart Wallet Batch will bundle approve + swap in one wallet flow.');
+
       const decimals = tokenIn.decimals || 6;
       const amountWei = parseUnits(amountIn, decimals);
-      
-      // Calculate minAmountOut with proper decimal conversion (same as ZeroToll mode)
       const decimalsOut = tokenOut.decimals || 18;
-      const slippageTolerance = 0.90; // 10% slippage tolerance
-      
       const amountAfterFeeWei = amountWei * 995n / 1000n;
+
       let expectedOutputWei;
       if (decimalsOut >= decimals) {
         expectedOutputWei = amountAfterFeeWei * BigInt(10 ** (decimalsOut - decimals));
@@ -620,66 +695,118 @@ const Swap = () => {
       }
       const minOut = expectedOutputWei * 90n / 100n;
 
-      let result;
-      if (permitType === 'erc2612') {
-        // ERC-2612 permit - fully gasless (relayer pays)
-        setGaslessStatus('Sign Permit + Swap Intent in MetaMask (NO GAS!)...');
-        toast.info('⚡ Sign 2 messages in MetaMask - relayer pays gas for you!');
-        
-        result = await intentGasless.submitSwapWithPermit({
-          tokenIn: tokenIn.address,
-          tokenOut: tokenOut.address,
-          amountIn: amountWei.toString(),
-          minAmountOut: minOut.toString(),
-          deadlineMinutes: 30,
-          mode: 'relayer'  // Use relayer EOA to pay gas
-        });
-      } else if (permitType === 'permit2') {
-        // Permit2 - gasless (relayer pays)
-        setGaslessStatus('Sign Permit2 + Swap Intent in MetaMask...');
-        toast.info('🔄 Sign 2 messages in MetaMask - relayer pays gas for you!');
-        
-        result = await intentGasless.submitSwapWithPermit2({
-          tokenIn: tokenIn.address,
-          tokenOut: tokenOut.address,
-          amountIn: amountWei.toString(),
-          minAmountOut: minOut.toString(),
-          deadlineMinutes: 30,
-          mode: 'relayer'  // Use relayer EOA to pay gas
-        });
-      }
+      const { routerHub, swapCallData } = buildRouterExecution({
+        tokenInAddress: tokenIn.address,
+        tokenOutAddress: tokenOut.address,
+        amountWei,
+        minOutWei: minOut,
+      });
 
-      setGaslessStatus('Swap submitted! Waiting for confirmation...');
-      const displayHash = result.userOpHash || result.txHash;
-      toast.success(`🎉 Gasless swap submitted! Hash: ${displayHash?.slice(0, 10)}...`);
-      setTxHash(displayHash);
+      setGaslessStatus('Waiting for wallet confirmation for approve + swap batch...');
 
-      // Poll for confirmation and get actual txHash
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        const status = await intentGasless.checkStatus(result.requestId);
-        console.log('📊 Swap status:', status);
-        
-        if (status.txHash) {
-          setTxHash(status.txHash);
-        }
-        
-        if (status.status === 'confirmed') {
-          setGaslessStatus('✓ Swap confirmed! You paid ZERO gas!');
-          toast.success('🎉 Gasless swap confirmed! You paid $0 in gas!');
-          return;
-        } else if (status.status === 'failed') {
-          setGaslessStatus('Swap failed on-chain');
-          toast.error('Swap failed on-chain');
-          return;
-        }
-      }
-      setGaslessStatus('Check explorer for status');
+      await gaslessSwap.executeBatch({
+        tokenAddress: tokenIn.address,
+        spender: routerHub,
+        amount: amountWei.toString(),
+        routerHub,
+        swapCallData,
+        targetChainId: fromChain.id,
+      });
+
+      toast.success('Smart wallet batch submitted. Check your wallet activity for confirmation.');
       
     } catch (error) {
-      console.error('Gasless swap error:', error);
+      console.error('Smart wallet batch error:', error);
       setGaslessStatus('');
-      toast.error(error.message || 'Gasless swap failed');
+      toast.error(error.message || 'Smart wallet batch failed');
+    }
+  };
+
+  const handleConfidentialGasless = async () => {
+    if (!isConnected) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    if (!amountIn || parseFloat(amountIn) <= 0) {
+      toast.error('Please enter an amount to swap');
+      return;
+    }
+
+    if (fromChain.id !== 11155111) {
+      toast.error('Confidential Gasless Intent currently uses Fhenix on Sepolia only.');
+      return;
+    }
+
+    if (tokenIn.isNative || tokenOut.isNative) {
+      toast.error('Use wrapped ERC-20 tokens for the confidential staged flow.');
+      return;
+    }
+
+    setLoading(true);
+    setTxHash(null);
+    setGaslessStatus('Preparing confidential staged execution...');
+
+    try {
+      let confidentialQuote = quote;
+
+      if (!confidentialQuote || confidentialQuote.mode !== 'CONFIDENTIAL_GASLESS_INTENT') {
+        setGaslessStatus('Fetching confidential quote from the backend...');
+        confidentialQuote = await confidentialGasless.getQuote({
+          user: address,
+          tokenIn: tokenIn.address,
+          tokenOut: tokenOut.address,
+          amountIn: parseFloat(amountIn),
+          srcChainId: fromChain.id,
+          dstChainId: toChain.id,
+          feeMode,
+          feeCap: parseFloat(feeCap),
+        });
+        setQuote(confidentialQuote);
+      }
+
+      const quotedAmountOut = Number(confidentialQuote.netOut || amountOut || 0);
+      const suggestedMinOut = Number(
+        confidentialQuote.suggestedConfidentialMinOut || quotedAmountOut * 0.95
+      );
+      const minAmountOutDisplay = suggestedMinOut.toFixed(
+        Math.min(tokenOut.decimals || 18, 6)
+      );
+      const minAmountOutUnits = parseUnits(
+        minAmountOutDisplay,
+        tokenOut.decimals || 18
+      ).toString();
+
+      if (!quotedAmountOut || Number.isNaN(quotedAmountOut)) {
+        throw new Error('Confidential quote is missing a net output amount.');
+      }
+
+      const result = await confidentialGasless.executeConfidentialSwap({
+        tokenIn: tokenIn.address,
+        tokenOut: tokenOut.address,
+        amountIn,
+        quotedAmountOut: quotedAmountOut.toString(),
+        minAmountOut: minAmountOutDisplay,
+        minAmountOutUnits,
+        srcChainId: fromChain.id,
+        dstChainId: toChain.id,
+        feeMode,
+        feeCap,
+      });
+
+      if (result.stage === 'finalized_success') {
+        toast.success('🔐 Confidential staged settlement finalized successfully.');
+      } else if (result.stage === 'refunded') {
+        toast.warning('🔐 Confidential intent refunded after the staged verdict.');
+      } else {
+        toast.info('🔐 Confidential intent submitted. Continue watching the staged status panel.');
+      }
+    } catch (error) {
+      console.error('Confidential gasless error:', error);
+      setGaslessStatus('');
+      toast.error(error.message || 'Confidential gasless intent failed');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -808,10 +935,10 @@ const Swap = () => {
     }
   };
 
-  // EIP-7702 Gasless (Phase 3A - 50% cheaper than ERC-4337!)
+  // Custom EIP-7702 mode for embedded/programmatic wallets that expose raw authorization signing.
   const handleEIP7702Swap = async () => {
     setLoading(true);
-    setGaslessStatus('Preparing EIP-7702 gasless swap...');
+    setGaslessStatus('Preparing Custom EIP-7702 swap...');
     
     try {
       // Validate inputs
@@ -858,27 +985,31 @@ const Swap = () => {
         toast.warning('Using estimated output (quote unavailable)');
       }
 
-      toast.info('🚀 Starting EIP-7702 gasless swap (50% cheaper!)');
-      setGaslessStatus('Step 1/3: Signing EIP-7702 authorization...');
+      if (tokenIn.isNative) {
+        toast.error('Use the wrapped input token for Custom EIP-7702 mode.');
+        setLoading(false);
+        return;
+      }
 
-      // Special NATIVE address for ZeroTollDelegate contract
-      // When user wants native output (POL/ETH), delegate will:
-      // 1. Swap to WPOL/WETH
-      // 2. Unwrap to native
-      // 3. Keep in user's EOA (via delegation)
-      const NATIVE_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+      toast.info('🚀 Starting Custom EIP-7702 swap');
+      setGaslessStatus('Step 1/3: Signing custom EIP-7702 authorization...');
 
       // Convert token addresses for EIP-7702
-      const getTokenAddress = (token, currentChainId) => {
+      const getTokenAddress = (token) => {
         if (token.isNative || token.address === 'NATIVE') {
-          // Use special NATIVE address - delegate will unwrap for user!
-          return NATIVE_ADDRESS;
+          return NATIVE_EIP7702_ADDRESS;
         }
         return token.address;
       };
 
-      const tokenInAddress = getTokenAddress(tokenIn, chain?.id);
-      const tokenOutAddress = getTokenAddress(tokenOut, chain?.id);
+      const tokenInAddress = getTokenAddress(tokenIn);
+      const tokenOutAddress = getTokenAddress(tokenOut);
+      const { routerHub, adapter, routeData } = buildRouterExecution({
+        tokenInAddress,
+        tokenOutAddress,
+        amountWei: amount,
+        minOutWei: minOut,
+      });
 
       console.log('🔍 Token addresses:', {
         tokenIn: { symbol: tokenIn.symbol, original: tokenIn.address, actual: tokenInAddress },
@@ -886,21 +1017,24 @@ const Swap = () => {
           symbol: tokenOut.symbol, 
           original: tokenOut.address, 
           actual: tokenOutAddress,
-          willUnwrap: tokenOutAddress === NATIVE_ADDRESS ? '✅ Yes - you will receive native ' + tokenOut.symbol : '❌ No'
+          willUnwrap: tokenOutAddress === NATIVE_EIP7702_ADDRESS ? '✅ Yes - you will receive native ' + tokenOut.symbol : '❌ No'
         }
       });
 
       // Show user-friendly message for native output
-      if (tokenOutAddress === NATIVE_ADDRESS) {
+      if (tokenOutAddress === NATIVE_EIP7702_ADDRESS) {
         toast.info(`💰 You will receive native ${tokenOut.symbol} in your wallet!`);
       }
 
-      // Execute EIP-7702 swap
+      // Execute custom EIP-7702 swap
       const result = await eip7702Swap.executeSwap({
         tokenIn: tokenInAddress,
         tokenOut: tokenOutAddress,
         amountIn: amount,
-        minAmountOut: minOut
+        minAmountOut: minOut,
+        routerHub,
+        adapter,
+        routeData
       });
 
       if (result && result.txHash) {
@@ -941,7 +1075,7 @@ const Swap = () => {
           </div>
         );
       } else {
-        toast.success('✅ EIP-7702 swap submitted!');
+        toast.success('✅ Custom EIP-7702 swap submitted!');
         setGaslessStatus('Check explorer for status');
       }
 
@@ -955,8 +1089,16 @@ const Swap = () => {
   };
 
   const handleExecute = async () => {
+    if (isConfidentialMode) {
+      return await handleConfidentialGasless();
+    }
+
     // If EIP-7702 mode is enabled, use EIP-7702 swap
     if (isEIP7702Mode) {
+      if (!isCustomEip7702Eligible) {
+        toast.error('Custom EIP-7702 is disabled for the current wallet connection. Use ZeroToll Gasless, Smart Wallet Batch, or connect an embedded/programmatic wallet.');
+        return;
+      }
       if (!eip7702Swap.isSupported) {
         toast.error('EIP-7702 not supported on this chain. Switch to Amoy or Sepolia.');
         return;
@@ -1123,19 +1265,14 @@ const Swap = () => {
           <h1 className="text-3xl font-bold mb-2 text-zt-paper">Gasless Cross-Chain Swap</h1>
           <p className="text-zt-paper/60 mb-6">Pay fees in any token you swap—use input, skim from output (even native via wrapped), or stick to native gas. Fee capped on-chain, unused refunded.</p>
 
-          {/* Gasless Mode Toggle - Multiple options */}
+          {/* Execution Mode Selector */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-3">
-              Gasless Mode <span className="text-zt-paper/40 font-normal">(ZeroToll pays gas for you)</span>
+              Execution Mode <span className="text-zt-paper/40 font-normal">(pick the control plane that matches your wallet)</span>
             </label>
-            
-            {/* Option 1: ZeroToll Gasless (Phase 2 - ERC-4337) */}
+
             <button
-              onClick={() => {
-                setIsZeroTollGasless(!isZeroTollGasless);
-                setIsGaslessMode(false); // Disable old relayer mode
-                setIsEIP7702Mode(false); // Disable EIP-7702 mode
-              }}
+              onClick={() => activateExecutionMode(EXECUTION_MODES.ZEROTOLL)}
               className={`w-full glass p-4 rounded-xl transition-all text-left mb-3 ${
                 isZeroTollGasless
                   ? 'border-2 border-green-500 bg-green-500/10'
@@ -1149,7 +1286,7 @@ const Swap = () => {
                     <div className={`font-semibold ${isZeroTollGasless ? 'text-green-400' : 'text-zt-paper'}`}>
                       ZeroToll Gasless (ERC-4337) {isZeroTollGasless && <span className="text-xs ml-2">✓ Active</span>}
                     </div>
-                    <div className="text-xs text-zt-paper/50">Sign 2 messages, pay $0 gas - we sponsor it!</div>
+                    <div className="text-xs text-zt-paper/50">Recommended. ZeroToll sponsors gas and recoups gas + protocol fee from swap tokens.</div>
                   </div>
                 </div>
                 <div className={`w-12 h-6 rounded-full transition-colors ${isZeroTollGasless ? 'bg-green-500' : 'bg-white/20'}`}>
@@ -1158,39 +1295,94 @@ const Swap = () => {
               </div>
             </button>
 
-            {/* Option 2: EIP-7702 Gasless (Phase 3A - 50% cheaper!) */}
             <button
-              onClick={() => {
-                setIsEIP7702Mode(!isEIP7702Mode);
-                setIsZeroTollGasless(false); // Disable Phase 2 mode
-                setIsGaslessMode(false); // Disable old relayer mode
-              }}
-              className={`w-full glass p-4 rounded-xl transition-all text-left ${
-                isEIP7702Mode
-                  ? 'border-2 border-blue-500 bg-blue-500/10'
+              onClick={() => activateExecutionMode(EXECUTION_MODES.CONFIDENTIAL)}
+              className={`w-full glass p-4 rounded-xl transition-all text-left mb-3 ${
+                isConfidentialMode
+                  ? 'border-2 border-cyan-500 bg-cyan-500/10'
                   : 'border border-white/10 hover:border-white/30'
               }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">🚀</span>
+                  <span className="text-2xl">🔐</span>
                   <div>
-                    <div className={`font-semibold ${isEIP7702Mode ? 'text-blue-400' : 'text-zt-paper'}`}>
-                      EIP-7702 Gasless (50% cheaper!) {isEIP7702Mode && <span className="text-xs ml-2">✓ Active</span>}
+                    <div className={`font-semibold ${isConfidentialMode ? 'text-cyan-300' : 'text-zt-paper'}`}>
+                      Confidential Gasless Intent {isConfidentialMode && <span className="text-xs ml-2">✓ Active</span>}
                     </div>
-                    <div className="text-xs text-zt-paper/50">Sign 3 messages, 50% less gas than ERC-4337!</div>
+                    <div className="text-xs text-zt-paper/50">Buildathon mode on Sepolia. ZeroToll keeps sponsorship economics, while the confidential path is modeled as staged settlement.</div>
                   </div>
                 </div>
-                <div className={`w-12 h-6 rounded-full transition-colors ${isEIP7702Mode ? 'bg-blue-500' : 'bg-white/20'}`}>
-                  <div className={`w-5 h-5 bg-white rounded-full mt-0.5 transition-transform ${isEIP7702Mode ? 'translate-x-6 ml-0.5' : 'ml-0.5'}`} />
+                <div className={`w-12 h-6 rounded-full transition-colors ${isConfidentialMode ? 'bg-cyan-500' : 'bg-white/20'}`}>
+                  <div className={`w-5 h-5 bg-white rounded-full mt-0.5 transition-transform ${isConfidentialMode ? 'translate-x-6 ml-0.5' : 'ml-0.5'}`} />
                 </div>
               </div>
             </button>
 
+            <button
+              onClick={() => activateExecutionMode(EXECUTION_MODES.SMART_WALLET)}
+              className={`w-full glass p-4 rounded-xl transition-all text-left mb-3 ${
+                isGaslessMode
+                  ? 'border-2 border-yellow-500 bg-yellow-500/10'
+                  : 'border border-white/10 hover:border-white/30'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🪪</span>
+                  <div>
+                    <div className={`font-semibold ${isGaslessMode ? 'text-yellow-300' : 'text-zt-paper'}`}>
+                      Smart Wallet Batch {isGaslessMode && <span className="text-xs ml-2">✓ Active</span>}
+                    </div>
+                    <div className="text-xs text-zt-paper/50">Wallet-native smart account flow via `wallet_sendCalls`. Great for batch UX, but sponsorship stays wallet-controlled.</div>
+                  </div>
+                </div>
+                <div className={`w-12 h-6 rounded-full transition-colors ${isGaslessMode ? 'bg-yellow-500' : 'bg-white/20'}`}>
+                  <div className={`w-5 h-5 bg-white rounded-full mt-0.5 transition-transform ${isGaslessMode ? 'translate-x-6 ml-0.5' : 'ml-0.5'}`} />
+                </div>
+              </div>
+            </button>
+
+            {isCustomEip7702Eligible ? (
+              <button
+                onClick={() => activateExecutionMode(EXECUTION_MODES.CUSTOM_7702)}
+                className={`w-full glass p-4 rounded-xl transition-all text-left ${
+                  isEIP7702Mode
+                    ? 'border-2 border-blue-500 bg-blue-500/10'
+                    : 'border border-white/10 hover:border-white/30'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🚀</span>
+                    <div>
+                      <div className={`font-semibold ${isEIP7702Mode ? 'text-blue-400' : 'text-zt-paper'}`}>
+                        Custom EIP-7702 {isEIP7702Mode && <span className="text-xs ml-2">✓ Active</span>}
+                      </div>
+                      <div className="text-xs text-zt-paper/50">
+                        Experimental. ZeroToll chooses the delegate contract, so only certain embedded/programmatic wallets are suitable.
+                      </div>
+                    </div>
+                  </div>
+                  <div className={`w-12 h-6 rounded-full transition-colors ${isEIP7702Mode ? 'bg-blue-500' : 'bg-white/20'}`}>
+                    <div className={`w-5 h-5 bg-white rounded-full mt-0.5 transition-transform ${isEIP7702Mode ? 'translate-x-6 ml-0.5' : 'ml-0.5'}`} />
+                  </div>
+                </div>
+              </button>
+            ) : (
+              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-left text-sm text-blue-100">
+                <div className="font-semibold text-blue-300">Custom EIP-7702 hidden for this wallet</div>
+                <div className="mt-1 text-xs text-blue-100/80">
+                  Current connector: {connector?.name || 'unknown wallet'}.
+                  Browser-RPC wallets like this do not expose the raw authorization signing that ZeroToll custom EIP-7702 needs.
+                </div>
+              </div>
+            )}
+
             {/* Mode Description */}
             <div className="mt-3 text-xs text-zt-paper/60">
-              {!isZeroTollGasless && !isEIP7702Mode ? (
-                <span>💳 Traditional swap - you pay gas in native token (ETH/POL). Toggle above to enable gasless.</span>
+              {!isZeroTollGasless && !isEIP7702Mode && !isGaslessMode && !isConfidentialMode ? (
+                <span>💳 Traditional swap active. You pay gas in native token and approve separately when needed.</span>
               ) : isZeroTollGasless ? (
                 <div>
                   <span className="text-green-400">⚡ ZeroToll Gasless (ERC-4337) active - our paymaster sponsors your gas. Best with zTokens (⚡).</span>
@@ -1200,15 +1392,54 @@ const Swap = () => {
                     </span>
                   )}
                 </div>
+              ) : isConfidentialMode ? (
+                <div>
+                  <span className="text-cyan-300">🔐 Confidential Gasless Intent active - staged settlement path for the Fhenix buildathon track.</span>
+                  <span className="block mt-1 text-zt-paper/50">
+                    Sepolia runtime now uses real CoFHE browser encryption for `minOut`, while the staged backend lifecycle remains explicit about what is scaffolded versus on-chain.
+                  </span>
+                  {confidentialGasless.quote?.estimatedFeeUSD && (
+                    <span className="block mt-1 text-cyan-200">
+                      Estimated sponsored cost + protocol fee: ~${Number(confidentialGasless.quote.estimatedFeeUSD).toFixed(4)}
+                    </span>
+                  )}
+                </div>
+              ) : isGaslessMode ? (
+                <div>
+                  <span className="text-yellow-300">🪪 Smart Wallet Batch active - approve + swap will be batched through the wallet when supported.</span>
+                  <span className="block mt-1 text-zt-paper/50">
+                    Gas may still be paid by the wallet account or wallet-native token-fee system. This is not the same as ZeroToll-sponsored gasless.
+                  </span>
+                  {smartWalletAvailability?.note && (
+                    <span className="block mt-1 text-yellow-200">{smartWalletAvailability.note}</span>
+                  )}
+                </div>
               ) : (
                 <div>
-                  <span className="text-blue-400">🚀 EIP-7702 Gasless active - 50% cheaper than ERC-4337! Direct delegation, no EntryPoint overhead.</span>
-                  <span className="block mt-1 text-green-400">
-                    ✨ Gas savings: ~150,000 gas (vs ERC-4337: ~300,000 gas)
+                  <span className="text-blue-400">🚀 Custom EIP-7702 active - delegate authorization is signed for a ZeroToll-selected contract.</span>
+                  <span className="block mt-1 text-blue-300">
+                    Best reserved for embedded/programmatic wallets. Browser extension wallets often block the raw authorization flow.
                   </span>
                 </div>
               )}
             </div>
+
+            {isGaslessMode && smartWalletAvailability && (
+              <div className="mt-3 rounded-xl border border-yellow-500/30 bg-yellow-500/5 p-3 text-xs text-zt-paper/75">
+                <div className="font-semibold text-yellow-300 mb-1">Smart Wallet Batch status</div>
+                {smartWalletAvailability.available ? (
+                  <>
+                    <div>Network: {smartWalletAvailability.chain || fromChain.name}</div>
+                    <div>Smart account: {smartWalletAvailability.isSmartAccount ? 'enabled' : 'not yet enabled in wallet'}</div>
+                    <div>
+                      Wallet note: {smartWalletAvailability.note || 'Wallet controls whether gas is paid normally or via wallet-native token fee support.'}
+                    </div>
+                  </>
+                ) : (
+                  <div>{smartWalletAvailability.reason || 'Capability check failed.'}</div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Network Mismatch Warning Banner */}
@@ -1362,209 +1593,151 @@ const Swap = () => {
             )}
           </div>
 
-          {/* OLD: TRUE Gasless Mode Toggle (EIP-7702) - HIDDEN, not working on testnets */}
-          {false && <div className="mb-6">
-            <div className={`glass p-4 rounded-xl border ${isGaslessChain ? 'border-green-500/30' : 'border-yellow-500/30'}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Zap className={`w-5 h-5 ${isGaslessChain ? 'text-green-400' : 'text-yellow-400'}`} />
-                  <div>
-                    <div className="font-semibold text-zt-paper">
-                      {isGaslessChain 
-                        ? (trueGaslessSwap.isSmartAccount ? '🎉 TRUE Gasless Mode' : '⚡ Gasless Available')
-                        : '⚡ Batch Mode Only'}
-                    </div>
-                    <div className="text-xs text-zt-paper/60">
-                      {isGaslessChain 
-                        ? (trueGaslessSwap.isSmartAccount 
-                          ? 'Pay $0 in gas fees! Sponsored by ZeroToll' 
-                          : 'Enable Smart Account for $0 gas')
-                        : 'Testnets: Batch approve+swap (gas required)'}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsGaslessMode(!isGaslessMode)}
-                  className={`relative w-14 h-7 rounded-full transition-colors ${
-                    isGaslessMode ? (isGaslessChain ? 'bg-green-500' : 'bg-yellow-500') : 'bg-white/20'
-                  }`}
-                >
-                  <div
-                    className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                      isGaslessMode ? 'translate-x-7' : ''
-                    }`}
-                  />
-                </button>
-              </div>
-              
-              {/* Chain Support Warning */}
-              {isGaslessMode && !isGaslessChain && (
-                <div className="mt-3 p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
-                    <div className="text-xs">
-                      <div className="font-semibold text-yellow-400 mb-1">⚠️ Testnet Limitation</div>
-                      <div className="text-zt-paper/70">
-                        MetaMask does not support EIP-7702 gasless on {chain?.name || 'this network'}.
-                        <br />
-                        <span className="text-zt-paper/50">
-                          Batch mode will combine approve+swap into one transaction, but you will pay gas.
-                        </span>
-                        <br />
-                        <span className="text-green-400 mt-1 block">
-                          ✅ For TRUE gasless ($0 gas), use Gnosis Chain or Base.
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {/* Smart Account Status Indicator */}
-              {isGaslessMode && isConnected && (
-                <div className="mt-3 pt-3 border-t border-white/10">
-                  <div className="flex items-center gap-2 mb-2">
-                    {trueGaslessSwap.isSmartAccount ? (
-                      <>
-                        <CheckCircle className="w-4 h-4 text-green-400" />
-                        <span className="text-sm text-green-400 font-semibold">🎉 TRUE GASLESS Ready!</span>
-                      </>
-                    ) : trueGaslessSwap.needsUpgrade ? (
-                      <>
-                        <AlertTriangle className="w-4 h-4 text-yellow-400" />
-                        <span className="text-sm text-yellow-400 font-semibold">Smart Account Not Enabled</span>
-                      </>
-                    ) : (
-                      <>
-                        <Loader2 className="w-4 h-4 text-zt-aqua animate-spin" />
-                        <span className="text-sm text-zt-paper/70">Checking status...</span>
-                      </>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-start gap-2 text-xs text-zt-paper/80">
-                    <Info className="w-4 h-4 text-zt-aqua flex-shrink-0 mt-0.5" />
-                    <div>
-                      {trueGaslessSwap.isSmartAccount ? (
-                        <>
-                          <div className="font-semibold text-green-400 mb-1">🎉 TRUE GASLESS Available!</div>
-                          <ul className="space-y-1 text-zt-paper/70">
-                            <li>• <strong className="text-green-400">You pay $0 in gas fees!</strong></li>
-                            <li>• Gas sponsored by ZeroToll paymaster</li>
-                            <li>• Approve + Swap in ONE gasless transaction</li>
-                            <li>• Same wallet address, enhanced capabilities</li>
-                          </ul>
-                          <div className="mt-2 p-2 bg-green-500/10 rounded border border-green-500/30">
-                            <span className="text-green-400 font-medium">✅ Gas: $0 (Sponsored)</span>
-                            <span className="text-zt-paper/60 block">ZeroToll paymaster covers all gas costs!</span>
-                          </div>
-                        </>
-                      ) : trueGaslessSwap.needsUpgrade ? (
-                        <>
-                          <div className="font-semibold text-yellow-400 mb-1">⚡ Smart Account Required for Gasless</div>
-                          <ul className="space-y-1 text-zt-paper/70">
-                            <li>• Enable Smart Account in MetaMask settings</li>
-                            <li>• Or use MetaMask's upgrade prompt on first tx</li>
-                            <li>• After upgrade, all transactions are FREE!</li>
-                          </ul>
-                          <div className="mt-2 p-2 bg-yellow-500/10 rounded border border-yellow-500/30">
-                            <span className="text-yellow-400 font-medium">⚠️ Upgrade needed for gasless</span>
-                            <span className="text-zt-paper/60 block">Enable Smart Account to unlock $0 gas fees!</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-zt-paper/60">Checking Smart Account status...</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {!isGaslessMode && (
-                <div className="mt-3 pt-3 border-t border-white/10">
-                  <div className="flex items-start gap-2 text-xs text-zt-paper/60">
-                    <Info className="w-4 h-4 text-zt-aqua flex-shrink-0 mt-0.5" />
-                    <div>
-                      Standard mode: Approve and swap are separate transactions.
-                      <span className="block mt-1 text-zt-aqua">Toggle batch mode ON to combine into one transaction!</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>}
-
-          {/* ZeroToll Gasless (zTokens on Sepolia or Amoy) */}
-          {(fromChain.id === 11155111 || fromChain.id === 80002) && intentGasless.isGaslessToken(tokenIn?.address) && (
+          {isZeroTollGasless && (
             <div className="mb-6">
               <div className="glass p-4 rounded-xl border border-green-500/30 bg-green-500/5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Zap className="w-5 h-5 text-green-400" />
-                    <div>
-                      <div className="font-semibold text-green-400">⚡ ZeroToll Gasless Available!</div>
-                      <div className="text-xs text-zt-paper/60">
-                        {tokenIn?.symbol} supports ERC-2612 Permit - swap with ZERO gas!
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setIsZeroTollGasless(!isZeroTollGasless)}
-                    className={`relative w-14 h-7 rounded-full transition-colors ${
-                      isZeroTollGasless ? 'bg-green-500' : 'bg-white/20'
-                    }`}
-                  >
-                    <div
-                      className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                        isZeroTollGasless ? 'translate-x-7' : ''
-                      }`}
-                    />
-                  </button>
-                </div>
-                
-                {isZeroTollGasless && (
-                  <div className="mt-3 pt-3 border-t border-white/10">
-                    <div className="flex items-start gap-2 text-xs">
-                      <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
-                      <div className="text-zt-paper/80">
-                        <div className="font-semibold text-green-400 mb-1">How it works:</div>
-                        <ul className="space-y-1 text-zt-paper/70">
-                          <li>1. Sign Permit (approves token transfer - no gas)</li>
-                          <li>2. Sign Swap Intent (authorizes swap - no gas)</li>
-                          <li>3. ZeroToll executes on-chain (we pay gas!)</li>
-                        </ul>
-                        {/* Fee Estimate Display */}
+                <div className="flex items-start gap-3 text-xs">
+                  <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+                  <div className="text-zt-paper/80">
+                    <div className="font-semibold text-green-400 mb-1">ZeroToll Gasless status</div>
+                    {intentGasless.isGaslessToken(tokenIn?.address) ? (
+                      <>
+                        <div>{tokenIn?.symbol} can use permit-based gasless flow on {fromChain.name}.</div>
+                        <div className="mt-1">You will sign off-chain approvals/intents, then ZeroToll submits the sponsored execution.</div>
                         {intentGasless.feeEstimate && (
-                          <div className="mt-2 p-2 bg-yellow-500/10 rounded border border-yellow-500/30">
+                          <div className="mt-2 rounded border border-yellow-500/30 bg-yellow-500/10 p-2">
                             <div className="flex items-center justify-between">
-                              <span className="text-yellow-400 font-medium">Service Fee (2x gas):</span>
-                              <span className="text-zt-paper font-mono">
+                              <span className="text-yellow-400 font-medium">Service fee (gas + protocol):</span>
+                              <span className="font-mono">
                                 ~${intentGasless.feeEstimate.feeUSD?.toFixed(4)} ({intentGasless.feeEstimate.feeFormatted} {tokenIn?.symbol})
                               </span>
                             </div>
-                            <div className="text-zt-paper/50 text-[10px] mt-1">
-                              Deducted from input • Supports LP rewards
+                            <div className="mt-1 text-[10px] text-zt-paper/55">
+                              Deducted from swap tokens and aligned with treasury / gas-pool economics.
                             </div>
                           </div>
                         )}
-                        <div className="mt-2 p-2 bg-green-500/10 rounded border border-green-500/30">
-                          <span className="text-green-400 font-medium">✅ Gas: $0 | Fee: {intentGasless.feeEstimate ? `~$${intentGasless.feeEstimate.feeUSD?.toFixed(4)}` : 'calculating...'}</span>
-                        </div>
+                      </>
+                    ) : (
+                      <div className="text-yellow-200">
+                        {tokenIn?.symbol} is not currently configured for ZeroToll gasless. Choose a token with ⚡ or 🔄 in the selector.
                       </div>
-                    </div>
+                    )}
                     {gaslessStatus && (
-                      <div className="mt-2 p-2 bg-zt-aqua/10 rounded text-xs text-zt-aqua">
+                      <div className="mt-2 rounded bg-zt-aqua/10 p-2 text-zt-aqua">
                         {gaslessStatus}
                       </div>
                     )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           )}
 
-          {/* Gas Payment Mode Selector - Only show in Relayer mode */}
-          {isGaslessMode && !isZeroTollGasless && (
+          {isConfidentialMode && (
+            <div className="mb-6">
+              <div className="glass p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/5">
+                <div className="flex items-start gap-3 text-xs">
+                  <Info className="w-4 h-4 text-cyan-300 flex-shrink-0 mt-0.5" />
+                  <div className="text-zt-paper/80">
+                    <div className="font-semibold text-cyan-300 mb-1">Confidential Gasless Intent status</div>
+                    <div>
+                      This mode is staged on purpose: encrypt a private threshold, sponsor execution, wait for decryption readiness, then finalize success or refund.
+                    </div>
+                    <div className="mt-1 text-zt-paper/60">
+                      Runtime today: real CoFHE encryption on Sepolia + backend lifecycle tracking. Contract-side FHE settlement already lives in `packages/contracts`, but the live app has not been switched to full on-chain enforcement yet.
+                    </div>
+                    {confidentialGasless.intentId && (
+                      <div className="mt-2 rounded bg-black/20 p-2 text-cyan-100">
+                        Intent ID: <span className="font-mono">{confidentialGasless.intentId}</span>
+                      </div>
+                    )}
+                    {confidentialGasless.lastStatus?.privacy && (
+                      <div className="mt-2 rounded bg-black/20 p-2 text-zt-paper/75">
+                        Client mode: {confidentialGasless.lastStatus.privacy.clientEncryptionMode}
+                        <br />
+                        Enforcement: {confidentialGasless.lastStatus.privacy.enforcementMode}
+                      </div>
+                    )}
+                    {quote?.contract && (
+                      <div className="mt-2 rounded bg-black/20 p-2 text-zt-paper/75">
+                        ConfidentialIntentEscrow: {quote.contract.confidentialIntentEscrow || 'not deployed in shared config'}
+                        <br />
+                        Runtime path: {quote.contract.ready ? 'contract address configured' : 'backend staged scaffold still active'}
+                      </div>
+                    )}
+                    {gaslessStatus && (
+                      <div className="mt-2 rounded bg-zt-aqua/10 p-2 text-zt-aqua">
+                        {gaslessStatus}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isGaslessMode && (
+            <div className="mb-6">
+              <div className="glass p-4 rounded-xl border border-yellow-500/30 bg-yellow-500/5">
+                <div className="flex items-start gap-3 text-xs">
+                  <Info className="w-4 h-4 text-yellow-300 flex-shrink-0 mt-0.5" />
+                  <div className="text-zt-paper/80">
+                    <div className="font-semibold text-yellow-300 mb-1">Smart Wallet Batch status</div>
+                    <div>
+                      Approve + swap will be bundled through the wallet using `wallet_sendCalls` when the wallet supports it.
+                    </div>
+                    <div className="mt-1 text-zt-paper/60">
+                      This improves UX, but gas payment remains wallet-controlled rather than ZeroToll-controlled.
+                    </div>
+                    {smartWalletAvailability?.note && (
+                      <div className="mt-2 rounded bg-black/20 p-2 text-zt-paper/75">
+                        {smartWalletAvailability.note}
+                      </div>
+                    )}
+                    {gaslessSwap.statusMessage && (
+                      <div className="mt-2 rounded bg-zt-aqua/10 p-2 text-zt-aqua">
+                        {gaslessSwap.statusMessage}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isEIP7702Mode && (
+            <div className="mb-6">
+              <div className="glass p-4 rounded-xl border border-blue-500/30 bg-blue-500/5">
+                <div className="flex items-start gap-3 text-xs">
+                  <AlertTriangle className="w-4 h-4 text-blue-300 flex-shrink-0 mt-0.5" />
+                  <div className="text-zt-paper/80">
+                    <div className="font-semibold text-blue-300 mb-1">Custom EIP-7702 requirements</div>
+                    <div>
+                      This mode needs a wallet that exposes raw EIP-7702 authorization signing for an app-selected delegate.
+                    </div>
+                    <div className="mt-1 text-zt-paper/60">
+                      Recommended wallet categories: Privy embedded, Magic embedded, Turnkey, or similar programmatic signers.
+                    </div>
+                    {!isCustomEip7702Eligible && (
+                      <div className="mt-2 rounded bg-black/20 p-2 text-blue-200">
+                        Current connector: {connector?.name || 'unknown wallet'}.
+                        This connection exposes a browser RPC account, so Custom EIP-7702 is intentionally disabled here.
+                      </div>
+                    )}
+                    {gaslessStatus && (
+                      <div className="mt-2 rounded bg-zt-aqua/10 p-2 text-zt-aqua">
+                        {gaslessStatus}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Gas Payment Mode Selector - Traditional mode only */}
+          {!isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && !isConfidentialMode && (
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-3">
               Fee Payment Mode
@@ -1618,8 +1791,8 @@ const Swap = () => {
           </div>
           )}
 
-          {/* Fee Cap - Only show in Relayer mode */}
-          {isGaslessMode && !isZeroTollGasless && (
+          {/* Fee Cap - Traditional mode only */}
+          {!isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && (
           <div className="mb-6">
             <label className="block text-sm font-semibold text-zt-paper/70 mb-2">
               Max Fee Cap (
@@ -1642,8 +1815,8 @@ const Swap = () => {
           </div>
           )}
 
-          {/* Info Banners - Only show in Relayer mode with OUTPUT fee */}
-          {isGaslessMode && !isZeroTollGasless && feeMode === 'OUTPUT' && isNativeOutput && (
+          {/* Info Banners - Traditional mode with OUTPUT fee */}
+          {!isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && feeMode === 'OUTPUT' && isNativeOutput && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
               <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -1651,7 +1824,7 @@ const Swap = () => {
               </div>
             </div>
           )}
-          {isGaslessMode && !isZeroTollGasless && feeMode === 'OUTPUT' && !isNativeOutput && (
+          {!isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && feeMode === 'OUTPUT' && !isNativeOutput && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-aqua/30">
               <Info className="w-5 h-5 text-zt-aqua flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -1659,7 +1832,7 @@ const Swap = () => {
               </div>
             </div>
           )}
-          {isGaslessMode && !isZeroTollGasless && feeMode === 'INPUT' && (
+          {!isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && feeMode === 'INPUT' && (
             <div className="mb-6 glass p-4 rounded-xl flex items-start gap-3 border border-zt-violet/30">
               <Info className="w-5 h-5 text-zt-violet flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -1669,7 +1842,7 @@ const Swap = () => {
           )}
 
           {/* Quote Info */}
-          {quote && (
+          {quote && !isGaslessMode && !isEIP7702Mode && (
             <div className="mb-6 glass p-4 rounded-xl space-y-2 text-sm border border-zt-violet/30">
               <div className="flex justify-between">
                 <span className="text-zt-paper/70">Relayer:</span>
@@ -1720,13 +1893,45 @@ const Swap = () => {
             />
           )}
 
+          {isConfidentialMode && confidentialGasless.intentId && (
+            <div className="mb-6 glass p-4 rounded-xl flex items-center gap-3 border border-cyan-500/30">
+              <CheckCircle className="w-6 h-6 text-cyan-300 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-zt-paper font-semibold">
+                  {confidentialGasless.lastStatus?.stage === 'finalized_success'
+                    ? '🔐 Confidential Intent Finalized'
+                    : confidentialGasless.lastStatus?.stage === 'refunded'
+                    ? '🔐 Confidential Intent Refunded'
+                    : '🔐 Confidential Intent In Flight'}
+                </p>
+                <p className="text-zt-paper/70 text-sm font-mono mb-2">
+                  {confidentialGasless.intentId.slice(0, 18)}...
+                </p>
+                <p className="text-cyan-300 text-sm mb-2">
+                  {confidentialGasless.lastStatus?.statusMessage || confidentialGasless.statusMessage}
+                </p>
+                {confidentialGasless.lastStatus?.execution && (
+                  <div className="text-xs text-zt-paper/65">
+                    Simulated gross output: {confidentialGasless.lastStatus.execution.grossAmountOut} {tokenOut.symbol}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Success Message - Show for both traditional and ZeroToll gasless modes */}
           {txHash && (
             <div className="mb-6 glass p-4 rounded-xl flex items-center gap-3 border border-green-500/30">
               <CheckCircle className="w-6 h-6 text-green-400 flex-shrink-0" />
               <div className="flex-1">
                 <p className="text-zt-paper font-semibold">
-                  {isZeroTollGasless ? '⚡ Gasless Swap Submitted!' : 'Swap Submitted!'}
+                  {isZeroTollGasless
+                    ? '⚡ ZeroToll Gasless Submitted!'
+                    : isGaslessMode
+                    ? '🪪 Smart Wallet Batch Submitted!'
+                    : isEIP7702Mode
+                    ? '🚀 Custom EIP-7702 Submitted!'
+                    : 'Swap Submitted!'}
                 </p>
                 <p className="text-zt-paper/70 text-sm font-mono mb-2">{txHash.slice(0, 20)}...</p>
                 {gaslessStatus && (
@@ -1808,8 +2013,8 @@ const Swap = () => {
             </button>
             
             {/* Show Approve button if needed, otherwise Execute */}
-            {/* Skip approval for ZeroToll gasless and EIP-7702 (both use ERC-2612 Permit) */}
-            {needsApproval && !tokenIn.isNative && !isZeroTollGasless && !isEIP7702Mode ? (
+            {/* Skip approval for mode-managed flows: ZeroToll gasless, Confidential Intent, Smart Wallet Batch, and Custom EIP-7702 */}
+            {needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && !isConfidentialMode ? (
               <button
                 onClick={handleApprove}
                 disabled={approvalPending || loading}
@@ -1828,21 +2033,29 @@ const Swap = () => {
             ) : (
               <button
                 onClick={handleExecute}
-                disabled={(loading || gaslessSwap.isLoading || intentGasless.isLoading || eip7702Swap.loading) || (!quote && !isZeroTollGasless && !isEIP7702Mode) || (needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode) || (fromChain.id !== toChain.id)}
+                disabled={(loading || gaslessSwap.isLoading || intentGasless.isLoading || eip7702Swap.loading || confidentialGasless.isLoading) || (!quote && !isZeroTollGasless && !isEIP7702Mode && !isGaslessMode && !isConfidentialMode) || (needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && !isConfidentialMode) || (fromChain.id !== toChain.id)}
                 className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 data-testid="execute-swap-btn"
                 title={
                   fromChain.id !== toChain.id ? 'Cross-chain swaps not yet supported' :
-                  needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode ? 'Please approve token first' : 
+                  needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && !isConfidentialMode ? 'Please approve token first' : 
                   ''
                 }
               >
-                {(loading || gaslessSwap.isLoading || intentGasless.isLoading) ? (
+                {(loading || gaslessSwap.isLoading || intentGasless.isLoading || confidentialGasless.isLoading) ? (
                   <Loader2 className="inline w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    {(isGaslessMode || isZeroTollGasless || isEIP7702Mode) && <Zap className="w-4 h-4" />}
-                    {isEIP7702Mode ? '⚡ Execute EIP-7702 (50% Cheaper!)' : isZeroTollGasless ? '⚡ Execute Gasless (No Approval!)' : isGaslessMode ? 'Execute Gasless Swap' : 'Execute Swap'}
+                    {(isGaslessMode || isZeroTollGasless || isEIP7702Mode || isConfidentialMode) && <Zap className="w-4 h-4" />}
+                    {isEIP7702Mode
+                      ? '🚀 Execute Custom EIP-7702'
+                      : isConfidentialMode
+                      ? '🔐 Execute Confidential Intent'
+                      : isZeroTollGasless
+                      ? '⚡ Execute ZeroToll Gasless'
+                      : isGaslessMode
+                      ? '🪪 Execute Smart Wallet Batch'
+                      : 'Execute Swap'}
                   </>
                 )}
               </button>
@@ -1861,8 +2074,8 @@ const Swap = () => {
             </div>
           )}
           
-          {/* Approval Info Banner - Don't show for ZeroToll gasless or EIP-7702 (both use Permit) */}
-          {needsApproval && !tokenIn.isNative && !isZeroTollGasless && !isEIP7702Mode && (
+          {/* Approval Info Banner - Don't show for mode-managed flows */}
+          {needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && (
             <div className="mt-4 glass p-4 rounded-xl flex items-start gap-3 border border-yellow-500/30">
               <Info className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
@@ -1876,13 +2089,21 @@ const Swap = () => {
         <div className="mt-8 space-y-4">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div className="glass p-4 rounded-xl">
-              <p className="text-zt-paper/70 text-sm mb-1">Current Mode</p>
+              <p className="text-zt-paper/70 text-sm mb-1">Execution</p>
               <p className={`text-lg font-bold ${
-                feeMode === 'INPUT' ? 'text-zt-violet' :
-                feeMode === 'OUTPUT' ? 'text-zt-aqua' :
-                feeMode === 'STABLE' ? 'text-blue-400' :
-                'text-gray-400'
-              }`}>{feeMode}</p>
+                isZeroTollGasless ? 'text-green-400' :
+                isGaslessMode ? 'text-yellow-300' :
+                isEIP7702Mode ? 'text-blue-400' :
+                'text-zt-violet'
+              }`}>
+                {isZeroTollGasless
+                  ? 'ERC-4337'
+                  : isGaslessMode
+                  ? 'Wallet Batch'
+                  : isEIP7702Mode
+                  ? 'Custom 7702'
+                  : 'Traditional'}
+              </p>
             </div>
             <div className="glass p-4 rounded-xl">
               <p className="text-zt-paper/70 text-sm mb-1">Supported Tokens</p>
@@ -1902,11 +2123,21 @@ const Swap = () => {
               </span>
             </div>
             <div className="flex items-center justify-between text-sm mt-2">
-              <span className="text-zt-paper/70">Fee Token:</span>
+              <span className="text-zt-paper/70">Fee Path:</span>
               <span className="text-zt-aqua font-semibold">
-                {feeMode === 'INPUT' ? tokenIn.symbol : 
-                 feeMode === 'OUTPUT' ? (isNativeOutput ? wrappedOutputSymbol : tokenOut.symbol) : 
-                 feeMode === 'STABLE' ? 'USDC' : 'POL/ETH'}
+                {isZeroTollGasless
+                  ? `${tokenIn.symbol} recoup`
+                  : isGaslessMode
+                  ? 'Wallet-controlled'
+                  : isEIP7702Mode
+                  ? 'Custom delegate flow'
+                  : feeMode === 'INPUT'
+                  ? tokenIn.symbol
+                  : feeMode === 'OUTPUT'
+                  ? (isNativeOutput ? wrappedOutputSymbol : tokenOut.symbol)
+                  : feeMode === 'STABLE'
+                  ? 'USDC'
+                  : 'POL/ETH'}
               </span>
             </div>
             <div className="flex items-center justify-between text-sm mt-2">

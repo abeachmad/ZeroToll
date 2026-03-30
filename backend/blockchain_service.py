@@ -1,10 +1,9 @@
 import os
-import json
-from pathlib import Path
 from web3 import Web3
 from eth_account import Account
 from dotenv import load_dotenv
 import logging
+from generated_config import get_explorer_tx_base, get_fee_sink, get_router_hub, get_rpc_url, get_token_map
 
 logger = logging.getLogger(__name__)
 
@@ -13,33 +12,26 @@ load_dotenv()
 
 class BlockchainService:
     def __init__(self):
-        # Load RPC URLs from .env with fallbacks
+        # Generated config is the source of truth, with env RPC overrides still supported.
         self.rpc_urls = {
-            80002: os.getenv("RPC_AMOY", "https://rpc-amoy.polygon.technology/"),
-            11155111: os.getenv("RPC_SEPOLIA", "https://ethereum-sepolia-rpc.publicnode.com")
+            chain_id: rpc_url
+            for chain_id in [80002, 11155111, 421614, 11155420]
+            if (rpc_url := get_rpc_url(chain_id))
         }
         
-        # Load contract addresses from .env (BEST PRACTICE - Nov 8, 2025)
         self.contracts = {
-            80002: {
-                "RouterHub": os.getenv("AMOY_ROUTERHUB", "0x49ADe5FbC18b1d2471e6001725C6bA3Fe1904881"),
-                "FeeSink": os.getenv("AMOY_FEESINK", "0x1F679D174A9fBe4158EABcD24d4A63D6Bcf8f700")
-            },
-            11155111: {
-                "RouterHub": os.getenv("SEPOLIA_ROUTERHUB", "0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84"),  # Phase 1: Gasless
-                "FeeSink": os.getenv("SEPOLIA_FEESINK", "0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130")
+            chain_id: {
+                "RouterHub": router_hub,
+                "FeeSink": get_fee_sink(chain_id)
             }
+            for chain_id in [80002, 11155111, 421614, 11155420]
+            if (router_hub := get_router_hub(chain_id))
         }
         
-        # Load token addresses from JSON file
-        token_file = Path(__file__).parent / "token_addresses.json"
-        with open(token_file, 'r') as f:
-            token_data = json.load(f)
-        
-        # Convert to old format for backward compatibility
-        self.tokens = {}
-        for chain_id, data in token_data.items():
-            self.tokens[int(chain_id)] = data["tokens"]
+        self.tokens = {
+            chain_id: get_token_map(chain_id)
+            for chain_id in [80002, 11155111, 421614, 11155420]
+        }
         
         # Load private key dari environment
         self.private_key = os.getenv('RELAYER_PRIVATE_KEY')
@@ -56,7 +48,11 @@ class BlockchainService:
     def get_router_contract(self, chain_id):
         """Get RouterHub contract instance"""
         w3 = self.get_web3(chain_id)
-        contract_address = self.contracts[chain_id]["RouterHub"]
+        contract_info = self.contracts.get(chain_id)
+        if not contract_info or not contract_info.get("RouterHub"):
+            raise ValueError(f"RouterHub not configured for chain ID: {chain_id}")
+
+        contract_address = contract_info["RouterHub"]
         
         # RouterHub ABI (simplified)
         abi = [
@@ -187,8 +183,7 @@ class BlockchainService:
     
     def _get_explorer_url(self, tx_hash, chain_id):
         """Get explorer URL for transaction"""
-        if chain_id == 80002:
-            return f"https://amoy.polygonscan.com/tx/{tx_hash}"
-        elif chain_id == 11155111:
-            return f"https://sepolia.etherscan.io/tx/{tx_hash}"
-        return None
+        explorer_tx_base = get_explorer_tx_base(chain_id)
+        if not explorer_tx_base:
+            return None
+        return f"{explorer_tx_base}{tx_hash}"

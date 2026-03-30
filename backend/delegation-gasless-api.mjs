@@ -17,7 +17,6 @@ import express from 'express';
 import cors from 'cors';
 import { createPublicClient, createWalletClient, http, parseUnits, encodeFunctionData, formatUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { polygonAmoy, sepolia } from 'viem/chains';
 import { createBundlerClient, entryPoint07Address } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { 
@@ -31,11 +30,13 @@ import { DelegationManager } from '@metamask/smart-accounts-kit/contracts';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { getConfiguredChain } from './generated-config.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 dotenv.config({ path: join(__dirname, '.env') });
+dotenv.config({ path: join(__dirname, '..', '.env.credentials') });
 
 const app = express();
 app.use(cors());
@@ -48,28 +49,16 @@ if (!PIMLICO_API_KEY) {
 }
 
 // Backend's delegate account - this account will execute on behalf of users
-const DELEGATE_PRIVATE_KEY = process.env.DELEGATE_PRIVATE_KEY || process.env.RELAYER_PRIVATE_KEY;
+const RAW_DELEGATE_PRIVATE_KEY = process.env.DELEGATE_PRIVATE_KEY || process.env.RELAYER_PRIVATE_KEY;
+const DELEGATE_PRIVATE_KEY = RAW_DELEGATE_PRIVATE_KEY
+  ? (RAW_DELEGATE_PRIVATE_KEY.startsWith('0x')
+      ? RAW_DELEGATE_PRIVATE_KEY
+      : `0x${RAW_DELEGATE_PRIVATE_KEY.replace(/^0x/, '')}`)
+  : null;
 if (!DELEGATE_PRIVATE_KEY) {
   console.error('Missing DELEGATE_PRIVATE_KEY or RELAYER_PRIVATE_KEY in environment');
   process.exit(1);
 }
-
-const CHAINS = {
-  80002: {
-    chain: polygonAmoy,
-    name: 'Polygon Amoy',
-    rpc: 'https://rpc-amoy.polygon.technology',
-    pimlicoRpc: `https://api.pimlico.io/v2/80002/rpc?apikey=${PIMLICO_API_KEY}`,
-    explorer: 'https://amoy.polygonscan.com'
-  },
-  11155111: {
-    chain: sepolia,
-    name: 'Ethereum Sepolia', 
-    rpc: 'https://ethereum-sepolia-rpc.publicnode.com',
-    pimlicoRpc: `https://api.pimlico.io/v2/11155111/rpc?apikey=${PIMLICO_API_KEY}`,
-    explorer: 'https://sepolia.etherscan.io'
-  }
-};
 
 // Store delegations (in production, use a database)
 const delegations = new Map();
@@ -131,7 +120,7 @@ app.post('/api/delegation/execute', async (req, res) => {
       return res.status(400).json({ error: 'Missing userAddress, chainId, or calls' });
     }
 
-    const chainConfig = CHAINS[parseInt(chainId)];
+    const chainConfig = getConfiguredChain(parseInt(chainId), { pimlicoApiKey: PIMLICO_API_KEY });
     if (!chainConfig) {
       return res.status(400).json({ error: 'Unsupported chain' });
     }
@@ -234,7 +223,7 @@ app.post('/api/delegation/execute', async (req, res) => {
       success: receipt.success,
       userOpHash,
       txHash: receipt.receipt.transactionHash,
-      explorerUrl: `${chainConfig.explorer}/tx/${receipt.receipt.transactionHash}`,
+      explorerUrl: chainConfig.explorerTx ? `${chainConfig.explorerTx}${receipt.receipt.transactionHash}` : null,
       gasless: true,
       message: '🎉 TRUE GASLESS! User paid $0 in gas!'
     });

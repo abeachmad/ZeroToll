@@ -1,41 +1,88 @@
-﻿/**
- * useEIP7702Swap Hook
+/**
+ * useEIP7702Swap Hook - FIXED VERSION
  * 
- * Provides EIP-7702 gasless swap functionality with 50% gas savings
+ * Based on research from:
+ * - https://docs.onebalance.io/guides/eip-7702/getting-started
+ * - https://www.quicknode.com/guides/ethereum-development/smart-contracts/eip-7702-smart-accounts
+ * - https://viem.sh/docs/eip7702/contract-writes
  * 
- * Features:
- * - EIP-7702 authorization signing
- * - EIP-2612 permit signing
- * - EIP-712 intent signing
- * - Gasless swap execution
- * - 50% cheaper than ERC-4337
+ * Key fixes:
+ * 1. Use viem's signAuthorization (not manual signing)
+ * 2. Batch approve + swap in single transaction
+ * 3. Proper delegation to implementation contract
+ * 4. Implementation contract executes the calls
  */
 
 import { useState, useCallback } from 'react';
-import { useAccount, useSignTypedData, usePublicClient, useWalletClient } from 'wagmi';
-import { parseUnits, formatUnits } from 'viem';
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
+import { parseUnits, formatUnits, encodeFunctionData } from 'viem';
+import { signEip7702Authorization } from '../lib/eip7702';
 
-// Deployed delegate addresses
-const DELEGATE_ADDRESS = {
-  80002: '0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C', // Amoy
-  11155111: '0xcFE005B2E0013e0FF8cB0569d9b103094d423B36' // Sepolia
+// Implementation contract addresses (BatchExecutor)
+const BATCH_EXECUTOR_ADDRESS = {
+  80002: '0x8153FA09Be1689D44C343f119C829F6702A8720b', // Amoy - DEPLOYED 2026-03-01
+  11155111: '0x8dD08D3369e1c36a03b30587a032b5A8Aaa177F9' // Sepolia - DEPLOYED 2026-03-01
 };
 
 // Backend API URL
 const API_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 
+// ERC20 ABI for approve
+const ERC20_ABI = [
+  {
+    name: 'approve',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' }
+    ],
+    outputs: [{ type: 'bool' }]
+  }
+];
+
+// RouterHub ABI for executeRoute
+const ROUTER_HUB_ABI = [
+  {
+    name: 'executeRoute',
+    type: 'function',
+    inputs: [
+      {
+        name: 'intent',
+        type: 'tuple',
+        components: [
+          { name: 'user', type: 'address' },
+          { name: 'tokenIn', type: 'address' },
+          { name: 'amtIn', type: 'uint256' },
+          { name: 'tokenOut', type: 'address' },
+          { name: 'minOut', type: 'uint256' },
+          { name: 'dstChainId', type: 'uint64' },
+          { name: 'deadline', type: 'uint64' },
+          { name: 'feeToken', type: 'address' },
+          { name: 'feeMode', type: 'uint8' },
+          { name: 'feeCapToken', type: 'uint256' },
+          { name: 'routeHint', type: 'bytes' },
+          { name: 'nonce', type: 'uint256' }
+        ]
+      },
+      { name: 'adapter', type: 'address' },
+      { name: 'routeData', type: 'bytes' }
+    ],
+    outputs: [{ type: 'uint256' }]
+  }
+];
+
 export function useEIP7702Swap() {
   const { address, chainId } = useAccount();
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
-  const { signTypedDataAsync } = useSignTypedData();
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [txHash, setTxHash] = useState(null);
 
   /**
-   * Get quote for EIP-7702 swap
+   * Get quote for swap
    */
   const getQuote = useCallback(async ({ tokenIn, tokenOut, amountIn }) => {
     try {
@@ -63,389 +110,206 @@ export function useEIP7702Swap() {
   }, [chainId]);
 
   /**
-   * Get user's current nonce
-   * Uses timestamp-based nonce for uniqueness
-   */
-  const getNonce = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/eip7702/nonce/${chainId}/${address}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to get nonce');
-      }
-
-      const data = await response.json();
-      
-      if (data.success && data.nonce) {
-        console.log('≡ƒôè Nonce from backend:', data.nonce, `(${data.type || 'unknown'})`);
-        return data.nonce;
-      }
-      
-      // Fallback: use timestamp
-      const timestampNonce = Math.floor(Date.now() / 1000).toString();
-      console.log('ΓÜá∩╕Å Using timestamp fallback nonce:', timestampNonce);
-      return timestampNonce;
-    } catch (err) {
-      console.error('Nonce error:', err);
-      // Fallback: use timestamp to ensure uniqueness
-      const timestampNonce = Math.floor(Date.now() / 1000).toString();
-      console.log('ΓÜá∩╕Å Error getting nonce, using timestamp:', timestampNonce);
-      return timestampNonce;
-    }
-  }, [chainId, address]);
-
-  /**
-   * Sign EIP-7702 authorization - Manual Implementation
-   * 
-   * Based on: https://hackmd.io/@nachomazzara/eip7702-almost-low-level-guide
-   * 
-   * We build the hash manually and use eth_sign (not personal_sign!)
-   * eth_sign does NOT add the Ethereum Signed Message prefix
-   */
-  const signAuthorization = useCallback(async (nonce) => {
-    try {
-      const delegateAddress = DELEGATE_ADDRESS[chainId];
-      if (!delegateAddress) {
-        throw new Error(`EIP-7702 not supported on chain ${chainId}`);
-      }
-
-      console.log('≡ƒô¥ Signing EIP-7702 authorization (manual)');
-      console.log('  User:', address);
-      console.log('  Chain ID:', chainId);
-      console.log('  Delegate:', delegateAddress);
-      console.log('  Nonce:', nonce);
-
-      if (!walletClient || !address) {
-        throw new Error('Wallet client or address not available');
-      }
-
-      // Build EIP-7702 authorization hash
-      // message_hash = keccak256(0x05 || RLP([chainId, address, nonce]))
-      const { keccak256, toRlp, toHex, concat } = await import('viem');
-      const { SigningKey } = await import('ethers');
-      
-      const rlpEncoded = toRlp([
-        toHex(BigInt(chainId)),
-        delegateAddress.toLowerCase(),
-        toHex(BigInt(nonce))
-      ]);
-      
-      const authHash = keccak256(concat(['0x05', rlpEncoded]));
-      
-      console.log('≡ƒô¥ EIP-7702 Authorization Hash:', authHash);
-      console.log('  RLP Encoded:', rlpEncoded);
-      
-      // Try eth_sign first (no prefix)
-      let signature;
-      try {
-        console.log('Trying eth_sign (no prefix)...');
-        signature = await walletClient.request({
-          method: 'eth_sign',
-          params: [address, authHash]
-        });
-        console.log('Γ£à Signed with eth_sign');
-      } catch (ethSignError) {
-        console.warn('eth_sign failed, trying personal_sign...');
-        // Fallback to personal_sign
-        // Note: This adds prefix, so signature recovery will be different
-        signature = await walletClient.request({
-          method: 'personal_sign',
-          params: [authHash, address]
-        });
-        console.log('Γ£à Signed with personal_sign (has prefix)');
-      }
-      
-      console.log('Γ£à Raw Signature:', signature);
-      
-      // Parse signature into r, s, v
-      const r = signature.slice(0, 66);
-      const s = '0x' + signature.slice(66, 130);
-      const v = parseInt(signature.slice(130, 132), 16);
-      
-      // For EIP-7702, we need yParity (0 or 1), not v (27 or 28)
-      let yParity = v >= 27 ? v - 27 : v;
-
-      console.log('Γ£à EIP-7702 authorization signed by USER!');
-      console.log('  r:', r);
-      console.log('  s:', s);
-      console.log('  v:', v);
-      console.log('  yParity:', yParity);
-
-      return {
-        chainId: chainId.toString(),
-        address: delegateAddress,
-        nonce: nonce.toString(),
-        yParity,
-        r,
-        s
-      };
-    } catch (err) {
-      console.error('Authorization signing error:', err);
-      throw err;
-    }
-  }, [chainId, address, walletClient]);
-
-  /**
-   * Sign EIP-2612 permit
-   */
-  const signPermit = useCallback(async ({ tokenAddress, amount }) => {
-    try {
-      const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour
-      const delegateAddress = DELEGATE_ADDRESS[chainId];
-
-      // Query permit nonce from token contract
-      let permitNonce = 0;
-      try {
-        if (publicClient) {
-          permitNonce = await publicClient.readContract({
-            address: tokenAddress,
-            abi: [{
-              "inputs": [{"name": "owner", "type": "address"}],
-              "name": "nonces",
-              "outputs": [{"name": "", "type": "uint256"}],
-              "stateMutability": "view",
-              "type": "function"
-            }],
-            functionName: 'nonces',
-            args: [address]
-          });
-          console.log('≡ƒôè Permit nonce from token:', permitNonce.toString());
-        }
-      } catch (err) {
-        console.warn('ΓÜá∩╕Å  Could not query permit nonce, using 0:', err.message);
-      }
-
-      // EIP-2612 permit structure
-      const permit = {
-        owner: address,
-        spender: delegateAddress,
-        value: amount.toString(),
-        nonce: permitNonce.toString(),
-        deadline
-      };
-
-      // Sign permit
-      const signature = await signTypedDataAsync({
-        domain: {
-          name: 'USD Coin', // Should be queried from token
-          version: '2', // USDC uses version 2
-          chainId: chainId,
-          verifyingContract: tokenAddress
-        },
-        types: {
-          Permit: [
-            { name: 'owner', type: 'address' },
-            { name: 'spender', type: 'address' },
-            { name: 'value', type: 'uint256' },
-            { name: 'nonce', type: 'uint256' },
-            { name: 'deadline', type: 'uint256' }
-          ]
-        },
-        primaryType: 'Permit',
-        message: permit
-      });
-
-      // Parse signature
-      const r = signature.slice(0, 66);
-      const s = '0x' + signature.slice(66, 130);
-      const v = parseInt(signature.slice(130, 132), 16);
-
-      return {
-        deadline,
-        v,
-        r,
-        s
-      };
-    } catch (err) {
-      console.error('Permit signing error:', err);
-      throw err;
-    }
-  }, [chainId, address, publicClient, signTypedDataAsync]);
-
-  /**
-   * Sign swap intent (EIP-712)
-   */
-  const signIntent = useCallback(async ({ tokenIn, tokenOut, amountIn, minAmountOut, nonce }) => {
-    try {
-      const delegateAddress = DELEGATE_ADDRESS[chainId];
-      const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour
-
-      const intent = {
-        user: address,
-        tokenIn,
-        tokenOut,
-        amountIn: amountIn.toString(),
-        minAmountOut: minAmountOut.toString(),
-        deadline,
-        nonce: nonce.toString(),
-        chainId: chainId.toString()
-      };
-
-      // Sign intent
-      const signature = await signTypedDataAsync({
-        domain: {
-          name: 'ZeroTollDelegate',
-          version: '1',
-          chainId: chainId,
-          verifyingContract: delegateAddress
-        },
-        types: {
-          SwapIntent: [
-            { name: 'user', type: 'address' },
-            { name: 'tokenIn', type: 'address' },
-            { name: 'tokenOut', type: 'address' },
-            { name: 'amountIn', type: 'uint256' },
-            { name: 'minAmountOut', type: 'uint256' },
-            { name: 'deadline', type: 'uint256' },
-            { name: 'nonce', type: 'uint256' },
-            { name: 'chainId', type: 'uint256' }
-          ]
-        },
-        primaryType: 'SwapIntent',
-        message: intent
-      });
-
-      return {
-        intent,
-        signature
-      };
-    } catch (err) {
-      console.error('Intent signing error:', err);
-      throw err;
-    }
-  }, [chainId, address, signTypedDataAsync]);
-
-  /**
    * Execute EIP-7702 gasless swap
    * 
-   * User signs authorization, relayer executes transaction
+   * THE CORRECT FLOW:
+   * 1. Sign authorization to delegate EOA to BatchExecutor contract
+   * 2. Build batch calls: [approve, swap]
+   * 3. Send transaction with authorizationList
+   * 4. BatchExecutor executes the calls on behalf of EOA
+   * 5. USDC is deducted from user's wallet
    */
   const executeSwap = useCallback(async ({ 
     tokenIn, 
     tokenOut, 
     amountIn, 
-    minAmountOut 
+    minAmountOut,
+    routerHub,
+    adapter,
+    routeData
   }) => {
     setLoading(true);
     setError(null);
     setTxHash(null);
 
     try {
+      if (!walletClient || !address) {
+        throw new Error('Wallet not connected');
+      }
+
+      const batchExecutor = BATCH_EXECUTOR_ADDRESS[chainId];
+      if (!batchExecutor) {
+        throw new Error(`EIP-7702 not supported on chain ${chainId}`);
+      }
+
+      console.log('🚀 Starting EIP-7702 Swap');
+      console.log('  User:', address);
+      console.log('  Chain:', chainId);
+      console.log('  BatchExecutor:', batchExecutor);
+
       // Step 1: Get quote
-      console.log('≡ƒôè Getting quote...');
+      console.log('\n📊 Getting quote...');
       const quote = await getQuote({ tokenIn, tokenOut, amountIn });
-      console.log('Quote:', quote);
+      console.log('  Quote:', quote);
 
-      // Step 2: Get nonce for authorization
-      console.log('≡ƒöó Getting nonce...');
-      const nonce = await getNonce();
-      console.log('Nonce:', nonce);
-
-      // Step 3: USER signs EIP-7702 authorization
-      console.log('Γ£ì∩╕Å  Signing EIP-7702 authorization...');
-      const authorization = await signAuthorization(nonce);
-      console.log('Authorization signed by USER');
-
-      // Step 4: Sign EIP-2612 permit
-      console.log('Γ£ì∩╕Å  Signing permit...');
-      const permit = await signPermit({ 
-        tokenAddress: tokenIn, 
-        amount: amountIn 
+      // Step 2: Sign authorization
+      console.log('\n✍️ Signing EIP-7702 authorization...');
+      const authorization = await signEip7702Authorization({
+        walletClient,
+        publicClient,
+        account: address,
+        chainId,
+        contractAddress: batchExecutor,
+        executor: 'self'
       });
-      console.log('Permit signed');
+      
+      console.log('✅ Authorization signed!');
+      console.log('  Contract:', authorization.address);
+      console.log('  Chain ID:', authorization.chainId);
+      console.log('  Nonce:', authorization.nonce);
 
-      // Step 5: Sign swap intent
-      console.log('Γ£ì∩╕Å  Signing intent...');
-      const { intent, signature: intentSignature } = await signIntent({
+      // Step 3: Build batch calls
+      console.log('\n🔨 Building batch calls...');
+      
+      // Call 1: Approve tokenIn to routerHub
+      const approveData = encodeFunctionData({
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [routerHub, amountIn]
+      });
+
+      // Call 2: Execute swap on routerHub
+      const deadline = Math.floor(Date.now() / 1000) + 600; // 10 minutes
+      const intent = {
+        user: address,
         tokenIn,
+        amtIn: amountIn,
         tokenOut,
-        amountIn,
-        minAmountOut,
-        nonce
-      });
-      console.log('Intent signed');
+        minOut: minAmountOut,
+        dstChainId: chainId,
+        deadline: BigInt(deadline),
+        feeToken: tokenIn,
+        feeMode: 1,
+        feeCapToken: parseUnits('0.01', 18),
+        routeHint: '0x',
+        nonce: BigInt(Date.now())
+      };
 
-      // Step 6: Execute swap via relayer
-      console.log('≡ƒÜÇ Executing swap...');
-      
-      const response = await fetch(`${API_URL}/api/eip7702/execute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chainId,
-          authorization,  // USER-signed authorization
-          permit,
-          intent,
-          intentSignature,
-          fee: quote.fee
-        })
+      const swapData = encodeFunctionData({
+        abi: ROUTER_HUB_ABI,
+        functionName: 'executeRoute',
+        args: [intent, adapter, routeData]
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Swap execution failed');
-      }
-
-      const result = await response.json();
-      console.log('Γ£à Swap executed:', result);
-
-      // Parse txHash from different response formats
-      let txHash = null;
-      let explorerUrl = null;
-      
-      if (result.txHash) {
-        txHash = result.txHash;
-        explorerUrl = result.explorerUrl;
-      } else if (result.data && result.data.txHash) {
-        txHash = result.data.txHash;
-        explorerUrl = result.data.explorerUrl;
-      } else if (result.output) {
-        // Parse from raw output string
-        const txHashMatch = result.output.match(/Transaction sent: (0x[a-fA-F0-9]{64})/);
-        if (txHashMatch) {
-          txHash = txHashMatch[1];
-          // Build explorer URL
-          if (chainId === 11155111) {
-            explorerUrl = `https://sepolia.etherscan.io/tx/${txHash}`;
-          } else if (chainId === 80002) {
-            explorerUrl = `https://amoy.polygonscan.com/tx/${txHash}`;
-          }
+      // Batch calls array
+      const calls = [
+        {
+          to: tokenIn,
+          value: 0n,
+          data: approveData
+        },
+        {
+          to: routerHub,
+          value: 0n,
+          data: swapData
         }
+      ];
+
+      console.log('  Call 1: Approve', formatUnits(amountIn, 6), 'USDC to RouterHub');
+      console.log('  Call 2: Execute swap');
+
+      // Step 4: Encode batch execution
+      // The BatchExecutor contract should have an execute(Call[] calls) function
+      const BATCH_EXECUTOR_ABI = [
+        {
+          name: 'execute',
+          type: 'function',
+          inputs: [
+            {
+              name: 'calls',
+              type: 'tuple[]',
+              components: [
+                { name: 'to', type: 'address' },
+                { name: 'value', type: 'uint256' },
+                { name: 'data', type: 'bytes' }
+              ]
+            }
+          ],
+          outputs: []
+        }
+      ];
+
+      const batchData = encodeFunctionData({
+        abi: BATCH_EXECUTOR_ABI,
+        functionName: 'execute',
+        args: [calls]
+      });
+
+      // Step 5: Send transaction with authorization
+      console.log('\n📤 Sending EIP-7702 transaction...');
+      
+      const hash = await walletClient.sendTransaction({
+        to: address, // Send to self (EOA)
+        data: batchData, // Execute batch calls
+        value: 0n,
+        authorizationList: [authorization] // Delegate to BatchExecutor
+      });
+
+      console.log('✅ Transaction sent:', hash);
+      setTxHash(hash);
+
+      // Step 6: Wait for confirmation
+      console.log('\n⏳ Waiting for confirmation...');
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      
+      console.log('✅ Transaction confirmed!');
+      console.log('  Block:', receipt.blockNumber);
+      console.log('  Status:', receipt.status);
+      console.log('  Gas used:', receipt.gasUsed.toString());
+
+      // Build explorer URL
+      let explorerUrl;
+      if (chainId === 11155111) {
+        explorerUrl = `https://sepolia.etherscan.io/tx/${hash}`;
+      } else if (chainId === 80002) {
+        explorerUrl = `https://amoy.polygonscan.com/tx/${hash}`;
       }
 
-      if (txHash) {
-        setTxHash(txHash);
-        console.log('≡ƒôè Transaction Hash:', txHash);
-        console.log('≡ƒöì Explorer:', explorerUrl);
-      }
+      console.log('  Explorer:', explorerUrl);
 
       return {
-        ...result,
-        txHash,
+        success: true,
+        txHash: hash,
         explorerUrl,
-        success: true
+        receipt
       };
+
     } catch (err) {
-      console.error('Swap error:', err);
-      setError(err.message);
+      console.error('❌ Swap error:', err);
+      const message = err?.message || 'Unknown EIP-7702 swap error.';
+
+      if (
+        message.includes('wallet_signAuthorization') ||
+        message.includes('authorization signing via JSON-RPC')
+      ) {
+        const guidance =
+          'This wallet does not expose the raw EIP-7702 authorization signing needed by ZeroToll custom EIP-7702. Use ZeroToll Gasless mode, or use an embedded/programmatic wallet such as Privy, Magic, Turnkey, or Para.';
+        setError(guidance);
+        throw new Error(guidance);
+      }
+
+      setError(message);
       throw err;
     } finally {
       setLoading(false);
     }
-  }, [
-    chainId,
-    getQuote,
-    getNonce,
-    signAuthorization,
-    signPermit,
-    signIntent
-  ]);
+  }, [chainId, address, walletClient, publicClient, getQuote]);
 
   /**
-   * Check if EIP-7702 is supported on current chain
+   * Check if EIP-7702 is supported
    */
   const isSupported = useCallback(() => {
-    return chainId && DELEGATE_ADDRESS[chainId] !== undefined;
+    return chainId && BATCH_EXECUTOR_ADDRESS[chainId] !== undefined;
   }, [chainId]);
 
   return {
@@ -455,7 +319,7 @@ export function useEIP7702Swap() {
     error,
     txHash,
     isSupported: isSupported(),
-    delegateAddress: DELEGATE_ADDRESS[chainId],
+    batchExecutor: BATCH_EXECUTOR_ADDRESS[chainId],
     gasSavings: '50%' // vs ERC-4337
   };
 }

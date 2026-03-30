@@ -73,7 +73,7 @@ Replace Pimlico's bundler and paymaster with our own self-hosted stack while mai
 
 ### Step 3: Configure & Start Infinitism Bundler ✅ DONE
 
-**Location:** `bundler-infinitism/`
+**Location:** `archive/vendor/bundler-infinitism/`
 
 **Tasks:**
 1. [x] Update `bundler.config.json` with correct settings ✅
@@ -112,7 +112,7 @@ Replace Pimlico's bundler and paymaster with our own self-hosted stack while mai
 
 ### Step 4: Update Policy Server ⬜
 
-**Location:** `backend/policy-server/server.js`
+**Location:** `backend/legacy/policy-server/server.js`
 
 **Tasks:**
 1. [ ] Add paymaster addresses to config
@@ -139,7 +139,7 @@ MAX_SWAPS_PER_HOUR=20
 
 ### Step 5: Create Self-Hosted Relayer ✅ DONE
 
-**New File:** `backend/self-hosted-relayer.mjs` ✅ CREATED
+**New File:** `backend/legacy/self-hosted-relayer.mjs` ✅ CREATED
 
 **Tasks:**
 1. [x] Create new relayer that uses Infinitism bundler instead of Pimlico
@@ -243,12 +243,12 @@ async function checkAndRefill(network) {
 | `packages/contracts/contracts/core/BasePaymaster.sol` | Exists | ✅ Already exists |
 | `packages/contracts/scripts/deploy-verifying-paymaster.js` | Create | ✅ Created |
 | `packages/contracts/scripts/fund-paymaster.js` | Create | ✅ Created |
-| `backend/self-hosted-relayer.mjs` | Create | ✅ Created (deprecated) |
+| `backend/legacy/self-hosted-relayer.mjs` | Create | ✅ Created (deprecated) |
 | `backend/phase2-relayer.mjs` | Create | ✅ Created (recommended) |
 | `backend/gas-tank-monitor.mjs` | Create | ✅ Created |
 | `.env.example` | Update | ✅ Updated with Phase 2 vars |
-| `backend/policy-server/server.js` | Update | ⬜ Pending |
-| `bundler-infinitism/bundler.config.json` | Update | ⬜ Pending |
+| `backend/legacy/policy-server/server.js` | Update | ⬜ Pending |
+| `archive/vendor/bundler-infinitism/bundler.config.json` | Update | ⬜ Pending |
 | `frontend/src/hooks/useIntentGasless.js` | Update | ✅ Updated |
 | `docs/CURRENT_CONTRACTS.md` | Update | ✅ Updated |
 | `.env` | Create | ✅ Created with paymaster addresses |

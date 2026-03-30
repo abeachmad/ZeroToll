@@ -65,23 +65,38 @@ Monthly profit:        $9,000
 ## 🚀 Quick Start
 
 ```bash
-# Start everything (MongoDB + Backend + Relayer + Frontend)
-./start-zerotoll.sh
+# Start official local stack (MongoDB + Backend + Relayer + Delegation API + Frontend)
+bash ./start-zerotoll.sh
 
 # Open: http://localhost:3000
 
 # Stop everything
-./stop-zerotoll.sh
+bash ./stop-zerotoll.sh
 ```
 
-### Services
+The same lifecycle commands are also available through the root `package.json`:
+
+- `npm run start:local`
+- `npm run status:local`
+- `npm run stop:local`
+
+### Official Local Runtime
+
+`bash ./start-zerotoll.sh` is the current canonical local entry point for this repo.
 
 | Service | Port | Description |
 |---------|------|-------------|
 | MongoDB | 27017 | Transaction history storage |
-| Python Backend | 8000 | API server, Pyth oracle quotes |
-| ZeroToll Relayer | 3002 | Self-Hosted Paymaster + fee calculation |
+| Python Backend | 8000 | FastAPI server for quotes, history, config, and EIP-7702 routes |
+| ZeroToll Relayer | 3002 | ERC-4337 / paymaster relayer and gasless execution |
+| Delegation API | 3003 | Delegation metadata and signing helpers |
 | Frontend | 3000 | React app |
+
+Support utilities now live under `scripts/`. Legacy utilities such as `archive/legacy-services/root-scripts/start-services.sh`, `backend/legacy/`, `archive/legacy-services/`, `archive/experiments/`, and `archive/vendor/` are still present in the repo, but they are not part of the official `start-zerotoll.sh` runtime path.
+
+Additional implementation notes and historical writeups now live under `docs/`, with older root-level notes archived in `docs/archive/root-notes/`.
+
+Two root-level sandbox frontends, `frontend-nextjs-broken/` and `frontend-cra-backup/`, are intentionally left as gitignored local-only directories. They are not part of the official repo structure or runtime path. See `docs/LOCAL_SANDBOXES.md`.
 
 ---
 
@@ -138,26 +153,26 @@ Monthly profit:        $9,000
 - **Pyth Oracle** for real-time price feeds
 - Full control over gas sponsorship (no third-party fees)
 
-### Phase 3: EIP-7702 Integration 🔵 PLANNED
+### Phase 3: Smart Wallet Compatibility 🔵 PLANNED
 
-**Goal**: Simpler gasless flow with EIP-7702 EOA delegation
+**Goal**: add wallet-native smart account UX and experimental custom EIP-7702 without replacing ZeroToll's ERC-4337 paymaster as the core gasless engine
 
-| Aspect | Current (ERC-4337) | EIP-7702 |
-|--------|-------------------|----------|
-| Gas cost | ~300,000 | ~150,000 (50% savings) |
-| Infrastructure | Bundler + EntryPoint + Paymaster | Just relayer |
-| User experience | "Upgrade to Smart Account" | Invisible |
-| Native token output | Complex | Built-in |
+| Mode | Role in product | Sponsor control |
+|------|-----------------|-----------------|
+| **ERC-4337 + ZeroToll Paymaster** | Primary ZeroToll gasless path | ✅ ZeroToll-controlled |
+| **Wallet-native smart account** | Optional batch UX for compatible wallets | ⚠️ Wallet-controlled |
+| **Custom EIP-7702 delegation** | Experimental path for embedded / programmatic wallets | ✅ Possible, wallet-dependent |
 
-**Key Features**:
-- EOA temporarily delegates to ZeroTollDelegate contract
-- No permanent smart account upgrade needed
-- Native token output (ERC20 → ETH/POL) built-in
-- 50% gas savings vs ERC-4337
+**Planned outcomes**:
+- keep ZeroToll-sponsored gasless on ERC-4337
+- support wallet-native batching where available
+- support custom EIP-7702 only on wallets that expose low-level authorization signing
+- avoid treating MetaMask-style smart accounts as equivalent to ZeroToll-sponsored gasless economics
 
-**Network Support**: ✅ Polygon Amoy, ✅ Ethereum Sepolia
+**Current compatibility target**: ✅ Ethereum Sepolia, ✅ Polygon Amoy
 
-📄 [Full Implementation Plan](./docs/EIP7702_IMPLEMENTATION_PLAN.md)
+📄 [ZeroToll Gasless Strategy](./docs/ZEROTOLL_GASLESS_STRATEGY.md)
+📄 [EIP-7702 Implementation Plan](./docs/EIP7702_IMPLEMENTATION_PLAN.md)
 
 ### Phase 4: Community Pool 🔵 PLANNED
 
@@ -214,7 +229,7 @@ Monthly profit:        $9,000
 | Frontend | React 18, Tailwind CSS, wagmi, viem |
 | Database | MongoDB 7.0 |
 | Oracles | Pyth Network (real-time prices) |
-| Account Abstraction | ERC-4337, EIP-7702 (Phase 3) |
+| Account Abstraction | ERC-4337 (primary), wallet-native smart accounts, optional custom EIP-7702 |
 | Networks | Polygon Amoy, Ethereum Sepolia |
 
 ---

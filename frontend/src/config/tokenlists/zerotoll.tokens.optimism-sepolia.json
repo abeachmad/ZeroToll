@@ -7,10 +7,14 @@
       "name": "Ethereum",
       "logo": "⭐",
       "address": "NATIVE",
-      "wrappedAddress": "0x4200000000000000000000000000000000000006",
       "decimals": 18,
       "isNative": true,
-      "feeModes": ["NATIVE", "INPUT", "OUTPUT"]
+      "feeModes": [
+        "NATIVE",
+        "INPUT",
+        "OUTPUT"
+      ],
+      "wrappedAddress": "0x4200000000000000000000000000000000000006"
     },
     {
       "symbol": "WETH",
@@ -19,7 +23,10 @@
       "address": "0x4200000000000000000000000000000000000006",
       "decimals": 18,
       "isNative": false,
-      "feeModes": ["INPUT", "OUTPUT"]
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
     },
     {
       "symbol": "USDC",
@@ -28,7 +35,11 @@
       "address": "0x5fd84259d66Cd46123540766Be93DFE6D43130D7",
       "decimals": 6,
       "isNative": false,
-      "feeModes": ["INPUT", "OUTPUT", "STABLE"]
+      "feeModes": [
+        "INPUT",
+        "OUTPUT",
+        "STABLE"
+      ]
     },
     {
       "symbol": "LINK",
@@ -37,7 +48,10 @@
       "address": "0xE4aB69C077896252FAFBD49EFD26B5D171A32410",
       "decimals": 18,
       "isNative": false,
-      "feeModes": ["INPUT", "OUTPUT"]
+      "feeModes": [
+        "INPUT",
+        "OUTPUT"
+      ]
     }
   ]
 }

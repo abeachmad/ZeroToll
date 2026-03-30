@@ -9,40 +9,14 @@ import {
   formatUnits
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { polygonAmoy, sepolia } from 'viem/chains';
 import { eip7702Actions } from 'viem/experimental';
 import dotenv from 'dotenv';
+import { getConfiguredChain } from './generated-config.mjs';
 
 dotenv.config();
 
 // Configuration
 const RELAYER_PRIVATE_KEY = process.env.RELAYER_PRIVATE_KEY;
-
-const DELEGATE_ADDRESS = {
-  80002: '0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C', // Amoy - Deployed!
-  11155111: '0xcFE005B2E0013e0FF8cB0569d9b103094d423B36' // Sepolia - Deployed!
-};
-
-// Multiple RPC endpoints for reliability (fallback if primary fails)
-const RPC_URLS = {
-  80002: [
-    process.env.AMOY_RPC_URL || 'https://rpc-amoy.polygon.technology',
-    'https://polygon-amoy.drpc.org',
-    'https://rpc.ankr.com/polygon_amoy'
-  ],
-  11155111: [
-    process.env.SEPOLIA_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com',
-    'https://rpc.sepolia.org',
-    'https://ethereum-sepolia.blockpi.network/v1/rpc/public',
-    'https://rpc.ankr.com/eth_sepolia'
-  ]
-};
-
-// Get primary RPC URL for a chain
-const RPC_URL = {
-  80002: RPC_URLS[80002][0],
-  11155111: RPC_URLS[11155111][0]
-};
 
 // ZeroTollDelegate ABI (minimal)
 const DELEGATE_ABI = [
@@ -93,7 +67,10 @@ const DELEGATE_ABI = [
  * Create wallet and public clients for a chain
  */
 async function createClients(chainId) {
-  const chain = chainId === 80002 ? polygonAmoy : sepolia;
+  const chainConfig = getConfiguredChain(chainId);
+  if (!chainConfig || !chainConfig.rpc) {
+    throw new Error(`Unsupported or unconfigured chain ${chainId}`);
+  }
   
   // Ensure private key has 0x prefix
   const privateKey = RELAYER_PRIVATE_KEY.startsWith('0x') 
@@ -107,13 +84,13 @@ async function createClients(chainId) {
   // No need to extend with eip7702Actions if it's causing issues
   const walletClient = createWalletClient({
     account: relayerAccount,
-    chain,
-    transport: http(RPC_URL[chainId])
+    chain: chainConfig.chain,
+    transport: http(chainConfig.rpc)
   });
   
   const publicClient = createPublicClient({
-    chain,
-    transport: http(RPC_URL[chainId])
+    chain: chainConfig.chain,
+    transport: http(chainConfig.rpc)
   });
   
   console.log('✅ Wallet client created (native EIP-7702 support in viem 2.31.4+)');
@@ -121,7 +98,8 @@ async function createClients(chainId) {
   return {
     walletClient,
     publicClient,
-    relayerAccount
+    relayerAccount,
+    chainConfig
   };
 }
 
@@ -150,13 +128,14 @@ export async function executeSwap7702(params) {
   console.log('Fee:', formatUnits(BigInt(fee), 6));
   
   // Get delegate address for this chain
-  const delegateAddress = DELEGATE_ADDRESS[chainId];
-  if (!delegateAddress || delegateAddress === '0x...') {
+  const configuredChain = getConfiguredChain(chainId);
+  const delegateAddress = configuredChain?.delegate;
+  if (!configuredChain || !delegateAddress) {
     throw new Error(`Delegate not deployed on chain ${chainId}`);
   }
   
   // Create clients with EIP-7702 support
-  const { walletClient, publicClient, relayerAccount } = await createClients(chainId);
+  const { walletClient, publicClient, relayerAccount, chainConfig } = await createClients(chainId);
   
   console.log('\nRelayer:', relayerAccount.address);
   console.log('Delegate:', delegateAddress);
@@ -252,9 +231,7 @@ export async function executeSwap7702(params) {
     console.log('Logs found:', receipt.logs.length);
   }
   
-  const explorerUrl = chainId === 80002 
-    ? `https://amoy.polygonscan.com/tx/${txHash}`
-    : `https://sepolia.etherscan.io/tx/${txHash}`;
+  const explorerUrl = chainConfig.explorerTx ? `${chainConfig.explorerTx}${txHash}` : null;
   
   return {
     success: receipt.status === 'success',
@@ -270,8 +247,9 @@ export async function executeSwap7702(params) {
  * Get user's current nonce from delegate contract
  */
 export async function getUserNonce(chainId, userAddress) {
-  const delegateAddress = DELEGATE_ADDRESS[chainId];
-  if (!delegateAddress || delegateAddress === '0x...') {
+  const chainConfig = getConfiguredChain(chainId);
+  const delegateAddress = chainConfig?.delegate;
+  if (!delegateAddress) {
     throw new Error(`Delegate not deployed on chain ${chainId}`);
   }
   
@@ -315,7 +293,7 @@ export async function calculateFee(chainId, tokenIn, amountIn) {
  */
 export async function healthCheck(chainId) {
   try {
-    const { publicClient, relayerAccount } = await createClients(chainId);
+    const { publicClient, relayerAccount, chainConfig } = await createClients(chainId);
     const balance = await publicClient.getBalance({ address: relayerAccount.address });
     
     return {
@@ -323,7 +301,7 @@ export async function healthCheck(chainId) {
       chainId,
       relayer: relayerAccount.address,
       balance: formatUnits(balance, 18),
-      delegate: DELEGATE_ADDRESS[chainId]
+      delegate: chainConfig.delegate
     };
   } catch (error) {
     return {

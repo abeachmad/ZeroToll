@@ -71,13 +71,10 @@ async function main() {
   console.log("\n" + "=".repeat(60));
   console.log("📝 UPDATE REQUIRED:");
   console.log("=".repeat(60));
-  console.log("\n1. Update backend/pimlico-v3-relayer.mjs:");
-  console.log(`   router: '${routerAddress}'`);
-  console.log("\n2. Update frontend/src/hooks/useIntentGasless.js:");
-  console.log(`   ${network === 'sepolia' ? '11155111' : '80002'}: '${routerAddress}'`);
-  console.log("\n3. Update frontend/src/config/contracts.json:");
-  console.log(`   "zeroTollRouter": "${routerAddress}"`);
-  console.log("\n4. Configure adapters:");
+  console.log("\n1. Update packages/shared-config/src/source-of-truth.json:");
+  console.log(`   zeroTollRouterV3 / zeroTollRouter: '${routerAddress}'`);
+  console.log("\n2. Run npm run sync:shared-config");
+  console.log("\n3. Configure adapters:");
   console.log(`   npx hardhat run scripts/configure-router-adapters.js --network ${network}`);
   console.log("=".repeat(60));
 

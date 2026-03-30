@@ -4,7 +4,6 @@ import { ArrowLeft, Droplets, Loader2, CheckCircle, Copy, ExternalLink } from 'l
 import { toast } from 'sonner';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import ConnectButton from '../components/ConnectButton';
-import contractsConfig from '../config/contracts.json';
 import sepoliaTokens from '../config/tokenlists/zerotoll.tokens.sepolia.json';
 import amoyTokens from '../config/tokenlists/zerotoll.tokens.amoy.json';
 

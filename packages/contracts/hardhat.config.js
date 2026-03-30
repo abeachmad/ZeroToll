@@ -1,15 +1,17 @@
+require('cofhe-hardhat-plugin');
 require('@nomicfoundation/hardhat-ethers');
 require('@nomicfoundation/hardhat-verify');
 require('dotenv').config();
 
 module.exports = {
   solidity: {
-    version: '0.8.24',
+    version: '0.8.25',
     settings: {
       optimizer: {
         enabled: true,
         runs: 200
       },
+      evmVersion: 'cancun',
       viaIR: true
     }
   },
@@ -64,5 +66,8 @@ module.exports = {
         }
       }
     ]
+  },
+  cofhe: {
+    logMocks: false
   }
 };

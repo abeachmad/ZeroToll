@@ -9,11 +9,17 @@ import subprocess
 import json
 import os
 from typing import Dict, Any
+from pathlib import Path
 
 router = APIRouter(prefix="/eip7702", tags=["eip7702"])
 
 # Path to the EIP-7702 relayer
 RELAYER_PATH = os.path.join(os.path.dirname(__file__), '..', 'eip7702-relayer.mjs')
+CHAIN_CONFIG_PATH = Path(__file__).resolve().parent.parent / 'chain_config.json'
+with open(CHAIN_CONFIG_PATH, 'r') as chain_config_handle:
+    CHAIN_CONFIG = {
+        int(chain_id): value for chain_id, value in json.load(chain_config_handle).items()
+    }
 
 # Pydantic models
 class QuoteRequest(BaseModel):
@@ -229,10 +235,9 @@ async def execute_swap(request: ExecuteRequest):
                 # Build explorer URL
                 explorer_url = ''
                 if 'txHash' in swap_result:
-                    if chain_id == 80002:
-                        explorer_url = f"https://amoy.polygonscan.com/tx/{swap_result['txHash']}"
-                    elif chain_id == 11155111:
-                        explorer_url = f"https://sepolia.etherscan.io/tx/{swap_result['txHash']}"
+                    explorer_tx = CHAIN_CONFIG.get(chain_id, {}).get('explorerTx')
+                    if explorer_tx:
+                        explorer_url = f"{explorer_tx}{swap_result['txHash']}"
                 
                 return {
                     'success': True,
@@ -268,6 +273,20 @@ async def get_info():
     Get EIP-7702 integration info
     GET /api/eip7702/info
     """
+    networks = {}
+    for chain_id, config in CHAIN_CONFIG.items():
+        delegate = config.get('delegate')
+        if not delegate:
+            continue
+
+        explorer_tx = config.get('explorerTx')
+        explorer_base = explorer_tx[:-4] if explorer_tx and explorer_tx.endswith('/tx/') else None
+        networks[str(chain_id)] = {
+            'name': config.get('name'),
+            'delegate': delegate,
+            'explorer': f'{explorer_base}/address/{delegate}' if explorer_base else None
+        }
+
     return {
         'success': True,
         'info': {
@@ -281,18 +300,7 @@ async def get_info():
                 'Atomic execution (no frontrunning)',
                 'Works with any EOA wallet'
             ],
-            'networks': {
-                '80002': {
-                    'name': 'Polygon Amoy',
-                    'delegate': '0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C',
-                    'explorer': 'https://amoy.polygonscan.com/address/0x5F43D1Fc4fAad0dFe097fc3bB32d66a9864c730C'
-                },
-                '11155111': {
-                    'name': 'Ethereum Sepolia',
-                    'delegate': '0xcFE005B2E0013e0FF8cB0569d9b103094d423B36',
-                    'explorer': 'https://sepolia.etherscan.io/address/0xcFE005B2E0013e0FF8cB0569d9b103094d423B36'
-                }
-            },
+            'networks': networks,
             'endpoints': {
                 'health': 'GET /api/eip7702/health/{chain_id}',
                 'nonce': 'GET /api/eip7702/nonce/{chain_id}/{address}',

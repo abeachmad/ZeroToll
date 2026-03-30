@@ -1,4 +1,11 @@
 {
+	"private": true,
+	"scripts": {
+		"start:local": "bash ./start-zerotoll.sh",
+		"status:local": "bash ./status-zerotoll.sh",
+		"stop:local": "bash ./stop-zerotoll.sh",
+		"sync:shared-config": "node packages/shared-config/scripts/generate.mjs"
+	},
 	"devDependencies": {
 		"@graphprotocol/graph-cli": "^0.98.1",
 		"@types/node": "^20.19.24"
