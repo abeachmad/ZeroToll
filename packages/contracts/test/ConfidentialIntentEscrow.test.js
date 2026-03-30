@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("ConfidentialIntentEscrow", function () {
-  let escrow, tokenIn, tokenOut, wrappedNative;
+  let escrow, tokenIn, tokenOut, wrappedNative, permit2;
   let owner, operator, user, feeRecipient, executionTarget;
 
   const AMOUNT_IN = ethers.parseUnits("100", 6);
@@ -14,12 +14,18 @@ describe("ConfidentialIntentEscrow", function () {
 
     const ERC20Mock = await ethers.getContractFactory("contracts/mocks/ERC20Mock.sol:ERC20Mock");
     const MockWrappedNative = await ethers.getContractFactory("MockWrappedNative");
+    const MockPermit2 = await ethers.getContractFactory("MockPermit2");
     tokenIn = await ERC20Mock.deploy("USDC", "USDC", 6);
     tokenOut = await ERC20Mock.deploy("zUSDC", "zUSDC", 6);
     wrappedNative = await MockWrappedNative.deploy("Wrapped Ether", "WETH");
+    permit2 = await MockPermit2.deploy();
 
     const ConfidentialIntentEscrow = await ethers.getContractFactory("ConfidentialIntentEscrow");
-    escrow = await ConfidentialIntentEscrow.deploy(feeRecipient.address, wrappedNative.target);
+    escrow = await ConfidentialIntentEscrow.deploy(
+      feeRecipient.address,
+      wrappedNative.target,
+      permit2.target
+    );
 
     await escrow.setTrustedOperator(operator.address, true);
 
@@ -38,6 +44,47 @@ describe("ConfidentialIntentEscrow", function () {
       chainId: 31337,
       encryptedMinOutCommitment: ethers.keccak256(ethers.toUtf8Bytes("enc-minout")),
     };
+  }
+
+  async function signErc2612Permit({
+    token,
+    ownerSigner,
+    spender,
+    value,
+    deadline,
+  }) {
+    const ownerAddress = await ownerSigner.getAddress();
+    const name = await token.name();
+    const nonce = await token.nonces(ownerAddress);
+    const { chainId } = await ethers.provider.getNetwork();
+
+    const domain = {
+      name,
+      version: "1",
+      chainId,
+      verifyingContract: await token.getAddress(),
+    };
+
+    const types = {
+      Permit: [
+        { name: "owner", type: "address" },
+        { name: "spender", type: "address" },
+        { name: "value", type: "uint256" },
+        { name: "nonce", type: "uint256" },
+        { name: "deadline", type: "uint256" },
+      ],
+    };
+
+    const values = {
+      owner: ownerAddress,
+      spender,
+      value,
+      nonce,
+      deadline,
+    };
+
+    const signature = await ownerSigner.signTypedData(domain, types, values);
+    return ethers.Signature.from(signature);
   }
 
   it("stores confidential intent and escrows input", async function () {
@@ -139,5 +186,70 @@ describe("ConfidentialIntentEscrow", function () {
 
     const summary = await escrow.getSettlementSummary(intentId);
     expect(summary.stage).to.equal(7n); // Cancelled
+  });
+
+  it("submits through Permit2 without upfront ERC20 approval", async function () {
+    const intent = buildIntent();
+    await tokenIn.connect(user).approve(escrow.target, 0n);
+
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+    const permitSingle = {
+      details: {
+        token: tokenIn.target,
+        amount: AMOUNT_IN,
+        expiration: deadline,
+        nonce: 0,
+      },
+      spender: escrow.target,
+      sigDeadline: deadline,
+    };
+
+    await escrow.connect(operator).submitIntentWithPermit2ForTesting(
+      intent,
+      123n,
+      false,
+      permitSingle,
+      "0x1234"
+    );
+
+    expect(await tokenIn.balanceOf(escrow.target)).to.equal(AMOUNT_IN);
+    const intentId = await escrow.getIntentId(intent);
+    const summary = await escrow.getSettlementSummary(intentId);
+    expect(summary.stage).to.equal(1n);
+  });
+
+  it("submits through ERC-2612 permit without upfront approval", async function () {
+    const MockERC20Permit = await ethers.getContractFactory("MockERC20Permit");
+    const permitToken = await MockERC20Permit.deploy("Permit USDC", "pUSDC", 6);
+    const permitAmount = ethers.parseUnits("50", 6);
+    await permitToken.mint(user.address, permitAmount);
+
+    const intent = buildIntent();
+    intent.tokenIn = permitToken.target;
+    intent.amountIn = permitAmount;
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+    const permitSignature = await signErc2612Permit({
+      token: permitToken,
+      ownerSigner: user,
+      spender: escrow.target,
+      value: permitAmount,
+      deadline,
+    });
+
+    await escrow.connect(operator).submitIntentWithPermitForTesting(
+      intent,
+      123n,
+      false,
+      deadline,
+      permitSignature.v,
+      permitSignature.r,
+      permitSignature.s
+    );
+
+    expect(await permitToken.balanceOf(escrow.target)).to.equal(permitAmount);
+    const intentId = await escrow.getIntentId(intent);
+    const summary = await escrow.getSettlementSummary(intentId);
+    expect(summary.stage).to.equal(1n);
   });
 });

@@ -1,0 +1,12 @@
+{
+  "network": "sepolia",
+  "networkKey": "sepolia",
+  "chainId": 11155111,
+  "deployedAt": "2026-03-30T17:46:00.834Z",
+  "deployer": "0x330A86eE67bA0Da0043EaD201866A32d362C394c",
+  "feeRecipient": "0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130",
+  "wrappedNativeToken": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+  "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+  "confidentialIntentEscrow": "0xF85F5f45dc1fDC63379d1C10B7EA5cc194cFFbe1",
+  "trustedOperator": "0x330A86eE67bA0Da0043EaD201866A32d362C394c"
+}

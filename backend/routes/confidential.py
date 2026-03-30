@@ -26,10 +26,13 @@ from confidential_contract import (
     execute_adapter_backed_execution,
     finalize_confidential_settlement,
     get_confidential_contract_client,
+    get_operator_inventory_status,
     get_settlement_summary,
     get_verdict_status,
     probe_live_adapter_execution,
     simulate_inventory_backed_execution,
+    submit_intent_with_permit2_min_out,
+    submit_intent_with_permit_min_out,
     submit_intent_with_plaintext_min_out,
 )
 from pyth_rest_oracle import pyth_oracle
@@ -39,9 +42,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/confidential", tags=["confidential"])
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-CHAIN_CONFIG_PATH = ROOT_DIR / "chain_config.json"
-TOKEN_ADDRESSES_PATH = ROOT_DIR / "token_addresses.json"
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BACKEND_DIR.parent
+CHAIN_CONFIG_PATH = BACKEND_DIR / "chain_config.json"
+TOKEN_ADDRESSES_PATH = BACKEND_DIR / "token_addresses.json"
+CONFIDENTIAL_INTENTS_PATH = PROJECT_ROOT / ".pids" / "confidential_intents.json"
+LEGACY_CONFIDENTIAL_INTENTS_PATH = BACKEND_DIR / ".pids" / "confidential_intents.json"
 with open(CHAIN_CONFIG_PATH, "r") as chain_config_handle:
     CHAIN_CONFIG = {
         int(chain_id): value for chain_id, value in json.load(chain_config_handle).items()
@@ -57,9 +63,6 @@ SUPPORTED_CHAINS = {
     if config.get("features", {}).get("gasless")
 }
 COFHE_BROWSER_CHAINS = {11155111}
-
-CONFIDENTIAL_INTENTS: Dict[str, Dict[str, Any]] = {}
-
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -204,8 +207,74 @@ def _serialize(intent: Dict[str, Any]) -> Dict[str, Any]:
     return serialized
 
 
+def _deserialize(document: Dict[str, Any]) -> Dict[str, Any]:
+    restored = dict(document)
+    for field_name in ("createdAt", "updatedAt", "decryptionReadyAt", "finalizedAt"):
+        value = restored.get(field_name)
+        if isinstance(value, str):
+            restored[field_name] = datetime.fromisoformat(value)
+    return restored
+
+
+def _load_intents_from_disk() -> Dict[str, Dict[str, Any]]:
+    source_path = CONFIDENTIAL_INTENTS_PATH
+    loaded_from_legacy = False
+    if not source_path.exists() and LEGACY_CONFIDENTIAL_INTENTS_PATH.exists():
+        source_path = LEGACY_CONFIDENTIAL_INTENTS_PATH
+        loaded_from_legacy = True
+
+    if not source_path.exists():
+        return {}
+
+    try:
+        payload = json.loads(source_path.read_text())
+    except Exception as exc:
+        logger.warning("Failed to load confidential intent cache from disk: %s", exc)
+        return {}
+
+    if not isinstance(payload, dict):
+        return {}
+
+    restored: Dict[str, Dict[str, Any]] = {}
+    for intent_id, intent in payload.items():
+        if isinstance(intent, dict):
+            restored[intent_id] = _deserialize(intent)
+
+    if loaded_from_legacy:
+        try:
+            CONFIDENTIAL_INTENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            CONFIDENTIAL_INTENTS_PATH.write_text(json.dumps(payload, indent=2))
+            LEGACY_CONFIDENTIAL_INTENTS_PATH.unlink(missing_ok=True)
+        except Exception as exc:
+            logger.warning("Failed to migrate legacy confidential intent cache: %s", exc)
+
+    return restored
+
+
+def _persist_intents_to_disk() -> None:
+    try:
+        CONFIDENTIAL_INTENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        serialized = {
+            intent_id: _serialize(intent)
+            for intent_id, intent in CONFIDENTIAL_INTENTS.items()
+        }
+        CONFIDENTIAL_INTENTS_PATH.write_text(json.dumps(serialized, indent=2))
+        if LEGACY_CONFIDENTIAL_INTENTS_PATH.exists():
+            try:
+                LEGACY_CONFIDENTIAL_INTENTS_PATH.unlink()
+            except Exception:
+                # Keep the new canonical cache even if legacy cleanup fails.
+                pass
+    except Exception as exc:
+        logger.warning("Failed to write confidential intent cache to disk: %s", exc)
+
+
+CONFIDENTIAL_INTENTS: Dict[str, Dict[str, Any]] = _load_intents_from_disk()
+
+
 async def _persist_intent(request: Request, intent: Dict[str, Any]) -> None:
     CONFIDENTIAL_INTENTS[intent["intentId"]] = intent
+    _persist_intents_to_disk()
 
     db = getattr(request.app.state, "db", None)
     if db is None:
@@ -226,6 +295,12 @@ async def _load_intent(request: Request, intent_id: str) -> Optional[Dict[str, A
     if intent:
         return intent
 
+    disk_intents = _load_intents_from_disk()
+    disk_intent = disk_intents.get(intent_id)
+    if disk_intent:
+        CONFIDENTIAL_INTENTS[intent_id] = disk_intent
+        return disk_intent
+
     db = getattr(request.app.state, "db", None)
     if db is None:
         return None
@@ -234,13 +309,10 @@ async def _load_intent(request: Request, intent_id: str) -> Optional[Dict[str, A
     if not document:
         return None
 
-    for field_name in ("createdAt", "updatedAt", "decryptionReadyAt", "finalizedAt"):
-        value = document.get(field_name)
-        if isinstance(value, str):
-            document[field_name] = datetime.fromisoformat(value)
-
-    CONFIDENTIAL_INTENTS[intent_id] = document
-    return document
+    restored = _deserialize(document)
+    CONFIDENTIAL_INTENTS[intent_id] = restored
+    _persist_intents_to_disk()
+    return restored
 
 
 def _refresh_transient_status(intent: Dict[str, Any]) -> None:
@@ -260,6 +332,97 @@ def _refresh_transient_status(intent: Dict[str, Any]) -> None:
         intent["updatedAt"] = _utc_now()
 
 
+def _sync_record_from_contract_state(record: Dict[str, Any], contract_state: Dict[str, Any]) -> bool:
+    settlement = contract_state.get("settlement") or {}
+    verdict_status = contract_state.get("verdictStatus") or {}
+    settlement_stage = settlement.get("stage")
+    if not settlement_stage or settlement_stage == "none":
+        return False
+
+    changed = False
+    now = _utc_now()
+
+    if settlement.get("grossAmountOut") and settlement.get("grossAmountOut") != "0":
+        current_execution = record.get("execution") or {}
+        next_execution = {
+            **current_execution,
+            "grossAmountOut": settlement.get("grossAmountOut"),
+            "estimatedFeeToken": settlement.get("feeAmount"),
+            "simulatedVerdict": None,
+            "verdictSource": "onchain_fhenix_demo",
+        }
+        if current_execution != next_execution:
+            record["execution"] = next_execution
+            changed = True
+
+    if settlement_stage in {"executing", "executed"}:
+        if record.get("stage") not in {"executing", "decryption_requested", "ready_to_finalize", "finalized_success", "refunded"}:
+            record["stage"] = "executing"
+            record["status"] = "executing"
+            record["statusMessage"] = "Sponsored execution is in progress on the confidential escrow path."
+            record["updatedAt"] = now
+            changed = True
+        return changed
+
+    if settlement_stage == "decryption_requested":
+        next_stage = "ready_to_finalize" if verdict_status.get("decrypted") else "decryption_requested"
+        next_message = (
+            "On-chain decryption verdict is ready. Finalize the confidential settlement now."
+            if verdict_status.get("decrypted")
+            else _describe_live_execution(record.get("enforcementMode", "cross_token_inventory_live_demo"))
+        )
+        if record.get("stage") != next_stage or record.get("statusMessage") != next_message or record.get("decryptionReady") != bool(verdict_status.get("decrypted")):
+            record["stage"] = next_stage
+            record["status"] = next_stage
+            record["statusMessage"] = next_message
+            record["decryptionReady"] = bool(verdict_status.get("decrypted"))
+            record["updatedAt"] = now
+            changed = True
+        return changed
+
+    if settlement_stage == "finalized_success":
+        delivered_as = (
+            CHAIN_CONFIG.get(record["dstChainId"], {}).get("nativeSymbol")
+            if record.get("requestedTokenOutIsNative")
+            else record.get("requestedTokenOutSymbol")
+        )
+        next_result = {
+            "verdict": True,
+            "verdictSource": "onchain_fhenix_demo",
+            "finalizeTxHash": record.get("result", {}).get("finalizeTxHash"),
+            "deliveredAs": delivered_as,
+        }
+        if record.get("stage") != "finalized_success" or record.get("result") != next_result:
+            record["stage"] = "finalized_success"
+            record["status"] = "finalized_success"
+            record["statusMessage"] = _describe_live_execution(record.get("enforcementMode", "cross_token_inventory_live_demo"), finalized=True)
+            record["decryptionReady"] = True
+            record["finalizedAt"] = record.get("finalizedAt") or now
+            record["updatedAt"] = now
+            record["result"] = next_result
+            changed = True
+        return changed
+
+    if settlement_stage == "finalized_refunded":
+        next_result = {
+            "verdict": False,
+            "verdictSource": "onchain_fhenix_demo",
+            "finalizeTxHash": record.get("result", {}).get("finalizeTxHash"),
+            "deliveredAs": record.get("requestedTokenOutSymbol"),
+        }
+        if record.get("stage") != "refunded" or record.get("result") != next_result:
+            record["stage"] = "refunded"
+            record["status"] = "refunded"
+            record["statusMessage"] = _describe_live_execution(record.get("enforcementMode", "cross_token_inventory_live_demo"), finalized=False)
+            record["decryptionReady"] = True
+            record["finalizedAt"] = record.get("finalizedAt") or now
+            record["updatedAt"] = now
+            record["result"] = next_result
+            changed = True
+
+    return changed
+
+
 def _is_ztoken_symbol(symbol: Optional[str]) -> bool:
     return bool(symbol and symbol.lower().startswith("z"))
 
@@ -267,6 +430,7 @@ def _is_ztoken_symbol(symbol: Optional[str]) -> bool:
 def _select_live_execution_adapter(intent: Dict[str, Any]) -> Optional[Dict[str, str]]:
     chain_config = CHAIN_CONFIG.get(intent["srcChainId"], {})
     adapters = chain_config.get("adapters", {})
+    smart_dex_adapter = chain_config.get("smartDexAdapter")
     token_in_symbol = intent.get("tokenInSymbol")
     token_out_symbol = intent.get("tokenOutSymbol")
 
@@ -277,17 +441,24 @@ def _select_live_execution_adapter(intent: Dict[str, Any]) -> Optional[Dict[str,
                 "address": adapter_address,
                 "kind": "zeroToll",
                 "label": "ZeroTollAdapter",
-                "mode": "cross_token_ztoken_adapter_live_demo",
+                "mode": "cross_token_ztoken_adapter_live",
             }
 
     if not _is_ztoken_symbol(token_in_symbol) and not _is_ztoken_symbol(token_out_symbol):
+        if smart_dex_adapter:
+            return {
+                "address": smart_dex_adapter,
+                "kind": "smartDex",
+                "label": "SmartDexAdapter",
+                "mode": "cross_token_smartdex_adapter_live",
+            }
         adapter_address = adapters.get("mockDex")
         if adapter_address:
             return {
                 "address": adapter_address,
                 "kind": "mockDex",
                 "label": "MockDEXAdapter",
-                "mode": "cross_token_adapter_live_demo",
+                "mode": "cross_token_mockdex_adapter_demo",
             }
 
     return None
@@ -297,26 +468,32 @@ def _describe_live_execution(mode: str, finalized: Optional[bool] = None) -> str
     if finalized is None:
         if mode == "same_token_live_escrow_demo":
             return "Live same-token confidential demo executed on escrow. Waiting for on-chain decryption readiness."
-        if mode == "cross_token_ztoken_adapter_live_demo":
+        if mode == "cross_token_ztoken_adapter_live":
             return "Live zToken confidential execution routed through ZeroTollAdapter. Waiting for on-chain decryption readiness."
-        if mode == "cross_token_adapter_live_demo":
+        if mode == "cross_token_smartdex_adapter_live":
+            return "Live confidential execution routed through SmartDexAdapter. Waiting for on-chain decryption readiness."
+        if mode == "cross_token_mockdex_adapter_demo":
             return "Live confidential execution routed through MockDEXAdapter demo liquidity. This path is on-chain, but the venue is still a mocked market. Waiting for on-chain decryption readiness."
         return "Live cross-token inventory-backed confidential demo executed on escrow. Waiting for on-chain decryption readiness."
 
     if finalized:
         if mode == "same_token_live_escrow_demo":
             return "Live same-token confidential settlement finalized on escrow."
-        if mode == "cross_token_ztoken_adapter_live_demo":
+        if mode == "cross_token_ztoken_adapter_live":
             return "Live zToken confidential settlement finalized through ZeroTollAdapter."
-        if mode == "cross_token_adapter_live_demo":
+        if mode == "cross_token_smartdex_adapter_live":
+            return "Live confidential settlement finalized through SmartDexAdapter."
+        if mode == "cross_token_mockdex_adapter_demo":
             return "Live confidential settlement finalized through MockDEXAdapter demo liquidity. This was an on-chain demo path, not a production market venue."
         return "Live cross-token inventory-backed confidential settlement finalized on escrow."
 
     if mode == "same_token_live_escrow_demo":
         return "Live same-token confidential settlement refunded on escrow."
-    if mode == "cross_token_ztoken_adapter_live_demo":
+    if mode == "cross_token_ztoken_adapter_live":
         return "Live zToken confidential settlement refunded after ZeroTollAdapter execution."
-    if mode == "cross_token_adapter_live_demo":
+    if mode == "cross_token_smartdex_adapter_live":
+        return "Live confidential settlement refunded after SmartDexAdapter execution."
+    if mode == "cross_token_mockdex_adapter_demo":
         return "Live confidential settlement refunded after MockDEXAdapter demo execution."
     return "Live cross-token inventory-backed confidential settlement refunded on escrow."
 
@@ -367,6 +544,7 @@ def _build_live_adapter_hint(
     token_in_symbol: str,
     token_out_symbol: str,
     amount_in: float,
+    expected_output_hint: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
     if not (_is_address(token_in_address or "") and _is_address(token_out_address or "")):
         return None
@@ -378,11 +556,43 @@ def _build_live_adapter_hint(
             "tokenOutSymbol": token_out_symbol,
         }
     )
+    amount_in_units = _decimal_to_units(amount_in, _token_decimals(chain_id, token_in_address))
+    expected_output_hint_units = (
+        _decimal_to_units(expected_output_hint, _token_decimals(chain_id, token_out_address))
+        if expected_output_hint and expected_output_hint > 0
+        else 0
+    )
+
     if not direct_adapter:
-        return None
+        inventory_status = get_operator_inventory_status(chain_id, token_out_address)
+        if not inventory_status:
+            return None
+
+        available_units = int(inventory_status.get("balance") or 0)
+        return {
+            "ready": available_units >= expected_output_hint_units > 0,
+            "mode": "cross_token_inventory_live_demo",
+            "adapter": "InventoryOperator",
+            "expectedOutputUnits": str(expected_output_hint_units),
+            "expectedOutput": _units_to_decimal(
+                expected_output_hint_units,
+                _token_decimals(chain_id, token_out_address),
+            ),
+            "operatorInventoryBalanceUnits": str(available_units),
+            "operatorInventoryBalance": _units_to_decimal(
+                available_units,
+                int(inventory_status.get("decimals") or _token_decimals(chain_id, token_out_address)),
+            ),
+            "operator": inventory_status.get("operator"),
+            "quoteSource": "oracle_inventory_demo",
+            "reason": (
+                None
+                if available_units >= expected_output_hint_units > 0
+                else "Operator inventory is currently below the quoted confidential tokenOut requirement for this mixed-pair demo path."
+            ),
+        }
 
     try:
-        amount_in_units = _decimal_to_units(amount_in, _token_decimals(chain_id, token_in_address))
         preflight = probe_live_adapter_execution(
             chain_id=chain_id,
             adapter_address=direct_adapter["address"],
@@ -390,6 +600,7 @@ def _build_live_adapter_hint(
             token_in_address=token_in_address,
             token_out_address=token_out_address,
             amount_in_units=amount_in_units,
+            expected_output_hint=expected_output_hint_units,
         )
     except Exception as exc:
         logger.warning(
@@ -414,6 +625,7 @@ def _build_live_adapter_hint(
         "expectedOutputUnits": str(expected_output_units),
         "expectedOutput": _units_to_decimal(expected_output_units, token_out_decimals),
         "adapterOutputBalanceUnits": preflight.get("adapterOutputBalance"),
+        "quoteSource": preflight.get("quoteSource"),
         "reason": preflight.get("reason"),
     }
 
@@ -451,6 +663,7 @@ def _build_quote(
         token_in_symbol=token_in_symbol,
         token_out_symbol=execution_token_out_symbol,
         amount_in=amount_in,
+        expected_output_hint=gross_out,
     )
 
     if live_adapter_hint and live_adapter_hint.get("ready") and live_adapter_hint.get("expectedOutput", 0) > 0:
@@ -564,6 +777,10 @@ class ConfidentialSubmitRequest(BaseModel):
     clientEncryptionMode: str = "commitment_only_scaffold"
     clientGuardrailBps: int = 9500
     plaintextMinOutForTesting: Optional[str] = None
+    permitType: Optional[str] = None
+    permitSingle: Optional[Dict[str, Any]] = None
+    permit2Signature: Optional[str] = None
+    permit: Optional[Dict[str, Any]] = None
 
     @field_validator("user")
     @classmethod
@@ -614,6 +831,16 @@ class ConfidentialSubmitRequest(BaseModel):
         if _coerce_float(value) <= 0:
             raise ValueError("plaintextMinOutForTesting must be positive")
         return value
+
+    @field_validator("permitType")
+    @classmethod
+    def validate_optional_permit_type(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        normalized = value.lower()
+        if normalized not in {"permit2", "erc2612"}:
+            raise ValueError("permitType must be permit2 or erc2612")
+        return normalized
 
     @field_validator("encryptedMinOutCommitment")
     @classmethod
@@ -709,6 +936,7 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
         if _coerce_float(estimated_fee_token) > 0
         else "0"
     )
+    funding_mode = "approval"
 
     if contract_state["submissionReady"] and payload.plaintextMinOutForTesting:
         intent_payload = {
@@ -722,15 +950,62 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
             "encryptedMinOutCommitment": payload.encryptedMinOutCommitment,
         }
         try:
-            onchain_submit = submit_intent_with_plaintext_min_out(
-                payload.srcChainId,
-                intent_payload,
-                int(payload.plaintextMinOutForTesting),
-                requested_native_output,
-            )
-            enforcement_mode = "onchain_submit_plaintext_testing_helper"
+            if payload.permitType == "permit2" and payload.permitSingle and payload.permit2Signature:
+                onchain_submit = submit_intent_with_permit2_min_out(
+                    payload.srcChainId,
+                    intent_payload,
+                    int(payload.plaintextMinOutForTesting),
+                    payload.permitSingle,
+                    payload.permit2Signature,
+                    requested_native_output,
+                )
+                enforcement_mode = "onchain_submit_permit2_testing_helper"
+                funding_mode = "permit2"
+            elif payload.permitType == "erc2612" and payload.permit:
+                onchain_submit = submit_intent_with_permit_min_out(
+                    payload.srcChainId,
+                    intent_payload,
+                    int(payload.plaintextMinOutForTesting),
+                    payload.permit,
+                    requested_native_output,
+                )
+                enforcement_mode = "onchain_submit_erc2612_testing_helper"
+                funding_mode = "erc2612"
+            else:
+                onchain_submit = submit_intent_with_plaintext_min_out(
+                    payload.srcChainId,
+                    intent_payload,
+                    int(payload.plaintextMinOutForTesting),
+                    requested_native_output,
+                )
+                enforcement_mode = "onchain_submit_plaintext_testing_helper"
         except Exception as exc:
             error_message = str(exc)
+            if "0x756688fe" in error_message.lower() or "invalidnonce" in error_message.lower():
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "On-chain confidential submit failed because the Permit2 nonce is stale for "
+                        "the escrow spender. Sign a fresh Permit2 spending authorization and retry."
+                    ),
+                ) from exc
+            if "permit2" in error_message.lower():
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "On-chain confidential submit failed because the Permit2 authorization "
+                        "was rejected, expired, or did not match the escrow spender. "
+                        "Sign a fresh Permit2 payload and retry."
+                    ),
+                ) from exc
+            if "permit" in error_message.lower():
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "On-chain confidential submit failed because the ERC-2612 permit "
+                        "was rejected or expired. Sign a fresh permit payload and retry."
+                    ),
+                ) from exc
             if "allowance" in error_message.lower() or "transfer amount" in error_message.lower():
                 raise HTTPException(
                     status_code=409,
@@ -779,6 +1054,7 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
         "clientEncryptionMode": payload.clientEncryptionMode,
         "clientGuardrailBps": payload.clientGuardrailBps,
         "plaintextMinOutForTesting": payload.plaintextMinOutForTesting,
+        "fundingMode": funding_mode,
         "enforcementMode": enforcement_mode,
         "createdAt": now,
         "updatedAt": now,
@@ -801,6 +1077,7 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
         "contract": {
             **_get_contract_state(payload.srcChainId, onchain_submit["contractIntentId"] if onchain_submit else None),
             "submission": onchain_submit,
+            "fundingMode": funding_mode,
         },
         "privacy": {
             "clientEncryptionMode": record["clientEncryptionMode"],
@@ -820,6 +1097,24 @@ async def execute_confidential_intent(payload: ConfidentialExecuteRequest, reque
     record = await _load_intent(request, payload.intentId)
     if not record:
         raise HTTPException(status_code=404, detail="Confidential intent not found")
+
+    if record.get("contractRef"):
+        contract_state = _get_contract_state(
+            record["srcChainId"],
+            record.get("contractRef", {}).get("contractIntentId"),
+        )
+        if _sync_record_from_contract_state(record, contract_state):
+            await _persist_intent(request, record)
+
+    if record["stage"] in {"ready_to_finalize", "finalized_success", "refunded"}:
+        return {
+            "success": True,
+            "intentId": record["intentId"],
+            "stage": record["stage"],
+            "statusMessage": record["statusMessage"],
+            "execution": record.get("execution"),
+            "result": record.get("result"),
+        }
 
     if record["stage"] not in {"submitted", "submitted_onchain", "executing"}:
         raise HTTPException(
@@ -856,11 +1151,24 @@ async def execute_confidential_intent(payload: ConfidentialExecuteRequest, reque
                     deadline=int(record["deadline"]),
                     estimated_fee_amount=fee_units,
                     plaintext_min_out=int(record.get("plaintextMinOutForTesting") or 0),
+                    expected_output_hint=gross_amount_out_units,
                 )
                 live_mode = direct_adapter["mode"]
             except Exception as exc:
                 status_code = 502
                 error_message = str(exc)
+                if "Invalid stage" in error_message:
+                    contract_state = _get_contract_state(record["srcChainId"], contract_intent_id)
+                    if _sync_record_from_contract_state(record, contract_state):
+                        await _persist_intent(request, record)
+                        return {
+                            "success": True,
+                            "intentId": record["intentId"],
+                            "stage": record["stage"],
+                            "statusMessage": record["statusMessage"],
+                            "execution": record.get("execution"),
+                            "result": record.get("result"),
+                        }
                 if "cannot satisfy the confidential minimum output" in error_message:
                     status_code = 409
                 raise HTTPException(
@@ -884,9 +1192,30 @@ async def execute_confidential_intent(payload: ConfidentialExecuteRequest, reque
                     else "cross_token_inventory_live_demo"
                 )
             except Exception as exc:
+                error_message = str(exc)
+                if "Invalid stage" in error_message:
+                    contract_state = _get_contract_state(record["srcChainId"], contract_intent_id)
+                    if _sync_record_from_contract_state(record, contract_state):
+                        await _persist_intent(request, record)
+                        return {
+                            "success": True,
+                            "intentId": record["intentId"],
+                            "stage": record["stage"],
+                            "statusMessage": record["statusMessage"],
+                            "execution": record.get("execution"),
+                            "result": record.get("result"),
+                        }
+                if "Insufficient operator inventory" in error_message:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "On-chain confidential execution is currently using the inventory-backed mixed-pair demo path, "
+                            f"but operator inventory is insufficient. {error_message}"
+                        ),
+                    ) from exc
                 raise HTTPException(
                     status_code=502,
-                    detail=f"On-chain confidential execution failed: {exc}",
+                    detail=f"On-chain confidential execution failed: {error_message}",
                 ) from exc
 
         now = _utc_now()
@@ -949,7 +1278,30 @@ async def finalize_confidential_intent(payload: ConfidentialFinalizeRequest, req
     if not record:
         raise HTTPException(status_code=404, detail="Confidential intent not found")
 
+    if record.get("contractRef"):
+        contract_state = _get_contract_state(
+            record["srcChainId"],
+            record.get("contractRef", {}).get("contractIntentId"),
+        )
+        if _sync_record_from_contract_state(record, contract_state):
+            await _persist_intent(request, record)
+
     _refresh_transient_status(record)
+
+    if record.get("stage") in {"finalized_success", "refunded"}:
+        return {
+            "success": True,
+            "intentId": record["intentId"],
+            "stage": record["stage"],
+            "statusMessage": record.get("statusMessage"),
+            "result": record.get("result"),
+            "delivery": {
+                "mode": record.get("deliveryMode", "erc20_transfer"),
+                "requestedTokenOutSymbol": record.get("requestedTokenOutSymbol", record.get("tokenOutSymbol")),
+                "executionTokenOutSymbol": record.get("tokenOutSymbol"),
+                "willUnwrapNative": record.get("requestedTokenOutIsNative", False),
+            },
+        }
 
     if _live_escrow_demo_eligible(record):
         contract_intent_id = record["contractRef"]["contractIntentId"]
@@ -966,8 +1318,9 @@ async def finalize_confidential_intent(payload: ConfidentialFinalizeRequest, req
         if (
             verdict_status.get("verdict") is False
             and enforcement_mode in {
-                "cross_token_ztoken_adapter_live_demo",
-                "cross_token_adapter_live_demo",
+                "cross_token_ztoken_adapter_live",
+                "cross_token_smartdex_adapter_live",
+                "cross_token_mockdex_adapter_demo",
                 "cross_token_inventory_live_demo",
             }
         ):
@@ -1091,6 +1444,13 @@ async def get_confidential_status(intent_id: str, request: Request):
     record = await _load_intent(request, intent_id)
     if not record:
         raise HTTPException(status_code=404, detail="Confidential intent not found")
+
+    if record.get("contractRef"):
+        contract_state = _get_contract_state(
+            record["srcChainId"],
+            record.get("contractRef", {}).get("contractIntentId"),
+        )
+        _sync_record_from_contract_state(record, contract_state)
 
     _refresh_transient_status(record)
     if record.get("contractRef"):

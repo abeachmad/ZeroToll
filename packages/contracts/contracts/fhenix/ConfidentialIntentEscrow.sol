@@ -3,11 +3,30 @@ pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@fhenixprotocol/cofhe-contracts/FHE.sol";
 import "../interfaces/IWETH.sol";
 import "./ConfidentialIntentLib.sol";
+
+interface IPermit2 {
+    struct PermitDetails {
+        address token;
+        uint160 amount;
+        uint48 expiration;
+        uint48 nonce;
+    }
+
+    struct PermitSingle {
+        PermitDetails details;
+        address spender;
+        uint256 sigDeadline;
+    }
+
+    function permit(address owner, PermitSingle memory permitSingle, bytes calldata signature) external;
+    function transferFrom(address from, address to, uint160 amount, address token) external;
+}
 
 /// @notice Confidential settlement scaffold for ZeroToll's future Fhenix path.
 /// @dev This contract now uses real CoFHE types for encrypted thresholds and
@@ -37,10 +56,12 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
 
     address public feeRecipient;
     address public wrappedNativeToken;
+    address public permit2;
 
     event TrustedOperatorSet(address indexed operator, bool enabled);
     event FeeRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
     event WrappedNativeTokenUpdated(address indexed oldWrappedNativeToken, address indexed newWrappedNativeToken);
+    event Permit2Updated(address indexed oldPermit2, address indexed newPermit2);
     event ConfidentialIntentSubmitted(
         bytes32 indexed intentId,
         address indexed user,
@@ -80,9 +101,14 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
         _;
     }
 
-    constructor(address initialFeeRecipient, address initialWrappedNativeToken) Ownable(msg.sender) {
+    constructor(
+        address initialFeeRecipient,
+        address initialWrappedNativeToken,
+        address initialPermit2
+    ) Ownable(msg.sender) {
         feeRecipient = initialFeeRecipient;
         wrappedNativeToken = initialWrappedNativeToken;
+        permit2 = initialPermit2;
     }
 
     function setTrustedOperator(address operator, bool enabled) external onlyOwner {
@@ -102,6 +128,12 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
         emit WrappedNativeTokenUpdated(oldWrappedNativeToken, newWrappedNativeToken);
     }
 
+    function setPermit2(address newPermit2) external onlyOwner {
+        address oldPermit2 = permit2;
+        permit2 = newPermit2;
+        emit Permit2Updated(oldPermit2, newPermit2);
+    }
+
     function getIntentId(
         ConfidentialIntentLib.ConfidentialIntent calldata intent
     ) external pure returns (bytes32) {
@@ -114,7 +146,7 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
         bool deliverNative
     ) external nonReentrant returns (bytes32 intentId) {
         euint128 minOut = FHE.asEuint128(encryptedMinOut);
-        return _submitIntent(intent, minOut, deliverNative);
+        return _submitIntentWithTransfer(intent, minOut, deliverNative);
     }
 
     /// @notice Local-development helper for tests and scaffolding.
@@ -126,10 +158,65 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
         bool deliverNative
     ) external nonReentrant returns (bytes32 intentId) {
         euint128 minOut = FHE.asEuint128(uint256(plaintextMinOut));
-        return _submitIntent(intent, minOut, deliverNative);
+        return _submitIntentWithTransfer(intent, minOut, deliverNative);
     }
 
-    function _submitIntent(
+    /// @notice Testing/helper path for Permit2-backed confidential submissions.
+    function submitIntentWithPermit2ForTesting(
+        ConfidentialIntentLib.ConfidentialIntent calldata intent,
+        uint128 plaintextMinOut,
+        bool deliverNative,
+        IPermit2.PermitSingle calldata permitSingle,
+        bytes calldata permit2Signature
+    ) external nonReentrant returns (bytes32 intentId) {
+        require(permit2 != address(0), "Permit2 not configured");
+        require(permitSingle.details.token == intent.tokenIn, "Permit2 token mismatch");
+        require(permitSingle.spender == address(this), "Permit2 spender mismatch");
+        require(permitSingle.details.amount >= intent.amountIn, "Permit2 amount too low");
+        require(permitSingle.sigDeadline >= block.timestamp, "Permit2 signature expired");
+
+        euint128 minOut = FHE.asEuint128(uint256(plaintextMinOut));
+        intentId = _initializeSettlement(intent, minOut, deliverNative);
+
+        IPermit2(permit2).permit(intent.user, permitSingle, permit2Signature);
+        IPermit2(permit2).transferFrom(intent.user, address(this), uint160(intent.amountIn), intent.tokenIn);
+    }
+
+    /// @notice Testing/helper path for ERC-2612-backed confidential submissions.
+    function submitIntentWithPermitForTesting(
+        ConfidentialIntentLib.ConfidentialIntent calldata intent,
+        uint128 plaintextMinOut,
+        bool deliverNative,
+        uint256 permitDeadline,
+        uint8 permitV,
+        bytes32 permitR,
+        bytes32 permitS
+    ) external nonReentrant returns (bytes32 intentId) {
+        euint128 minOut = FHE.asEuint128(uint256(plaintextMinOut));
+        intentId = _initializeSettlement(intent, minOut, deliverNative);
+
+        IERC20Permit(intent.tokenIn).permit(
+            intent.user,
+            address(this),
+            intent.amountIn,
+            permitDeadline,
+            permitV,
+            permitR,
+            permitS
+        );
+        IERC20(intent.tokenIn).safeTransferFrom(intent.user, address(this), intent.amountIn);
+    }
+
+    function _submitIntentWithTransfer(
+        ConfidentialIntentLib.ConfidentialIntent calldata intent,
+        euint128 encryptedMinOut,
+        bool deliverNative
+    ) internal returns (bytes32 intentId) {
+        intentId = _initializeSettlement(intent, encryptedMinOut, deliverNative);
+        IERC20(intent.tokenIn).safeTransferFrom(intent.user, address(this), intent.amountIn);
+    }
+
+    function _initializeSettlement(
         ConfidentialIntentLib.ConfidentialIntent calldata intent,
         euint128 encryptedMinOut,
         bool deliverNative
@@ -158,8 +245,6 @@ contract ConfidentialIntentEscrow is Ownable, ReentrancyGuard {
 
         FHE.allowThis(settlement.encryptedMinOut);
         FHE.allow(settlement.encryptedMinOut, intent.user);
-
-        IERC20(intent.tokenIn).safeTransferFrom(intent.user, address(this), intent.amountIn);
 
         emit ConfidentialIntentSubmitted(
             intentId,

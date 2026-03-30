@@ -20,18 +20,23 @@ async function main() {
     process.env.TREASURY_ADDRESS ||
     deployer.address;
   const wrappedNativeToken = chain.contracts.wrappedToken;
+  const permit2 = sharedConfig.permit2 || process.env.PERMIT2_ADDRESS;
 
   if (!wrappedNativeToken) {
     throw new Error(`No wrappedToken configured for ${networkName}.`);
+  }
+  if (!permit2) {
+    throw new Error(`No Permit2 configured for ${networkName}.`);
   }
 
   console.log(`\n🔐 Deploying ConfidentialIntentEscrow to ${networkName}...`);
   console.log(`Deployer: ${deployer.address}`);
   console.log(`Fee recipient: ${feeRecipient}\n`);
   console.log(`Wrapped native token: ${wrappedNativeToken}\n`);
+  console.log(`Permit2: ${permit2}\n`);
 
   const Factory = await hre.ethers.getContractFactory('ConfidentialIntentEscrow');
-  const escrow = await Factory.deploy(feeRecipient, wrappedNativeToken);
+  const escrow = await Factory.deploy(feeRecipient, wrappedNativeToken, permit2);
   await escrow.waitForDeployment();
 
   const address = await escrow.getAddress();
@@ -49,6 +54,7 @@ async function main() {
     deployer: deployer.address,
     feeRecipient,
     wrappedNativeToken,
+    permit2,
     confidentialIntentEscrow: address,
     trustedOperator: deployer.address,
   };

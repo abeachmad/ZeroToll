@@ -11,6 +11,7 @@
     "paymaster": "0xaad1211a722ee04b6980724586b6b5b7b0c86fee",
     "feeSink": "0x1F679D174A9fBe4158EABcD24d4A63D6Bcf8f700",
     "wrappedToken": "0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9",
+    "smartDexAdapter": "0x8Bf6f17F19CAc8b857764E9B97E7B8FdCE194e84",
     "confidentialIntentEscrow": null,
     "adapters": {
       "quickswapV2": "0xbe6F932465D5155c1564FF0AD7Cc9D2D2a4316d5",
@@ -42,6 +43,7 @@
     "paymaster": null,
     "feeSink": null,
     "wrappedToken": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+    "smartDexAdapter": null,
     "confidentialIntentEscrow": null,
     "adapters": {
       "uniswapV3": null,
@@ -72,7 +74,8 @@
     "paymaster": "0xaf7e002447b790f212ea435f9387509cd1ef0054",
     "feeSink": "0x2c7342421eB6Bf2a2368F034b26A19F39DC2C130",
     "wrappedToken": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
-    "confidentialIntentEscrow": "0xc83137c301a89554046B44ed35438b20CB196Ce1",
+    "smartDexAdapter": "0x5c2d8Ce29Bb6E5ddf14e8df5a62ec78AAeffBffa",
+    "confidentialIntentEscrow": "0xF85F5f45dc1fDC63379d1C10B7EA5cc194cFFbe1",
     "adapters": {
       "uniswapV2": "0x86D1AA2228F3ce649d415F19fC71134264D0E84B",
       "uniswapV3": "0x86D1AA2228F3ce649d415F19fC71134264D0E84B",
@@ -104,6 +107,7 @@
     "paymaster": null,
     "feeSink": null,
     "wrappedToken": "0x4200000000000000000000000000000000000006",
+    "smartDexAdapter": null,
     "confidentialIntentEscrow": null,
     "adapters": {
       "uniswapV3": null,

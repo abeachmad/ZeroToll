@@ -136,6 +136,9 @@ for (const [chainKey, chain] of Object.entries(source.chains)) {
   const wrappedToken = isConfiguredAddress(chain.contracts.wrappedToken)
     ? chain.contracts.wrappedToken
     : null;
+  const smartDexAdapter = isConfiguredAddress(chain.contracts.smartDexAdapter)
+    ? chain.contracts.smartDexAdapter
+    : null;
   const adapters = Object.fromEntries(
     Object.entries(chain.contracts.adapters || {}).map(([adapterKey, address]) => [
       adapterKey,
@@ -155,6 +158,7 @@ for (const [chainKey, chain] of Object.entries(source.chains)) {
     paymaster,
     feeSink,
     wrappedToken,
+    smartDexAdapter,
     confidentialIntentEscrow,
     adapters,
     permit2: source.permit2,

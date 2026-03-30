@@ -111,6 +111,19 @@ const getPreferredAdapterAddress = (chainId) => {
   return adapterCandidates.find((value) => getConfiguredAddress(value)) || null;
 };
 
+const getExplorerTxUrl = (chainId, hash) => {
+  if (!hash) return null;
+
+  const explorers = {
+    11155111: `https://sepolia.etherscan.io/tx/${hash}`,
+    80002: `https://amoy.polygonscan.com/tx/${hash}`,
+    421614: `https://sepolia.arbiscan.io/tx/${hash}`,
+    11155420: `https://sepolia-optimism.etherscan.io/tx/${hash}`,
+  };
+
+  return explorers[chainId] || null;
+};
+
 // Helper function to get permit type indicator
 const getPermitIndicator = (token) => {
   if (token?.permitType === 'ERC2612') return '⚡';
@@ -124,6 +137,27 @@ const getPermitTooltip = (token) => {
   if (token?.permitType === 'permit2') return 'Permit2 - gasless after approval';
   if (token?.isNative) return 'Native token';
   return 'Requires approval tx';
+};
+
+const normalizeConfidentialBaseSymbol = (symbol) =>
+  String(symbol || '')
+    .replace(/^z/i, '')
+    .replace(/^W(?=ETH$|POL$|MATIC$|LINK$|USDC$)/i, '')
+    .toUpperCase();
+
+const getConfidentialRecommendedInput = (token, chainTokens) => {
+  if (!token || token.isNative || token.permitType === 'ERC2612') {
+    return null;
+  }
+
+  const normalizedSymbol = normalizeConfidentialBaseSymbol(token.symbol);
+  return (
+    chainTokens.find(
+      (candidate) =>
+        candidate?.permitType === 'ERC2612' &&
+        normalizeConfidentialBaseSymbol(candidate.symbol) === normalizedSymbol
+    ) || null
+  );
 };
 
 const Swap = () => {
@@ -229,11 +263,39 @@ const Swap = () => {
   const confidentialEscrowAddress = getConfiguredAddress(
     getChainContracts(fromChain?.id)?.confidentialIntentEscrow
   );
+  const confidentialFundingMode = isConfidentialMode
+    ? (tokenIn?.permitType === 'permit2'
+        ? 'permit2'
+        : tokenIn?.permitType === 'ERC2612'
+          ? 'erc2612'
+          : 'approval')
+    : 'approval';
+  const confidentialSupportsGaslessFunding = Boolean(
+    isConfidentialMode &&
+    confidentialEscrowAddress &&
+    confidentialFundingMode !== 'approval'
+  );
+  const confidentialPermit2Spender = confidentialFundingMode === 'permit2'
+    ? intentGasless.permit2Address
+    : null;
+  const confidentialRecommendedInput = getConfidentialRecommendedInput(
+    tokenIn,
+    fromChain?.tokens || []
+  );
   const approvalSpenderAddress =
-    isConfidentialMode && confidentialEscrowAddress
-      ? confidentialEscrowAddress
+    isConfidentialMode
+      ? (confidentialFundingMode === 'permit2'
+          ? confidentialPermit2Spender
+          : confidentialFundingMode === 'erc2612'
+            ? undefined
+            : confidentialEscrowAddress)
       : routerHubAddress;
-  const confidentialApprovalRequired = Boolean(isConfidentialMode && confidentialEscrowAddress);
+  const confidentialApprovalRequired = Boolean(
+    isConfidentialMode && (
+      (confidentialFundingMode === 'permit2' && confidentialPermit2Spender) ||
+      (confidentialFundingMode === 'approval' && confidentialEscrowAddress)
+    )
+  );
   
   // Wagmi hooks for approval
   const { writeContract: approveToken, data: approveHash } = useWriteContract();
@@ -377,6 +439,11 @@ const Swap = () => {
   
   // Check if approval is needed when amount or allowance changes
   useEffect(() => {
+    if (isConfidentialMode && !confidentialApprovalRequired) {
+      setNeedsApproval(false);
+      return;
+    }
+
     if (!amountIn || tokenIn?.isNative) {
       setNeedsApproval(false);
       return;
@@ -437,7 +504,14 @@ const Swap = () => {
       console.error('Error checking approval:', e);
       setNeedsApproval(true); // On error, assume approval needed for safety
     }
-  }, [amountIn, currentAllowance, tokenIn, refetchAllowance]);
+  }, [
+    amountIn,
+    confidentialApprovalRequired,
+    currentAllowance,
+    isConfidentialMode,
+    refetchAllowance,
+    tokenIn,
+  ]);
   
   // Handle approval success
   useEffect(() => {
@@ -450,6 +524,37 @@ const Swap = () => {
 
   const isNativeOutput = tokenOut.isNative;
   const wrappedOutputSymbol = isNativeOutput ? tokenOut.symbol.replace(/^(POL|ETH)$/, 'W$1') : null;
+  const confidentialExecution = confidentialGasless.lastStatus?.execution?.liveExecution;
+  const confidentialTxLinks = [
+    confidentialGasless.lastStatus?.contractRef?.submitTxHash && {
+      label: 'Submit',
+      hash: confidentialGasless.lastStatus.contractRef.submitTxHash,
+    },
+    confidentialExecution?.releaseInputTxHash && {
+      label: 'Release Input',
+      hash: confidentialExecution.releaseInputTxHash,
+    },
+    confidentialExecution?.swapTxHash && {
+      label: 'Swap',
+      hash: confidentialExecution.swapTxHash,
+    },
+    confidentialExecution?.returnOutputTxHash && {
+      label: 'Return Output',
+      hash: confidentialExecution.returnOutputTxHash,
+    },
+    confidentialExecution?.recordExecutionTxHash && {
+      label: 'Record Execution',
+      hash: confidentialExecution.recordExecutionTxHash,
+    },
+    confidentialExecution?.requestDecryptionTxHash && {
+      label: 'Request Decryption',
+      hash: confidentialExecution.requestDecryptionTxHash,
+    },
+    confidentialGasless.lastStatus?.result?.finalizeTxHash && {
+      label: 'Finalize',
+      hash: confidentialGasless.lastStatus.result.finalizeTxHash,
+    },
+  ].filter(Boolean);
 
   const buildStandardQuoteIntent = () => ({
     user: address || '0x1234567890123456789012345678901234567890',
@@ -843,6 +948,14 @@ const Swap = () => {
         toast.info(`💰 Confidential mode will settle through ${wrappedOutputSymbol} internally, then unwrap to native ${tokenOut.symbol} on finalization.`);
       }
 
+      if (confidentialSupportsGaslessFunding) {
+        toast.info(
+          confidentialFundingMode === 'permit2'
+            ? '🔄 This confidential input supports Permit2. If you already gave the one-time Permit2 approval, you will only sign a gasless spending authorization here.'
+            : '⚡ This confidential input supports ERC-2612 permit. You will sign a gasless permit instead of sending an approval transaction.'
+        );
+      }
+
       const result = await confidentialGasless.executeConfidentialSwap({
         tokenIn: tokenIn.address,
         tokenOut: tokenOut.address,
@@ -858,6 +971,8 @@ const Swap = () => {
         dstChainId: toChain.id,
         feeMode,
         feeCap,
+        fundingMode: confidentialSupportsGaslessFunding ? confidentialFundingMode : 'approval',
+        fundingSpender: confidentialEscrowAddress,
       });
 
       if (result.stage === 'finalized_success') {
@@ -1468,14 +1583,45 @@ const Swap = () => {
                   <span className="block mt-1 text-cyan-200">
                     Live today: staged escrow demos with ERC-20 input, including native output delivery via wrapped routing and final-step unwrap.
                   </span>
-                  {confidentialApprovalRequired && (
+                  {confidentialFundingMode === 'erc2612' ? (
+                    <span className="block mt-1 text-green-300">
+                      Funding step: this token can use a signed ERC-2612 permit to the escrow, so no upfront approval transaction is required.
+                    </span>
+                  ) : confidentialFundingMode === 'permit2' ? (
+                    <span className="block mt-1 text-yellow-300">
+                      Funding step: this token can use a signed Permit2 authorization for confidential submission, but Permit2 still needs a one-time token approval if you have not granted it before.
+                    </span>
+                  ) : confidentialApprovalRequired ? (
                     <span className="block mt-1 text-yellow-300">
                       Current limitation: the first ERC20 approval/spending-cap transaction to the escrow contract is still a normal on-chain approval paid by the user in native gas.
                     </span>
-                  )}
+                  ) : null}
                   <span className="block mt-1 text-yellow-200">
-                    Sponsorship starts after approval. The staged submit/execute/finalize lifecycle is the sponsored part.
+                    {confidentialFundingMode === 'erc2612'
+                      ? 'Sponsorship begins from the staged confidential submit/execute/finalize lifecycle after you sign the permit payload.'
+                      : confidentialFundingMode === 'permit2'
+                        ? 'After the one-time Permit2 approval exists, sponsorship begins from the staged confidential submit/execute/finalize lifecycle and subsequent runs only need signed Permit2 payloads.'
+                      : 'Sponsorship starts after approval. The staged submit/execute/finalize lifecycle is the sponsored part.'}
                   </span>
+                  {confidentialFundingMode !== 'erc2612' && (
+                    <span className="block mt-1 text-yellow-300">
+                      For a truly approval-free confidential run from step zero today, use an ERC-2612 input token such as zUSDC.
+                    </span>
+                  )}
+                  {confidentialRecommendedInput && (
+                    <div className="mt-2 rounded-lg border border-cyan-400/20 bg-cyan-500/10 p-3">
+                      <div className="text-cyan-200">
+                        Recommended input for zero-gas entry: switch from {tokenIn.symbol} to {confidentialRecommendedInput.symbol}.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setTokenIn(confidentialRecommendedInput)}
+                        className="mt-2 rounded-md bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400"
+                      >
+                        Use {confidentialRecommendedInput.symbol} Instead
+                      </button>
+                    </div>
+                  )}
                   {confidentialGasless.quote?.estimatedFeeUSD && (
                     <span className="block mt-1 text-cyan-200">
                       Estimated sponsored cost + protocol fee: ~${Number(confidentialGasless.quote.estimatedFeeUSD).toFixed(4)}
@@ -1728,6 +1874,11 @@ const Swap = () => {
                     <div className="mt-1 text-yellow-200">
                       Important: if approval is required, that approval transaction still costs the user native gas. ZeroToll only sponsors the staged confidential execution after approval exists.
                     </div>
+                    {confidentialRecommendedInput && (
+                      <div className="mt-1 text-green-200">
+                        If you want confidential mode to be gasless from step zero, switch the input token to {confidentialRecommendedInput.symbol}. That token supports ERC-2612 permit instead of a setup approval transaction.
+                      </div>
+                    )}
                     {confidentialGasless.intentId && (
                       <div className="mt-2 rounded bg-black/20 p-2 text-cyan-100">
                         Intent ID: <span className="font-mono">{confidentialGasless.intentId}</span>
@@ -1745,10 +1896,16 @@ const Swap = () => {
                         ConfidentialIntentEscrow: {quote.contract.confidentialIntentEscrow || 'not deployed in shared config'}
                         <br />
                         Runtime path: {quote.contract.liveSubmitMode || (quote.contract.ready ? 'contract address configured' : 'backend staged scaffold still active')}
+                        <br />
+                        Funding mode: {confidentialFundingMode === 'erc2612'
+                          ? 'ERC-2612 signed permit'
+                          : confidentialFundingMode === 'permit2'
+                            ? 'Permit2 signed authorization (requires one-time Permit2 setup approval)'
+                            : 'ERC-20 approval'}
                         {confidentialApprovalRequired && (
                           <>
                             <br />
-                            Approval spender: {confidentialEscrowAddress}
+                            Approval spender: {approvalSpenderAddress}
                           </>
                         )}
                       </div>
@@ -1763,10 +1920,40 @@ const Swap = () => {
                     {quote?.liveExecutionHint?.adapter && (
                       <div className="mt-2 rounded bg-black/20 p-2 text-zt-paper/75">
                         Execution venue: {quote.liveExecutionHint.adapter}
+                        {quote.liveExecutionHint.quoteSource && (
+                          <>
+                            <br />
+                            Quote source: {quote.liveExecutionHint.quoteSource}
+                          </>
+                        )}
+                        {quote.liveExecutionHint.adapter === 'SmartDexAdapter' && (
+                          <>
+                            <br />
+                            Live venue note: SmartDexAdapter uses a Uniswap-first route with internal liquidity fallback. This is the non-mock path for standard Sepolia pairs, and confidential quotes now try to read the live pool price instead of a generic oracle-only estimate.
+                          </>
+                        )}
                         {quote.liveExecutionHint.adapter === 'MockDEXAdapter' && (
                           <>
                             <br />
                             Demo note: this venue is on-chain but uses mocked liquidity for buildathon demonstration.
+                          </>
+                        )}
+                        {quote.liveExecutionHint.adapter === 'InventoryOperator' && (
+                          <>
+                            <br />
+                            Demo note: this mixed-pair confidential path is currently fulfilled from operator inventory instead of a direct live adapter.
+                            {quote.liveExecutionHint.operatorInventoryBalance && (
+                              <>
+                                <br />
+                                Operator inventory: {quote.liveExecutionHint.operatorInventoryBalance} {quote.delivery?.executionTokenOutSymbol}
+                              </>
+                            )}
+                            {quote.liveExecutionHint.reason && (
+                              <>
+                                <br />
+                                Current readiness: {quote.liveExecutionHint.reason}
+                              </>
+                            )}
                           </>
                         )}
                       </div>
@@ -1774,12 +1961,47 @@ const Swap = () => {
                     {confidentialGasless.lastStatus?.execution?.liveExecution?.adapterKind && (
                       <div className="mt-2 rounded bg-black/20 p-2 text-zt-paper/75">
                         Finalized path: {confidentialGasless.lastStatus.execution.liveExecution.adapterKind}
+                        {confidentialGasless.lastStatus.execution.liveExecution.adapterKind === 'smartDex' && (
+                          <>
+                            <br />
+                            This finalized through SmartDexAdapter, the live Uniswap-first venue for standard Sepolia pairs.
+                          </>
+                        )}
                         {confidentialGasless.lastStatus.execution.liveExecution.adapterKind === 'mockDex' && (
                           <>
                             <br />
                             This finalized through MockDEXAdapter demo liquidity, not a production market venue.
                           </>
                         )}
+                      </div>
+                    )}
+                    {confidentialTxLinks.length > 0 && (
+                      <div className="mt-2 rounded bg-black/20 p-2 text-zt-paper/75">
+                        <div className="font-semibold text-cyan-200 mb-2">Confidential transaction links</div>
+                        <div className="space-y-1">
+                          {confidentialTxLinks.map((item) => {
+                            const url = getExplorerTxUrl(fromChain.id, item.hash);
+                            return (
+                              <div key={`${item.label}-${item.hash}`} className="flex items-center justify-between gap-3 text-xs">
+                                <span className="text-zt-paper/65">{item.label}</span>
+                                {url ? (
+                                  <a
+                                    href={url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-mono text-cyan-300 hover:text-cyan-200 underline underline-offset-2"
+                                  >
+                                    {item.hash.slice(0, 10)}...{item.hash.slice(-8)}
+                                  </a>
+                                ) : (
+                                  <span className="font-mono text-cyan-300">
+                                    {item.hash.slice(0, 10)}...{item.hash.slice(-8)}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                     {gaslessStatus && (
@@ -2028,7 +2250,33 @@ const Swap = () => {
                 </p>
                 {confidentialGasless.lastStatus?.execution && (
                   <div className="text-xs text-zt-paper/65">
-                    Simulated gross output: {confidentialGasless.lastStatus.execution.grossAmountOut} {tokenOut.symbol}
+                    {confidentialGasless.lastStatus.execution.liveExecution ? 'Latest gross output' : 'Simulated gross output'}: {confidentialGasless.lastStatus.execution.grossAmountOut} {tokenOut.symbol}
+                  </div>
+                )}
+                {confidentialTxLinks.length > 0 && (
+                  <div className="mt-3 grid gap-1 text-xs">
+                    {confidentialTxLinks.map((item) => {
+                      const url = getExplorerTxUrl(fromChain.id, item.hash);
+                      return (
+                        <div key={`banner-${item.label}-${item.hash}`} className="flex items-center justify-between gap-3">
+                          <span className="text-zt-paper/60">{item.label}</span>
+                          {url ? (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-cyan-300 hover:text-cyan-200 underline underline-offset-2"
+                            >
+                              {item.hash.slice(0, 10)}...{item.hash.slice(-8)}
+                            </a>
+                          ) : (
+                            <span className="font-mono text-cyan-300">
+                              {item.hash.slice(0, 10)}...{item.hash.slice(-8)}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -2129,7 +2377,7 @@ const Swap = () => {
             </button>
             
             {/* Show Approve button if needed, otherwise Execute */}
-            {/* Confidential Intent with a live escrow currently needs an ERC20 approval to the escrow contract. */}
+            {/* Confidential intent now only needs approval for tokens without Permit2 / ERC-2612 funding support. */}
             {needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && (!isConfidentialMode || confidentialApprovalRequired) ? (
               <button
                 onClick={handleApprove}
@@ -2144,7 +2392,9 @@ const Swap = () => {
                   </>
                 ) : (
                   confidentialApprovalRequired
-                    ? `Approve ${tokenIn.symbol} to Escrow`
+                    ? (confidentialFundingMode === 'permit2'
+                        ? `One-time Approve ${tokenIn.symbol} to Permit2`
+                        : `Approve ${tokenIn.symbol} to Escrow`)
                     : `Approve ${tokenIn.symbol}`
                 )}
               </button>
@@ -2157,7 +2407,13 @@ const Swap = () => {
                 title={
                   fromChain.id !== toChain.id ? 'Cross-chain swaps not yet supported' :
                   needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && (!isConfidentialMode || confidentialApprovalRequired)
-                    ? (confidentialApprovalRequired ? 'Please approve the ConfidentialIntentEscrow spender first' : 'Please approve token first')
+                    ? (
+                        confidentialApprovalRequired
+                          ? (confidentialFundingMode === 'permit2'
+                              ? 'Please complete the one-time Permit2 approval first'
+                              : 'Please approve the ConfidentialIntentEscrow spender first')
+                          : 'Please approve token first'
+                      )
                     :
                   ''
                 }

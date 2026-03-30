@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useAccount, useChainId, usePublicClient, useWalletClient } from 'wagmi';
 import { encryptUint128WithCofhe, getCofheSupportedChainIds } from '../lib/cofhe';
+import contractsConfig from '../config/contracts.json';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 const API = `${BACKEND_URL}/api/confidential`;
+const PERMIT2_ADDRESS = contractsConfig.permit2;
 
 const SUPPORTED_CHAINS = new Set(getCofheSupportedChainIds());
 
@@ -47,6 +49,39 @@ async function hashCommitment(payload) {
   return toHex(digest);
 }
 
+const parseStringResult = (hexValue, fallback = 'Token') => {
+  try {
+    const lengthHex = hexValue.slice(66, 130);
+    const length = parseInt(lengthHex, 16);
+    const hex = hexValue.slice(130, 130 + length * 2);
+    return hex
+      .match(/.{2}/g)
+      .map((byte) => parseInt(byte, 16))
+      .filter((code) => code > 0)
+      .map((code) => String.fromCharCode(code))
+      .join('');
+  } catch {
+    return fallback;
+  }
+};
+
+const parsePermit2AllowanceResult = (result) => {
+  if (!result || result === '0x') {
+    return { amount: 0n, expiration: 0, nonce: 0 };
+  }
+
+  const hex = result.startsWith('0x') ? result.slice(2) : result;
+  if (hex.length < 64 * 3) {
+    return { amount: 0n, expiration: 0, nonce: 0 };
+  }
+
+  return {
+    amount: BigInt(`0x${hex.slice(0, 64)}`),
+    expiration: parseInt(`0x${hex.slice(64, 128)}`, 16),
+    nonce: parseInt(`0x${hex.slice(128, 192)}`, 16),
+  };
+};
+
 export function useConfidentialIntentGasless() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -65,6 +100,153 @@ export function useConfidentialIntentGasless() {
     () => Boolean(chainId && SUPPORTED_CHAINS.has(chainId)),
     [chainId]
   );
+
+  const getPermit2Allowance = useCallback(async (tokenAddress, spender) => {
+    if (!address || !walletClient) {
+      return { amount: 0n, expiration: 0, nonce: 0 };
+    }
+
+    try {
+      const userHex = address.slice(2).toLowerCase().padStart(64, '0');
+      const tokenHex = tokenAddress.slice(2).toLowerCase().padStart(64, '0');
+      const spenderHex = spender.slice(2).toLowerCase().padStart(64, '0');
+      const data = `0x927da105${userHex}${tokenHex}${spenderHex}`;
+      const result = await walletClient.request({
+        method: 'eth_call',
+        params: [{ to: PERMIT2_ADDRESS, data }, 'latest'],
+      });
+
+      return parsePermit2AllowanceResult(result);
+    } catch {
+      return { amount: 0n, expiration: 0, nonce: 0 };
+    }
+  }, [address, walletClient]);
+
+  const signPermit2 = useCallback(async ({ tokenAddress, spender, amount, deadline }) => {
+    if (!address || !chainId || !walletClient) {
+      throw new Error('Wallet connection is required for Permit2 signing.');
+    }
+
+    const { nonce } = await getPermit2Allowance(tokenAddress, spender);
+    const typedData = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+          { name: 'verifyingContract', type: 'address' },
+        ],
+        PermitSingle: [
+          { name: 'details', type: 'PermitDetails' },
+          { name: 'spender', type: 'address' },
+          { name: 'sigDeadline', type: 'uint256' },
+        ],
+        PermitDetails: [
+          { name: 'token', type: 'address' },
+          { name: 'amount', type: 'uint160' },
+          { name: 'expiration', type: 'uint48' },
+          { name: 'nonce', type: 'uint48' },
+        ],
+      },
+      primaryType: 'PermitSingle',
+      domain: {
+        name: 'Permit2',
+        chainId,
+        verifyingContract: PERMIT2_ADDRESS,
+      },
+      message: {
+        details: {
+          token: tokenAddress,
+          amount: amount.toString(),
+          expiration: deadline.toString(),
+          nonce: nonce.toString(),
+        },
+        spender,
+        sigDeadline: deadline.toString(),
+      },
+    };
+
+    const signature = await walletClient.request({
+      method: 'eth_signTypedData_v4',
+      params: [address, JSON.stringify(typedData)],
+    });
+
+    return {
+      permitType: 'permit2',
+      permitSingle: typedData.message,
+      permit2Signature: signature,
+    };
+  }, [address, chainId, getPermit2Allowance, walletClient]);
+
+  const signErc2612Permit = useCallback(async ({ tokenAddress, spender, amount, deadline }) => {
+    if (!address || !chainId || !walletClient) {
+      throw new Error('Wallet connection is required for permit signing.');
+    }
+
+    const nameResult = await walletClient.request({
+      method: 'eth_call',
+      params: [{ to: tokenAddress, data: '0x06fdde03' }, 'latest'],
+    });
+    const tokenName = parseStringResult(nameResult, 'Token');
+
+    const nonceCall = `0x7ecebe00000000000000000000000000${address.slice(2)}`;
+    const nonceResult = await walletClient.request({
+      method: 'eth_call',
+      params: [{ to: tokenAddress, data: nonceCall }, 'latest'],
+    });
+    const permitNonce = parseInt(nonceResult, 16);
+
+    const typedData = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+          { name: 'verifyingContract', type: 'address' },
+        ],
+        Permit: [
+          { name: 'owner', type: 'address' },
+          { name: 'spender', type: 'address' },
+          { name: 'value', type: 'uint256' },
+          { name: 'nonce', type: 'uint256' },
+          { name: 'deadline', type: 'uint256' },
+        ],
+      },
+      primaryType: 'Permit',
+      domain: {
+        name: tokenName,
+        version: '1',
+        chainId,
+        verifyingContract: tokenAddress,
+      },
+      message: {
+        owner: address,
+        spender,
+        value: amount.toString(),
+        nonce: permitNonce.toString(),
+        deadline: deadline.toString(),
+      },
+    };
+
+    const signature = await walletClient.request({
+      method: 'eth_signTypedData_v4',
+      params: [address, JSON.stringify(typedData)],
+    });
+
+    const r = signature.slice(0, 66);
+    const s = `0x${signature.slice(66, 130)}`;
+    let v = parseInt(signature.slice(130, 132), 16);
+    if (v < 27) v += 27;
+
+    return {
+      permitType: 'erc2612',
+      permit: {
+        deadline: deadline.toString(),
+        v,
+        r,
+        s,
+      },
+    };
+  }, [address, chainId, walletClient]);
 
   const getQuote = useCallback(async ({
     user,
@@ -135,10 +317,13 @@ export function useConfidentialIntentGasless() {
     feeCap,
     deadline,
     nonce,
+    fundingMode = 'approval',
+    fundingSpender,
   }) => {
     let commitment;
     let encryptedPayload;
     let clientEncryptionMode;
+    let permitPayload = {};
 
     if (SUPPORTED_CHAINS.has(srcChainId)) {
       const encrypted = await encryptUint128WithCofhe({
@@ -178,6 +363,26 @@ export function useConfidentialIntentGasless() {
       clientEncryptionMode = 'commitment_only_scaffold';
     }
 
+    if ((fundingMode === 'permit2' || fundingMode === 'erc2612') && !fundingSpender) {
+      throw new Error('Confidential escrow spender is not configured for signed funding.');
+    }
+
+    if (fundingMode === 'permit2') {
+      permitPayload = await signPermit2({
+        tokenAddress: tokenIn,
+        spender: fundingSpender,
+        amount: amountInUnits,
+        deadline,
+      });
+    } else if (fundingMode === 'erc2612') {
+      permitPayload = await signErc2612Permit({
+        tokenAddress: tokenIn,
+        spender: fundingSpender,
+        amount: amountInUnits,
+        deadline,
+      });
+    }
+
     const response = await fetch(`${API}/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -202,6 +407,7 @@ export function useConfidentialIntentGasless() {
         clientEncryptionMode,
         clientGuardrailBps: 9500,
         plaintextMinOutForTesting: String(minAmountOutUnits),
+        ...permitPayload,
       }),
     });
 
@@ -214,7 +420,7 @@ export function useConfidentialIntentGasless() {
     setStatus(data.stage);
     setStatusMessage(data.statusMessage || '');
     return data;
-  }, [address, publicClient, walletClient]);
+  }, [address, publicClient, signErc2612Permit, signPermit2, walletClient]);
 
   const executeIntent = useCallback(async (currentIntentId) => {
     const response = await fetch(`${API}/execute`, {
@@ -267,6 +473,8 @@ export function useConfidentialIntentGasless() {
     dstChainId,
     feeMode = 'OUTPUT',
     feeCap = '3',
+    fundingMode = 'approval',
+    fundingSpender,
   }) => {
     if (!isConnected || !address) {
       throw new Error('Please connect your wallet first.');
@@ -279,7 +487,13 @@ export function useConfidentialIntentGasless() {
     setIsLoading(true);
     setError(null);
     setStatus('encrypting');
-    setStatusMessage('Creating confidential minOut commitment in the browser...');
+    setStatusMessage(
+      fundingMode === 'permit2'
+        ? 'Creating confidential minOut commitment and preparing Permit2 authorization...'
+        : fundingMode === 'erc2612'
+          ? 'Creating confidential minOut commitment and preparing ERC-2612 permit...'
+          : 'Creating confidential minOut commitment in the browser...'
+    );
 
     try {
       const deadline = Math.floor(Date.now() / 1000) + 30 * 60;
@@ -302,6 +516,8 @@ export function useConfidentialIntentGasless() {
         feeCap,
         deadline,
         nonce,
+        fundingMode,
+        fundingSpender,
       });
 
       setStatusMessage('Intent committed. Requesting sponsored execution...');
@@ -348,6 +564,8 @@ export function useConfidentialIntentGasless() {
     finalizeIntent,
     isConnected,
     publicClient,
+    signErc2612Permit,
+    signPermit2,
     submitIntent,
     walletClient,
   ]);

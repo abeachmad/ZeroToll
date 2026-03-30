@@ -73,6 +73,23 @@ const parseApiResponse = async (response, fallbackMessage) => {
   );
 };
 
+const parsePermit2AllowanceResult = (result) => {
+  if (!result || result === '0x') {
+    return { amount: 0n, expiration: 0, nonce: 0 };
+  }
+
+  const hex = result.startsWith('0x') ? result.slice(2) : result;
+  if (hex.length < 64 * 3) {
+    return { amount: 0n, expiration: 0, nonce: 0 };
+  }
+
+  return {
+    amount: BigInt(`0x${hex.slice(0, 64)}`),
+    expiration: parseInt(`0x${hex.slice(64, 128)}`, 16),
+    nonce: parseInt(`0x${hex.slice(128, 192)}`, 16),
+  };
+};
+
 const FRONTEND_CHAIN_CONFIG = {
   11155111: { key: 'sepolia', tokens: sepoliaTokens.tokens },
   80002: { key: 'amoy', tokens: amoyTokens.tokens },
@@ -222,13 +239,8 @@ export function useIntentGasless() {
         method: 'eth_call',
         params: [{ to: PERMIT2_ADDRESS, data }, 'latest']
       });
-      
-      // Decode result: amount (uint160), expiration (uint48), nonce (uint48)
-      const amount = BigInt('0x' + result.slice(2, 42));
-      const expiration = parseInt('0x' + result.slice(42, 54), 16);
-      const nonce = parseInt('0x' + result.slice(54, 66), 16);
-      
-      return { amount, expiration, nonce };
+
+      return parsePermit2AllowanceResult(result);
     } catch (e) {
       console.error('Error getting Permit2 allowance:', e);
       return { amount: BigInt(0), expiration: 0, nonce: 0 };
