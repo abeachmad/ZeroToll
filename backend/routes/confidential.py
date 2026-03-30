@@ -511,9 +511,18 @@ def _get_contract_state(chain_id: int, intent_id: Optional[str] = None) -> Dict[
     chain_config = CHAIN_CONFIG.get(chain_id, {})
     contract_address = chain_config.get("confidentialIntentEscrow")
     wrapped_token = _get_wrapped_native_address(chain_id)
-    client = get_confidential_contract_client(chain_id)
+    client = None
     settlement = None
     verdict_status = None
+
+    try:
+        client = get_confidential_contract_client(chain_id)
+    except Exception as exc:
+        logger.warning(
+            "Failed to initialize confidential contract client for chain %s: %s",
+            chain_id,
+            exc,
+        )
 
     if intent_id and client is not None:
         try:
@@ -546,88 +555,101 @@ def _build_live_adapter_hint(
     amount_in: float,
     expected_output_hint: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
-    if not (_is_address(token_in_address or "") and _is_address(token_out_address or "")):
-        return None
-
-    direct_adapter = _select_live_execution_adapter(
-        {
-            "srcChainId": chain_id,
-            "tokenInSymbol": token_in_symbol,
-            "tokenOutSymbol": token_out_symbol,
-        }
-    )
-    amount_in_units = _decimal_to_units(amount_in, _token_decimals(chain_id, token_in_address))
-    expected_output_hint_units = (
-        _decimal_to_units(expected_output_hint, _token_decimals(chain_id, token_out_address))
-        if expected_output_hint and expected_output_hint > 0
-        else 0
-    )
-
-    if not direct_adapter:
-        inventory_status = get_operator_inventory_status(chain_id, token_out_address)
-        if not inventory_status:
+    try:
+        if not (_is_address(token_in_address or "") and _is_address(token_out_address or "")):
             return None
 
-        available_units = int(inventory_status.get("balance") or 0)
-        return {
-            "ready": available_units >= expected_output_hint_units > 0,
-            "mode": "cross_token_inventory_live_demo",
-            "adapter": "InventoryOperator",
-            "expectedOutputUnits": str(expected_output_hint_units),
-            "expectedOutput": _units_to_decimal(
-                expected_output_hint_units,
-                _token_decimals(chain_id, token_out_address),
-            ),
-            "operatorInventoryBalanceUnits": str(available_units),
-            "operatorInventoryBalance": _units_to_decimal(
-                available_units,
-                int(inventory_status.get("decimals") or _token_decimals(chain_id, token_out_address)),
-            ),
-            "operator": inventory_status.get("operator"),
-            "quoteSource": "oracle_inventory_demo",
-            "reason": (
-                None
-                if available_units >= expected_output_hint_units > 0
-                else "Operator inventory is currently below the quoted confidential tokenOut requirement for this mixed-pair demo path."
-            ),
-        }
-
-    try:
-        preflight = probe_live_adapter_execution(
-            chain_id=chain_id,
-            adapter_address=direct_adapter["address"],
-            adapter_kind=direct_adapter["kind"],
-            token_in_address=token_in_address,
-            token_out_address=token_out_address,
-            amount_in_units=amount_in_units,
-            expected_output_hint=expected_output_hint_units,
+        direct_adapter = _select_live_execution_adapter(
+            {
+                "srcChainId": chain_id,
+                "tokenInSymbol": token_in_symbol,
+                "tokenOutSymbol": token_out_symbol,
+            }
         )
+        amount_in_units = _decimal_to_units(amount_in, _token_decimals(chain_id, token_in_address))
+        expected_output_hint_units = (
+            _decimal_to_units(expected_output_hint, _token_decimals(chain_id, token_out_address))
+            if expected_output_hint and expected_output_hint > 0
+            else 0
+        )
+
+        if not direct_adapter:
+            inventory_status = get_operator_inventory_status(chain_id, token_out_address)
+            if not inventory_status:
+                return None
+
+            available_units = int(inventory_status.get("balance") or 0)
+            return {
+                "ready": available_units >= expected_output_hint_units > 0,
+                "mode": "cross_token_inventory_live_demo",
+                "adapter": "InventoryOperator",
+                "expectedOutputUnits": str(expected_output_hint_units),
+                "expectedOutput": _units_to_decimal(
+                    expected_output_hint_units,
+                    _token_decimals(chain_id, token_out_address),
+                ),
+                "operatorInventoryBalanceUnits": str(available_units),
+                "operatorInventoryBalance": _units_to_decimal(
+                    available_units,
+                    int(inventory_status.get("decimals") or _token_decimals(chain_id, token_out_address)),
+                ),
+                "operator": inventory_status.get("operator"),
+                "quoteSource": "oracle_inventory_demo",
+                "reason": (
+                    None
+                    if available_units >= expected_output_hint_units > 0
+                    else "Operator inventory is currently below the quoted confidential tokenOut requirement for this mixed-pair demo path."
+                ),
+            }
+
+        try:
+            preflight = probe_live_adapter_execution(
+                chain_id=chain_id,
+                adapter_address=direct_adapter["address"],
+                adapter_kind=direct_adapter["kind"],
+                token_in_address=token_in_address,
+                token_out_address=token_out_address,
+                amount_in_units=amount_in_units,
+                expected_output_hint=expected_output_hint_units,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to load live adapter hint for confidential quote on chain %s: %s",
+                chain_id,
+                exc,
+            )
+            return {
+                "ready": False,
+                "mode": direct_adapter["mode"],
+                "adapter": direct_adapter["label"],
+                "reason": str(exc),
+            }
+
+        expected_output_units = int(preflight.get("expectedOutput") or 0)
+        token_out_decimals = _token_decimals(chain_id, token_out_address)
+
+        return {
+            "ready": bool(preflight.get("ready")),
+            "mode": direct_adapter["mode"],
+            "adapter": direct_adapter["label"],
+            "expectedOutputUnits": str(expected_output_units),
+            "expectedOutput": _units_to_decimal(expected_output_units, token_out_decimals),
+            "adapterOutputBalanceUnits": preflight.get("adapterOutputBalance"),
+            "quoteSource": preflight.get("quoteSource"),
+            "reason": preflight.get("reason"),
+        }
     except Exception as exc:
         logger.warning(
-            "Failed to load live adapter hint for confidential quote on chain %s: %s",
+            "Failed to build live adapter hint for confidential quote on chain %s: %s",
             chain_id,
             exc,
         )
         return {
             "ready": False,
-            "mode": direct_adapter["mode"],
-            "adapter": direct_adapter["label"],
+            "mode": "quote_fallback",
+            "adapter": "QuoteFallback",
             "reason": str(exc),
         }
-
-    expected_output_units = int(preflight.get("expectedOutput") or 0)
-    token_out_decimals = _token_decimals(chain_id, token_out_address)
-
-    return {
-        "ready": bool(preflight.get("ready")),
-        "mode": direct_adapter["mode"],
-        "adapter": direct_adapter["label"],
-        "expectedOutputUnits": str(expected_output_units),
-        "expectedOutput": _units_to_decimal(expected_output_units, token_out_decimals),
-        "adapterOutputBalanceUnits": preflight.get("adapterOutputBalance"),
-        "quoteSource": preflight.get("quoteSource"),
-        "reason": preflight.get("reason"),
-    }
 
 
 def _build_quote(
@@ -874,29 +896,44 @@ class ConfidentialFinalizeRequest(BaseModel):
 
 @router.post("/quote")
 async def get_confidential_quote(request: ConfidentialQuoteRequest):
-    token_in_symbol = _coerce_token_symbol(request.tokenIn, request.srcChainId)
-    token_out_symbol = _coerce_token_symbol(request.tokenOut, request.dstChainId)
-    _ensure_confidential_supported(
-        token_in_symbol,
-        token_out_symbol,
-        request.srcChainId,
-        request.dstChainId,
-    )
-    output_resolution = _resolve_confidential_output(
-        request.tokenOut,
-        token_out_symbol,
-        request.dstChainId,
-    )
-    return _build_quote(
-        token_in_symbol,
-        output_resolution["requestedSymbol"],
-        output_resolution["executionSymbol"],
-        request.amountIn,
-        request.srcChainId,
-        request.tokenIn,
-        output_resolution["executionAddress"],
-        output_resolution["deliveryMode"],
-    )
+    try:
+        token_in_symbol = _coerce_token_symbol(request.tokenIn, request.srcChainId)
+        token_out_symbol = _coerce_token_symbol(request.tokenOut, request.dstChainId)
+        _ensure_confidential_supported(
+            token_in_symbol,
+            token_out_symbol,
+            request.srcChainId,
+            request.dstChainId,
+        )
+        output_resolution = _resolve_confidential_output(
+            request.tokenOut,
+            token_out_symbol,
+            request.dstChainId,
+        )
+        return _build_quote(
+            token_in_symbol,
+            output_resolution["requestedSymbol"],
+            output_resolution["executionSymbol"],
+            request.amountIn,
+            request.srcChainId,
+            request.tokenIn,
+            output_resolution["executionAddress"],
+            output_resolution["deliveryMode"],
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(
+            "Confidential quote failed for %s -> %s on chain %s: %s",
+            request.tokenIn,
+            request.tokenOut,
+            request.srcChainId,
+            exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Confidential quote failed: {exc}",
+        ) from exc
 
 
 @router.post("/submit")

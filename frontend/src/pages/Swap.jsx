@@ -279,6 +279,12 @@ const Swap = () => {
   const confidentialPermit2Spender = confidentialFundingMode === 'permit2'
     ? intentGasless.permit2Address
     : null;
+  const zeroTollPermitType = isZeroTollGasless && tokenIn?.address
+    ? intentGasless.getPermitType(tokenIn.address)
+    : 'none';
+  const zeroTollApprovalSpender = zeroTollPermitType === 'permit2'
+    ? intentGasless.permit2Address
+    : null;
   const confidentialRecommendedInput = getConfidentialRecommendedInput(
     tokenIn,
     fromChain?.tokens || []
@@ -290,12 +296,31 @@ const Swap = () => {
           : confidentialFundingMode === 'erc2612'
             ? undefined
             : confidentialEscrowAddress)
+      : isZeroTollGasless
+        ? (zeroTollPermitType === 'permit2'
+            ? zeroTollApprovalSpender
+            : undefined)
       : routerHubAddress;
   const confidentialApprovalRequired = Boolean(
     isConfidentialMode && (
       (confidentialFundingMode === 'permit2' && confidentialPermit2Spender) ||
       (confidentialFundingMode === 'approval' && confidentialEscrowAddress)
     )
+  );
+  const zeroTollApprovalRequired = Boolean(
+    isZeroTollGasless && zeroTollPermitType === 'permit2' && zeroTollApprovalSpender
+  );
+  const modeManagedApprovalRequired = Boolean(
+    (isConfidentialMode && confidentialApprovalRequired) ||
+    zeroTollApprovalRequired
+  );
+  const showApprovalAction = Boolean(
+    needsApproval &&
+    !tokenIn?.isNative &&
+    !isGaslessMode &&
+    !isEIP7702Mode &&
+    (!isConfidentialMode || confidentialApprovalRequired) &&
+    (!isZeroTollGasless || zeroTollApprovalRequired)
   );
   
   // Wagmi hooks for approval
@@ -440,7 +465,7 @@ const Swap = () => {
   
   // Check if approval is needed when amount or allowance changes
   useEffect(() => {
-    if (isConfidentialMode && !confidentialApprovalRequired) {
+    if ((isConfidentialMode && !confidentialApprovalRequired) || (isZeroTollGasless && !zeroTollApprovalRequired)) {
       setNeedsApproval(false);
       return;
     }
@@ -510,8 +535,10 @@ const Swap = () => {
     confidentialApprovalRequired,
     currentAllowance,
     isConfidentialMode,
+    isZeroTollGasless,
     refetchAllowance,
     tokenIn,
+    zeroTollApprovalRequired,
   ]);
   
   // Handle approval success
@@ -2379,7 +2406,7 @@ const Swap = () => {
             
             {/* Show Approve button if needed, otherwise Execute */}
             {/* Confidential intent now only needs approval for tokens without Permit2 / ERC-2612 funding support. */}
-            {needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && (!isConfidentialMode || confidentialApprovalRequired) ? (
+            {showApprovalAction ? (
               <button
                 onClick={handleApprove}
                 disabled={approvalPending || loading}
@@ -2392,7 +2419,9 @@ const Swap = () => {
                     Approving...
                   </>
                 ) : (
-                  confidentialApprovalRequired
+                  zeroTollApprovalRequired
+                    ? `One-time Approve ${tokenIn.symbol} to Permit2`
+                    : confidentialApprovalRequired
                     ? (confidentialFundingMode === 'permit2'
                         ? `One-time Approve ${tokenIn.symbol} to Permit2`
                         : `Approve ${tokenIn.symbol} to Escrow`)
@@ -2402,14 +2431,16 @@ const Swap = () => {
             ) : (
               <button
                 onClick={handleExecute}
-                disabled={(loading || gaslessSwap.isLoading || intentGasless.isLoading || eip7702Swap.loading || confidentialGasless.isLoading) || (!quote && !isZeroTollGasless && !isEIP7702Mode && !isGaslessMode && !isConfidentialMode) || (needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && (!isConfidentialMode || confidentialApprovalRequired)) || (fromChain.id !== toChain.id)}
+                disabled={(loading || gaslessSwap.isLoading || intentGasless.isLoading || eip7702Swap.loading || confidentialGasless.isLoading) || (!quote && !isZeroTollGasless && !isEIP7702Mode && !isGaslessMode && !isConfidentialMode) || showApprovalAction || (fromChain.id !== toChain.id)}
                 className="flex-1 btn-primary hover-lift disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 data-testid="execute-swap-btn"
                 title={
                   fromChain.id !== toChain.id ? 'Cross-chain swaps not yet supported' :
-                  needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && (!isConfidentialMode || confidentialApprovalRequired)
+                  showApprovalAction
                     ? (
-                        confidentialApprovalRequired
+                        zeroTollApprovalRequired
+                          ? 'Please complete the one-time Permit2 approval first'
+                          : confidentialApprovalRequired
                           ? (confidentialFundingMode === 'permit2'
                               ? 'Please complete the one-time Permit2 approval first'
                               : 'Please approve the ConfidentialIntentEscrow spender first')
@@ -2452,11 +2483,18 @@ const Swap = () => {
           )}
           
           {/* Approval Info Banner - Don't show for mode-managed flows */}
-          {needsApproval && !tokenIn.isNative && !isGaslessMode && !isZeroTollGasless && !isEIP7702Mode && (
+          {showApprovalAction && (
             <div className="mt-4 glass p-4 rounded-xl flex items-start gap-3 border border-yellow-500/30">
               <Info className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-zt-paper/80">
-                <strong className="text-yellow-400">Approval Required:</strong> You need to approve the RouterHub contract to spend your {tokenIn.symbol} before executing the swap.
+                <strong className="text-yellow-400">Approval Required:</strong>{' '}
+                {zeroTollApprovalRequired
+                  ? `Permit2 needs a one-time token approval before ZeroToll gasless execution can pull ${tokenIn.symbol}.`
+                  : confidentialApprovalRequired
+                    ? (confidentialFundingMode === 'permit2'
+                        ? `Permit2 needs a one-time token approval before confidential submission can pull ${tokenIn.symbol}.`
+                        : `Approve the ConfidentialIntentEscrow spender before executing the confidential flow.`)
+                    : `You need to approve the RouterHub contract to spend your ${tokenIn.symbol} before executing the swap.`}
               </div>
             </div>
           )}
