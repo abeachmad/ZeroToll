@@ -20,15 +20,17 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const pathSegments = Array.isArray(req.query.path)
-    ? req.query.path
-    : req.query.path
-      ? [req.query.path]
-      : [];
+  const rawPath = Array.isArray(req.query.path) ? req.query.path.join('/') : req.query.path;
+  const normalizedPath = String(rawPath || '').replace(/^\/+/, '');
 
-  const targetPath = pathSegments.join('/');
+  if (!normalizedPath) {
+    res.status(400).json({
+      error: 'Missing proxy path.',
+    });
+    return;
+  }
+
   const query = new URLSearchParams();
-
   for (const [key, value] of Object.entries(req.query || {})) {
     if (key === 'path') continue;
     if (Array.isArray(value)) {
@@ -40,8 +42,7 @@ module.exports = async (req, res) => {
     }
   }
 
-  const queryString = query.toString();
-  const targetUrl = `${backendBaseUrl}/${targetPath}${queryString ? `?${queryString}` : ''}`;
+  const targetUrl = `${backendBaseUrl}/${normalizedPath}${query.toString() ? `?${query.toString()}` : ''}`;
 
   const headers = {};
   for (const [key, value] of Object.entries(req.headers || {})) {
