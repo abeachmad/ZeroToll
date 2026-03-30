@@ -1,17 +1,26 @@
 # ZeroToll 🚀
 
-**True Gasless DeFi with Dynamic Fee System**
+**Gasless DeFi with Native Output and Confidential Intents**
 
-> Next-generation DeFi protocol enabling **true gasless swaps** where users pay ZERO gas.
-> Swap tokens without native gas. Pay a small service fee from your input token. Fully on-chain.
+> ZeroToll is a gasless execution protocol that lets users swap without holding native gas, with fees recovered from token flow instead of upfront ETH/POL.
 
-> Powered by **ERC-4337 Account Abstraction**, **EIP-712 Signatures**, **ERC-2612 Permit**, and our **Self-Hosted VerifyingPaymasterV07**.
+> Today the repo ships two active tracks:
+> - **ZeroToll Gasless**: ERC-4337 + self-hosted paymaster, including native ETH delivery on Sepolia
+> - **Confidential Gasless Intent**: Sepolia-only staged confidential settlement using browser-side CoFHE encryption, on-chain escrow, and native ETH finalization
+
+> Powered by **ERC-4337 Account Abstraction**, **EIP-712 Signatures**, **ERC-2612 Permit**, **Permit2**, **Self-Hosted VerifyingPaymasterV07**, and **Fhenix CoFHE / @cofhe/sdk**.
 
 ---
 
 ## ✨ What is ZeroToll?
 
-ZeroToll is a **gasless DEX** that eliminates gas friction in DeFi through **intent-based signatures and self-hosted paymaster sponsorship**.
+ZeroToll is a **gasless DEX / execution layer** that removes the native-gas barrier in DeFi through **intent-based signatures and self-hosted paymaster sponsorship**.
+
+As of 2026-03-31, the active repo supports:
+
+- **ERC-4337 gasless swaps** on Sepolia and Amoy
+- **Native output delivery** on Sepolia, so a user can swap from ERC-20 into native `ETH`
+- **Confidential Gasless Intent** on Sepolia with real browser-side CoFHE encryption and on-chain staged finalization
 
 ### Fee Model
 
@@ -25,11 +34,21 @@ ZeroToll is a **gasless DEX** that eliminates gas friction in DeFi through **int
 ### 🎯 Core Innovation: Self-Hosted ERC-4337 Paymaster
 
 **How ZeroToll Gasless Works:**
-1. User signs **ERC-2612 Permit** (approves token transfer) - NO GAS
+1. User signs **ERC-2612 Permit** or **Permit2** spending authorization, depending on the token
 2. User signs **EIP-712 SwapIntent** (authorizes the swap) - NO GAS  
 3. ZeroToll Relayer calculates **2x gas fee** from input token
 4. Our **VerifyingPaymasterV07** sponsors ALL gas costs
-5. **RouterV3** executes swap and sends fee to Treasury
+5. **RouterV3** executes swap, sends fee to Treasury, and can unwrap wrapped output into native `ETH`
+
+For the confidential track, the user flow is intentionally staged:
+
+1. Browser encrypts a private execution threshold with CoFHE
+2. ZeroToll submits a confidential intent into `ConfidentialIntentEscrow`
+3. Sponsored execution runs through the active venue
+4. On-chain decryption is requested
+5. Settlement is finalized as either:
+   - native/token delivery to the user
+   - or refund on failure
 
 ---
 
@@ -100,13 +119,44 @@ Two root-level sandbox frontends, `frontend-nextjs-broken/` and `frontend-cra-ba
 
 ---
 
+## 📌 Current Status
+
+Updated: `2026-03-31`
+
+### Primary live path
+
+- **ZeroToll Gasless** is still the main product path
+- It uses **ERC-4337 + ZeroToll paymaster**
+- On Sepolia it can deliver **native ETH** directly after internal wrapped settlement
+
+### Confidential buildathon path
+
+- **Confidential Gasless Intent** is live on **Sepolia**
+- Browser-side encryption uses `@cofhe/sdk`
+- Settlement runs through **ConfidentialIntentEscrow**
+- Final delivery can unwrap to **native ETH**
+
+Current confirmed confidential paths:
+
+- `USDC -> ETH`: **live adapter-backed** through `SmartDexAdapter`
+- `zUSDC -> ETH`: **live inventory-backed** confidential demo path on escrow
+
+Important caveats:
+
+- **Permit2 inputs** such as `USDC` are gasless only after a **one-time Permit2 approval**
+- **ERC-2612 inputs** such as `zUSDC` are approval-free from step zero
+- The confidential path is **real and on-chain**, but still **demo-oriented** and not yet a production-ready private router
+- `zUSDC -> ETH` currently proves the staged confidential lifecycle, but it still settles through an **inventory-backed** path rather than a direct venue adapter
+
+---
+
 ## 📊 Deployed Contracts
 
 ### RouterV3 + Treasury
 
 | Network | RouterV3 | Treasury |
 |---------|----------|----------|
-| **Sepolia** | `0xB54e95a30E4Aa355380798313E0791833C7F0BFF` | `0xA5e89F1485D56fd5dfA20B6FDC9874B8bCF0bd10` |
+| **Sepolia** | `0xEDEB7F0a335BdAeA933421701Ed49726649815fF` | `0xA5e89F1485D56fd5dfA20B6FDC9874B8bCF0bd10` |
 | **Amoy** | `0xD83D377E4698317731b2953854c01d39C60815d7` | `0xD6a7294445F34d0F7244b2072696106904ea807B` |
 
 ### Self-Hosted Paymaster
@@ -115,6 +165,12 @@ Two root-level sandbox frontends, `frontend-nextjs-broken/` and `frontend-cra-ba
 |---------|---------|
 | **Sepolia** | `0xaf7e002447b790f212ea435f9387509cd1ef0054` |
 | **Amoy** | `0xaad1211a722ee04b6980724586b6b5b7b0c86fee` |
+
+### Confidential Intent Escrow
+
+| Network | Address | Notes |
+|---------|---------|-------|
+| **Sepolia** | `0xF85F5f45dc1fDC63379d1C10B7EA5cc194cFFbe1` | Active confidential staged settlement contract |
 
 ### zTokens (ERC-2612 Permit)
 
@@ -127,14 +183,21 @@ Two root-level sandbox frontends, `frontend-nextjs-broken/` and `frontend-cra-ba
 
 ---
 
-## ✅ Verified Gasless Transactions
+## ✅ Verified Transactions
 
-| Network | Transaction | Status |
-|---------|-------------|--------|
-| **Amoy** | [0x463469b0...](https://amoy.polygonscan.com/tx/0x463469b0eba526a2abf2ca4049a11fc280716d8840d1c35d2aa8869501b03edf) | ✅ Success |
-| **Sepolia** | [0x9ea3743d...](https://sepolia.etherscan.io/tx/0x9ea3743dd77cb83ec50ec23ba7faef56b7fd052931bee737d7b6bb16995d0ce8) | ✅ Success |
+| Flow | Network | Transaction | Status |
+|------|---------|-------------|--------|
+| **ZeroToll Gasless (ERC-4337)** | **Sepolia** | [0x51cea4d6...](https://sepolia.etherscan.io/tx/0x51cea4d64be4ab84f17512a8615514f89e627dba49367890bbcfec660f7f8115) | ✅ User receives native ETH |
+| **Confidential USDC -> ETH** | **Sepolia** | [0x586d309a...](https://sepolia.etherscan.io/tx/0x586d309a8fb1d246aad79057ce2e1437d2bca6c2a83ba2261921199d5a51da70) | ✅ Finalized through SmartDexAdapter |
+| **Confidential zUSDC -> ETH** | **Sepolia** | [0x5c426034...](https://sepolia.etherscan.io/tx/0x5c426034e235ef3bac8827747e820c1dc5764858453cc7b6cb44947b246b37a5) | ✅ Finalized through inventory-backed escrow path |
 
-**Gas spent by user: ZERO** - All gas sponsored by ZeroToll Paymaster!
+**Important:** sponsored execution gas is paid by ZeroToll, but **Permit2 setup approval** is still a user-paid one-time transaction when required. ERC-2612 inputs remain approval-free from step zero.
+
+These verified links are the most useful judge-facing proof points today:
+
+- **Main gasless path**: user swaps into native `ETH` without holding native gas up front
+- **Confidential USDC -> ETH**: browser-side CoFHE encryption + on-chain staged settlement + native `ETH` finalization
+- **Confidential zUSDC -> ETH**: approval-free encrypted input path + on-chain staged settlement + native `ETH` finalization
 
 ---
 
@@ -153,26 +216,36 @@ Two root-level sandbox frontends, `frontend-nextjs-broken/` and `frontend-cra-ba
 - **Pyth Oracle** for real-time price feeds
 - Full control over gas sponsorship (no third-party fees)
 
-### Phase 3: Smart Wallet Compatibility 🔵 PLANNED
+### Phase 3: Confidential Intents + Wallet Compatibility 🟡 IN PROGRESS
 
-**Goal**: add wallet-native smart account UX and experimental custom EIP-7702 without replacing ZeroToll's ERC-4337 paymaster as the core gasless engine
+**Goal**: keep ERC-4337 as the core sponsor engine, while adding confidential execution on Sepolia and preserving optional wallet-native smart account UX
 
 | Mode | Role in product | Sponsor control |
 |------|-----------------|-----------------|
 | **ERC-4337 + ZeroToll Paymaster** | Primary ZeroToll gasless path | ✅ ZeroToll-controlled |
+| **Confidential Gasless Intent** | Sepolia buildathon path | ✅ ZeroToll-controlled |
 | **Wallet-native smart account** | Optional batch UX for compatible wallets | ⚠️ Wallet-controlled |
 | **Custom EIP-7702 delegation** | Experimental path for embedded / programmatic wallets | ✅ Possible, wallet-dependent |
 
-**Planned outcomes**:
-- keep ZeroToll-sponsored gasless on ERC-4337
-- support wallet-native batching where available
-- support custom EIP-7702 only on wallets that expose low-level authorization signing
-- avoid treating MetaMask-style smart accounts as equivalent to ZeroToll-sponsored gasless economics
+**Live now**:
+- ERC-4337 gasless remains the main ZeroToll path
+- native ETH delivery works on Sepolia
+- confidential staged settlement works on Sepolia
+- `USDC -> ETH` confidential uses `SmartDexAdapter`
+- `zUSDC -> ETH` confidential currently uses inventory-backed escrow settlement
+
+**Still in progress**:
+- remove inventory-backed confidential mixed-pair path
+- replace plaintext helper assumptions in the confidential submit path
+- make the confidential live path fully proof-oriented instead of partially demo-oriented
+- keep smart-wallet and custom EIP-7702 support clearly secondary to the paymaster engine
 
 **Current compatibility target**: ✅ Ethereum Sepolia, ✅ Polygon Amoy
 
 📄 [ZeroToll Gasless Strategy](./docs/ZEROTOLL_GASLESS_STRATEGY.md)
 📄 [EIP-7702 Implementation Plan](./docs/EIP7702_IMPLEMENTATION_PLAN.md)
+📄 [ZeroToll x Fhenix Buildathon Fit](./docs/FHENIX_BUILDATHON_FIT.md)
+📄 [ZeroToll Fhenix Direct Integration](./docs/ZEROTOLL_FHENIX_DIRECT_INTEGRATION.md)
 
 ### Phase 4: Community Pool 🔵 PLANNED
 
@@ -214,7 +287,8 @@ Two root-level sandbox frontends, `frontend-nextjs-broken/` and `frontend-cra-ba
 ### What Relayer CAN Do
 
 - ✅ Choose not to execute (liveness, not security)
-- ✅ See intent before execution (Phase 3 fixes this)
+- ✅ See public intent data on the normal ERC-4337 path
+- ⚠️ In confidential mode, the relayer still sees public metadata, but the private threshold is hidden and enforced through staged settlement
 
 📄 [Full Trust Model & Security Analysis](./docs/TRUST_MODEL.md)
 
@@ -229,6 +303,7 @@ Two root-level sandbox frontends, `frontend-nextjs-broken/` and `frontend-cra-ba
 | Frontend | React 18, Tailwind CSS, wagmi, viem |
 | Database | MongoDB 7.0 |
 | Oracles | Pyth Network (real-time prices) |
+| Private Compute | Fhenix CoFHE, `@cofhe/sdk` |
 | Account Abstraction | ERC-4337 (primary), wallet-native smart accounts, optional custom EIP-7702 |
 | Networks | Polygon Amoy, Ethereum Sepolia |
 
@@ -240,6 +315,6 @@ MIT License
 
 ---
 
-**Built with ❤️ for the Polygon Buildathon**
+**Built for gasless + confidential DeFi execution**
 
-*"Making DeFi accessible to everyone, one gasless swap at a time."*
+*"Making DeFi accessible without native gas, then making execution more private where it matters."*
