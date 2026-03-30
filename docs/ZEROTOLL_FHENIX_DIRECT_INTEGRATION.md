@@ -365,18 +365,30 @@ The repo now has a first staged runtime scaffold for this path:
   - record execution result
   - request decryption
   - finalize on-chain
+- for `cross-token` confidential demos where both tokens are standard testnet assets, the active backend can now drive a live **adapter-backed** escrow lifecycle through `MockDEXAdapter`:
+  - live proof: `USDC -> WETH`
+  - direct adapter swap tx: `0xca8b5c70e6e3e8108a5e6f79f3b7010e8fc523e8ccbed8c398fab441fa4e5d44`
+- for `cross-token` confidential demos where both tokens are zTokens, the active backend can now drive a live **adapter-backed** escrow lifecycle through `ZeroTollAdapter`:
+  - live proof: `zUSDC -> zETH`
+  - direct adapter swap tx: `0xd72a6a4b53ff695195d0afdb0784e8edb6fc43b79d6c0d256f8689de4ab8cabf`
+- the contracts package now includes a one-shot prep script for Sepolia confidential demos:
+  - `packages/contracts/scripts/prepare-confidential-demo-sepolia.js`
+  - current live prep change: `ZeroTollAdapter.maxPriceAge` was relaxed to `604800` on Sepolia via tx `0xfb125d70def1fc71993d53007a6321f948a96a557181cbf0050aa1d78a027b30`
 
 What is still intentionally unfinished:
 
 - CoFHE browser encryption is only wired for Sepolia right now
-- general cross-token settlement that sources liquidity from real adapters is still hybrid/backend scaffolding
 - the live app does not yet send the real encrypted `InEuint128` payload into the live contract path
 - the confidential live path still needs one ERC-20 approval to `ConfidentialIntentEscrow`, because the contract currently uses `transferFrom`-based escrow funding
-- the fully live cross-token path is currently limited to an inventory-backed demo route; it is not yet performing a real confidential adapter swap against live pool liquidity
+- mixed regular-token <-> zToken paths are still inventory-backed/hybrid; they are not yet routed through a single live adapter execution path
+- the direct adapter-backed path is still demo-grade testnet routing:
+  - standard-token pairs currently go through `MockDEXAdapter`
+  - zToken pairs currently go through `ZeroTollAdapter`
+  - neither path should be marketed as production-ready confidential liquidity routing yet
 
 This means the product is now honest in both directions:
 
-- the confidential mode is now real enough to demonstrate staged lifecycle UX, real browser-side encryption on Sepolia, a live escrow submit path, a fully on-chain `same-token` demo lifecycle, and a fully on-chain `cross-token inventory-backed` demo lifecycle
+- the confidential mode is now real enough to demonstrate staged lifecycle UX, real browser-side encryption on Sepolia, a live escrow submit path, a fully on-chain `same-token` demo lifecycle, a fully on-chain `cross-token inventory-backed` demo lifecycle, and two fully on-chain **adapter-backed** cross-token demos
 - but it does **not** yet claim that the live frontend/backend path is already enforcing `minOut` with Fhenix end-to-end on-chain
 
 ## Bottom Line

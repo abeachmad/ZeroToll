@@ -40,7 +40,77 @@ ERC20_ABI = [
         "stateMutability": "nonpayable",
         "inputs": [{"name": "to", "type": "address"}, {"name": "amount", "type": "uint256"}],
         "outputs": [{"name": "", "type": "bool"}],
-    }
+    },
+]
+MOCK_DEX_ADAPTER_ABI = [
+    {
+        "name": "supportedTokens",
+        "type": "function",
+        "stateMutability": "view",
+        "inputs": [{"name": "token", "type": "address"}],
+        "outputs": [{"name": "", "type": "bool"}],
+    },
+    {
+        "name": "getQuote",
+        "type": "function",
+        "stateMutability": "view",
+        "inputs": [
+            {"name": "tokenIn", "type": "address"},
+            {"name": "tokenOut", "type": "address"},
+            {"name": "amountIn", "type": "uint256"},
+        ],
+        "outputs": [
+            {"name": "amountOut", "type": "uint256"},
+            {"name": "path", "type": "address[]"},
+        ],
+    },
+    {
+        "name": "swap",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "tokenIn", "type": "address"},
+            {"name": "tokenOut", "type": "address"},
+            {"name": "amountIn", "type": "uint256"},
+            {"name": "minAmountOut", "type": "uint256"},
+            {"name": "recipient", "type": "address"},
+            {"name": "deadline", "type": "uint256"},
+        ],
+        "outputs": [{"name": "amountOut", "type": "uint256"}],
+    },
+]
+ZERO_TOLL_ADAPTER_ABI = [
+    {
+        "name": "supportedTokens",
+        "type": "function",
+        "stateMutability": "view",
+        "inputs": [{"name": "token", "type": "address"}],
+        "outputs": [{"name": "", "type": "bool"}],
+    },
+    {
+        "name": "getQuote",
+        "type": "function",
+        "stateMutability": "view",
+        "inputs": [
+            {"name": "tokenIn", "type": "address"},
+            {"name": "tokenOut", "type": "address"},
+            {"name": "amountIn", "type": "uint256"},
+        ],
+        "outputs": [{"name": "amountOut", "type": "uint256"}],
+    },
+    {
+        "name": "swap",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "tokenIn", "type": "address"},
+            {"name": "tokenOut", "type": "address"},
+            {"name": "amountIn", "type": "uint256"},
+            {"name": "minAmountOut", "type": "uint256"},
+            {"name": "recipient", "type": "address"},
+        ],
+        "outputs": [{"name": "amountOut", "type": "uint256"}],
+    },
 ]
 
 SETTLEMENT_STAGE_NAMES = {
@@ -160,6 +230,40 @@ def _normalize_bytes32(value: str | bytes) -> bytes:
     return Web3.to_bytes(hexstr=value)
 
 
+def _adapter_contract(w3: Web3, adapter_address: str, adapter_kind: str) -> Any:
+    adapter_abi = (
+        ZERO_TOLL_ADAPTER_ABI
+        if adapter_kind == "zeroToll"
+        else MOCK_DEX_ADAPTER_ABI
+    )
+    return w3.eth.contract(
+        address=Web3.to_checksum_address(adapter_address),
+        abi=adapter_abi,
+    )
+
+
+def _erc20_contract(w3: Web3, token_address: str) -> Any:
+    return w3.eth.contract(
+        address=Web3.to_checksum_address(token_address),
+        abi=ERC20_ABI,
+    )
+
+
+def _clamp_fee_amount(
+    estimated_fee_amount: int,
+    gross_amount_out: int,
+    plaintext_min_out: int,
+) -> int:
+    if gross_amount_out <= 0 or estimated_fee_amount <= 0:
+        return 0
+
+    if plaintext_min_out > 0:
+        max_fee_without_violating_user_floor = max(gross_amount_out - plaintext_min_out, 0)
+        return min(estimated_fee_amount, max_fee_without_violating_user_floor)
+
+    return min(estimated_fee_amount, gross_amount_out)
+
+
 def _send_transaction(w3: Web3, account: Any, tx_builder: Any, chain_id: int) -> Dict[str, Any]:
     tx_params = {
         "from": account.address,
@@ -186,6 +290,63 @@ def _send_transaction(w3: Web3, account: Any, tx_builder: Any, chain_id: int) ->
         "txHash": tx_hash.hex(),
         "blockNumber": receipt.blockNumber,
         "gasUsed": getattr(receipt, "gasUsed", None),
+    }
+
+
+def probe_live_adapter_execution(
+    chain_id: int,
+    adapter_address: str,
+    adapter_kind: str,
+    token_in_address: str,
+    token_out_address: str,
+    amount_in_units: int,
+) -> Dict[str, Any]:
+    client = get_confidential_contract_client(chain_id)
+    if client is None:
+        raise RuntimeError("ConfidentialIntentEscrow is not configured for live execution on this chain.")
+
+    w3: Web3 = client["web3"]
+    adapter = _adapter_contract(w3, adapter_address, adapter_kind)
+    token_out = _erc20_contract(w3, token_out_address)
+    token_in_checksum = Web3.to_checksum_address(token_in_address)
+    token_out_checksum = Web3.to_checksum_address(token_out_address)
+
+    supported_in = bool(adapter.functions.supportedTokens(token_in_checksum).call())
+    supported_out = bool(adapter.functions.supportedTokens(token_out_checksum).call())
+    if not supported_in or not supported_out:
+        return {
+            "ready": False,
+            "supportedTokenIn": supported_in,
+            "supportedTokenOut": supported_out,
+            "reason": "Adapter does not support this token pair.",
+        }
+
+    if adapter_kind == "zeroToll":
+        expected_output = int(
+            adapter.functions.getQuote(
+                token_in_checksum,
+                token_out_checksum,
+                int(amount_in_units),
+            ).call()
+        )
+    else:
+        quote_result = adapter.functions.getQuote(
+            token_in_checksum,
+            token_out_checksum,
+            int(amount_in_units),
+        ).call()
+        expected_output = int(quote_result[0])
+
+    output_balance = int(token_out.functions.balanceOf(Web3.to_checksum_address(adapter_address)).call())
+    ready = expected_output > 0 and output_balance >= expected_output
+
+    return {
+        "ready": ready,
+        "supportedTokenIn": supported_in,
+        "supportedTokenOut": supported_out,
+        "expectedOutput": str(expected_output),
+        "adapterOutputBalance": str(output_balance),
+        "reason": None if ready else "Adapter output liquidity is insufficient for the current quote.",
     }
 
 
@@ -324,6 +485,122 @@ def simulate_inventory_backed_execution(
         "operatorInventoryBalance": str(available_balance),
         "releaseInputTxHash": release_receipt["txHash"],
         "returnOutputTxHash": fund_receipt["txHash"],
+        "recordExecutionTxHash": record_receipt["txHash"],
+        "requestDecryptionTxHash": decrypt_receipt["txHash"],
+    }
+
+
+def execute_adapter_backed_execution(
+    chain_id: int,
+    intent_id: str,
+    adapter_address: str,
+    adapter_kind: str,
+    token_in_address: str,
+    token_out_address: str,
+    amount_in_units: int,
+    execution_min_amount_out: int,
+    deadline: int,
+    estimated_fee_amount: int,
+    plaintext_min_out: int,
+) -> Dict[str, Any]:
+    client = get_confidential_contract_client(chain_id)
+    if client is None:
+        raise RuntimeError("ConfidentialIntentEscrow is not configured for live execution on this chain.")
+
+    preflight = probe_live_adapter_execution(
+        chain_id=chain_id,
+        adapter_address=adapter_address,
+        adapter_kind=adapter_kind,
+        token_in_address=token_in_address,
+        token_out_address=token_out_address,
+        amount_in_units=amount_in_units,
+    )
+    if not preflight.get("ready"):
+        raise RuntimeError(preflight.get("reason") or "Adapter preflight failed.")
+
+    w3: Web3 = client["web3"]
+    account = client["account"]
+    contract = client["contract"]
+    adapter = _adapter_contract(w3, adapter_address, adapter_kind)
+    token_out = _erc20_contract(w3, token_out_address)
+    escrow_address = Web3.to_checksum_address(client["address"])
+
+    balance_before = int(token_out.functions.balanceOf(escrow_address).call())
+
+    release_receipt = _send_transaction(
+        w3,
+        account,
+        contract.functions.releaseInputForExecution(
+            _normalize_bytes32(intent_id),
+            Web3.to_checksum_address(adapter_address),
+        ),
+        chain_id,
+    )
+
+    if adapter_kind == "zeroToll":
+        swap_fn = adapter.functions.swap(
+            Web3.to_checksum_address(token_in_address),
+            Web3.to_checksum_address(token_out_address),
+            int(amount_in_units),
+            int(execution_min_amount_out),
+            escrow_address,
+        )
+    else:
+        swap_fn = adapter.functions.swap(
+            Web3.to_checksum_address(token_in_address),
+            Web3.to_checksum_address(token_out_address),
+            int(amount_in_units),
+            int(execution_min_amount_out),
+            escrow_address,
+            int(deadline),
+        )
+
+    swap_receipt = _send_transaction(
+        w3,
+        account,
+        swap_fn,
+        chain_id,
+    )
+
+    balance_after = int(token_out.functions.balanceOf(escrow_address).call())
+    gross_amount_out = balance_after - balance_before
+    if gross_amount_out <= 0:
+        raise RuntimeError("Adapter execution completed but escrow did not receive any tokenOut.")
+
+    applied_fee_amount = _clamp_fee_amount(
+        int(estimated_fee_amount),
+        int(gross_amount_out),
+        int(plaintext_min_out),
+    )
+
+    record_receipt = _send_transaction(
+        w3,
+        account,
+        contract.functions.recordExecutionResult(
+            _normalize_bytes32(intent_id),
+            int(gross_amount_out),
+            int(applied_fee_amount),
+        ),
+        chain_id,
+    )
+    decrypt_receipt = _send_transaction(
+        w3,
+        account,
+        contract.functions.requestDecryption(_normalize_bytes32(intent_id)),
+        chain_id,
+    )
+
+    return {
+        "mode": f"{adapter_kind}_adapter_live_demo",
+        "adapterKind": adapter_kind,
+        "adapterAddress": Web3.to_checksum_address(adapter_address),
+        "preflight": preflight,
+        "executionMinAmountOut": str(execution_min_amount_out),
+        "grossAmountOut": str(gross_amount_out),
+        "appliedFeeAmount": str(applied_fee_amount),
+        "netAmountOut": str(gross_amount_out - applied_fee_amount),
+        "releaseInputTxHash": release_receipt["txHash"],
+        "swapTxHash": swap_receipt["txHash"],
         "recordExecutionTxHash": record_receipt["txHash"],
         "requestDecryptionTxHash": decrypt_receipt["txHash"],
     }

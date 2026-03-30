@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from confidential_contract import (
+    execute_adapter_backed_execution,
     finalize_confidential_settlement,
     get_confidential_contract_client,
     get_settlement_summary,
@@ -156,6 +157,67 @@ def _refresh_transient_status(intent: Dict[str, Any]) -> None:
         intent["updatedAt"] = _utc_now()
 
 
+def _is_ztoken_symbol(symbol: Optional[str]) -> bool:
+    return bool(symbol and symbol.lower().startswith("z"))
+
+
+def _select_live_execution_adapter(intent: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    chain_config = CHAIN_CONFIG.get(intent["srcChainId"], {})
+    adapters = chain_config.get("adapters", {})
+    token_in_symbol = intent.get("tokenInSymbol")
+    token_out_symbol = intent.get("tokenOutSymbol")
+
+    if _is_ztoken_symbol(token_in_symbol) and _is_ztoken_symbol(token_out_symbol):
+        adapter_address = adapters.get("zeroToll")
+        if adapter_address:
+            return {
+                "address": adapter_address,
+                "kind": "zeroToll",
+                "label": "ZeroTollAdapter",
+                "mode": "cross_token_ztoken_adapter_live_demo",
+            }
+
+    if not _is_ztoken_symbol(token_in_symbol) and not _is_ztoken_symbol(token_out_symbol):
+        adapter_address = adapters.get("mockDex")
+        if adapter_address:
+            return {
+                "address": adapter_address,
+                "kind": "mockDex",
+                "label": "MockDEXAdapter",
+                "mode": "cross_token_adapter_live_demo",
+            }
+
+    return None
+
+
+def _describe_live_execution(mode: str, finalized: Optional[bool] = None) -> str:
+    if finalized is None:
+        if mode == "same_token_live_escrow_demo":
+            return "Live same-token confidential demo executed on escrow. Waiting for on-chain decryption readiness."
+        if mode == "cross_token_ztoken_adapter_live_demo":
+            return "Live zToken confidential execution routed through ZeroTollAdapter. Waiting for on-chain decryption readiness."
+        if mode == "cross_token_adapter_live_demo":
+            return "Live confidential execution routed through MockDEXAdapter. Waiting for on-chain decryption readiness."
+        return "Live cross-token inventory-backed confidential demo executed on escrow. Waiting for on-chain decryption readiness."
+
+    if finalized:
+        if mode == "same_token_live_escrow_demo":
+            return "Live same-token confidential settlement finalized on escrow."
+        if mode == "cross_token_ztoken_adapter_live_demo":
+            return "Live zToken confidential settlement finalized through ZeroTollAdapter."
+        if mode == "cross_token_adapter_live_demo":
+            return "Live confidential settlement finalized through MockDEXAdapter."
+        return "Live cross-token inventory-backed confidential settlement finalized on escrow."
+
+    if mode == "same_token_live_escrow_demo":
+        return "Live same-token confidential settlement refunded on escrow."
+    if mode == "cross_token_ztoken_adapter_live_demo":
+        return "Live zToken confidential settlement refunded after ZeroTollAdapter execution."
+    if mode == "cross_token_adapter_live_demo":
+        return "Live confidential settlement refunded after MockDEXAdapter execution."
+    return "Live cross-token inventory-backed confidential settlement refunded on escrow."
+
+
 def _live_escrow_demo_eligible(intent: Dict[str, Any]) -> bool:
     return bool(
         intent.get("contractRef")
@@ -240,7 +302,11 @@ def _build_quote(token_in_symbol: str, token_out_symbol: str, amount_in: float, 
                 "cofhe_sdk_web" if chain_id in COFHE_BROWSER_CHAINS else "commitment_only_scaffold"
             ),
             "contractEnforcement": "contracts-package-only",
-            "runtimeStatus": "staged-backend-lifecycle",
+            "runtimeStatus": (
+                "hybrid-live-escrow-with-adapter-execution"
+                if contract_state.get("submissionReady")
+                else "staged-backend-lifecycle"
+            ),
         },
         "contract": contract_state,
         "oracleSource": "Pyth",
@@ -534,43 +600,62 @@ async def execute_confidential_intent(payload: ConfidentialExecuteRequest, reque
         quoted_amount_out_units = int(record["quotedAmountOutUnits"])
         fee_units = int(record["estimatedFeeTokenUnits"])
         gross_amount_out_units = quoted_amount_out_units + fee_units
+        direct_adapter = _select_live_execution_adapter(record)
 
-        try:
-            onchain_execution = simulate_inventory_backed_execution(
-                record["srcChainId"],
-                contract_intent_id,
-                token_in_address=record["tokenIn"],
-                token_out_address=record["tokenOut"],
-                amount_in_units=amount_in_units,
-                gross_amount_out=gross_amount_out_units,
-                fee_amount=fee_units,
-            )
-        except Exception as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=f"On-chain confidential execution failed: {exc}",
-            ) from exc
+        if direct_adapter:
+            try:
+                onchain_execution = execute_adapter_backed_execution(
+                    chain_id=record["srcChainId"],
+                    intent_id=contract_intent_id,
+                    adapter_address=direct_adapter["address"],
+                    adapter_kind=direct_adapter["kind"],
+                    token_in_address=record["tokenIn"],
+                    token_out_address=record["tokenOut"],
+                    amount_in_units=amount_in_units,
+                    execution_min_amount_out=1,
+                    deadline=int(record["deadline"]),
+                    estimated_fee_amount=fee_units,
+                    plaintext_min_out=int(record.get("plaintextMinOutForTesting") or 0),
+                )
+                live_mode = direct_adapter["mode"]
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"On-chain confidential adapter execution failed: {exc}",
+                ) from exc
+        else:
+            try:
+                onchain_execution = simulate_inventory_backed_execution(
+                    record["srcChainId"],
+                    contract_intent_id,
+                    token_in_address=record["tokenIn"],
+                    token_out_address=record["tokenOut"],
+                    amount_in_units=amount_in_units,
+                    gross_amount_out=gross_amount_out_units,
+                    fee_amount=fee_units,
+                )
+                live_mode = (
+                    "same_token_live_escrow_demo"
+                    if (record["tokenIn"] or "").lower() == (record["tokenOut"] or "").lower()
+                    else "cross_token_inventory_live_demo"
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"On-chain confidential execution failed: {exc}",
+                ) from exc
 
         now = _utc_now()
         record["stage"] = "decryption_requested"
         record["status"] = "decryption_requested"
-        is_same_token = (record["tokenIn"] or "").lower() == (record["tokenOut"] or "").lower()
-        record["statusMessage"] = (
-            "Live same-token confidential demo executed on escrow. Waiting for on-chain decryption readiness."
-            if is_same_token
-            else "Live cross-token inventory-backed confidential demo executed on escrow. Waiting for on-chain decryption readiness."
-        )
-        record["enforcementMode"] = (
-            "same_token_live_escrow_demo"
-            if is_same_token
-            else "cross_token_inventory_live_demo"
-        )
+        record["statusMessage"] = _describe_live_execution(live_mode)
+        record["enforcementMode"] = live_mode
         record["updatedAt"] = now
         record["decryptionReady"] = False
         record["decryptionReadyAt"] = None
         record["execution"] = {
-            "grossAmountOut": str(gross_amount_out_units),
-            "estimatedFeeToken": str(fee_units),
+            "grossAmountOut": str(onchain_execution.get("grossAmountOut", gross_amount_out_units)),
+            "estimatedFeeToken": str(onchain_execution.get("appliedFeeAmount", fee_units)),
             "simulatedVerdict": None,
             "verdictSource": "onchain_fhenix_demo",
             "liveExecution": onchain_execution,
@@ -646,26 +731,11 @@ async def finalize_confidential_intent(payload: ConfidentialFinalizeRequest, req
 
         verdict = bool(finalize_result["verdict"])
         now = _utc_now()
-        is_same_token = (record["tokenIn"] or "").lower() == (record["tokenOut"] or "").lower()
         record["stage"] = "finalized_success" if verdict else "refunded"
         record["status"] = record["stage"]
-        record["statusMessage"] = (
-            (
-                "Live same-token confidential settlement finalized on escrow."
-                if is_same_token
-                else "Live cross-token inventory-backed confidential settlement finalized on escrow."
-            )
-            if verdict
-            else (
-                "Live same-token confidential settlement refunded on escrow."
-                if is_same_token
-                else "Live cross-token inventory-backed confidential settlement refunded on escrow."
-            )
-        )
-        record["enforcementMode"] = (
-            "same_token_live_escrow_demo"
-            if is_same_token
-            else "cross_token_inventory_live_demo"
+        record["statusMessage"] = _describe_live_execution(
+            record.get("enforcementMode", "cross_token_inventory_live_demo"),
+            finalized=verdict,
         )
         record["updatedAt"] = now
         record["finalizedAt"] = now
