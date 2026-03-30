@@ -64,6 +64,7 @@ module.exports = {
         /Failed to parse source map/,
         /Can't resolve '@react-native-async-storage\/async-storage'/,
         /Critical dependency/,
+        /Circular dependency between chunks with runtime/,
       ];
 
       return webpackConfig;
