@@ -7,19 +7,11 @@ const isVercelHost = () => {
 };
 
 export const getBackendUrl = () => {
-  const configuredUrl = stripTrailingSlash(process.env.REACT_APP_BACKEND_URL);
-
-  // In production, prefer an explicit public backend URL when provided.
-  // This keeps Vercel working even if serverless proxy routing is unavailable.
-  if (configuredUrl) {
-    return configuredUrl;
-  }
-
   if (isVercelHost()) {
     return '/api/backend';
   }
 
-  return 'http://localhost:8000';
+  return stripTrailingSlash(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000');
 };
 
 export const getRelayerUrl = () => {

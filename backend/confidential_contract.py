@@ -20,6 +20,149 @@ ABI_PATH = (
     / "ConfidentialIntentEscrow.sol"
     / "ConfidentialIntentEscrow.json"
 )
+
+CONFIDENTIAL_INTENT_TUPLE_COMPONENTS = [
+    {"name": "user", "type": "address"},
+    {"name": "tokenIn", "type": "address"},
+    {"name": "tokenOut", "type": "address"},
+    {"name": "amountIn", "type": "uint256"},
+    {"name": "deadline", "type": "uint256"},
+    {"name": "nonce", "type": "uint256"},
+    {"name": "chainId", "type": "uint256"},
+    {"name": "encryptedMinOutCommitment", "type": "bytes32"},
+]
+
+PERMIT_DETAILS_COMPONENTS = [
+    {"name": "token", "type": "address"},
+    {"name": "amount", "type": "uint160"},
+    {"name": "expiration", "type": "uint48"},
+    {"name": "nonce", "type": "uint48"},
+]
+
+PERMIT_SINGLE_COMPONENTS = [
+    {"name": "details", "type": "tuple", "components": PERMIT_DETAILS_COMPONENTS},
+    {"name": "spender", "type": "address"},
+    {"name": "sigDeadline", "type": "uint256"},
+]
+
+FALLBACK_ESCROW_ABI: list[Dict[str, Any]] = [
+    {
+        "name": "getIntentId",
+        "type": "function",
+        "stateMutability": "pure",
+        "inputs": [{"name": "intent", "type": "tuple", "components": CONFIDENTIAL_INTENT_TUPLE_COMPONENTS}],
+        "outputs": [{"name": "", "type": "bytes32"}],
+    },
+    {
+        "name": "submitIntentWithPlaintextMinOutForTesting",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "intent", "type": "tuple", "components": CONFIDENTIAL_INTENT_TUPLE_COMPONENTS},
+            {"name": "plaintextMinOut", "type": "uint128"},
+            {"name": "deliverNative", "type": "bool"},
+        ],
+        "outputs": [{"name": "intentId", "type": "bytes32"}],
+    },
+    {
+        "name": "submitIntentWithPermit2ForTesting",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "intent", "type": "tuple", "components": CONFIDENTIAL_INTENT_TUPLE_COMPONENTS},
+            {"name": "plaintextMinOut", "type": "uint128"},
+            {"name": "deliverNative", "type": "bool"},
+            {"name": "permitSingle", "type": "tuple", "components": PERMIT_SINGLE_COMPONENTS},
+            {"name": "permit2Signature", "type": "bytes"},
+        ],
+        "outputs": [{"name": "intentId", "type": "bytes32"}],
+    },
+    {
+        "name": "submitIntentWithPermitForTesting",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "intent", "type": "tuple", "components": CONFIDENTIAL_INTENT_TUPLE_COMPONENTS},
+            {"name": "plaintextMinOut", "type": "uint128"},
+            {"name": "deliverNative", "type": "bool"},
+            {"name": "permitDeadline", "type": "uint256"},
+            {"name": "permitV", "type": "uint8"},
+            {"name": "permitR", "type": "bytes32"},
+            {"name": "permitS", "type": "bytes32"},
+        ],
+        "outputs": [{"name": "intentId", "type": "bytes32"}],
+    },
+    {
+        "name": "releaseInputForExecution",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "intentId", "type": "bytes32"},
+            {"name": "executionTarget", "type": "address"},
+        ],
+        "outputs": [],
+    },
+    {
+        "name": "recordExecutionResult",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "intentId", "type": "bytes32"},
+            {"name": "grossAmountOut", "type": "uint256"},
+            {"name": "feeAmount", "type": "uint256"},
+        ],
+        "outputs": [],
+    },
+    {
+        "name": "requestDecryption",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [{"name": "intentId", "type": "bytes32"}],
+        "outputs": [],
+    },
+    {
+        "name": "finalizeSuccess",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [{"name": "intentId", "type": "bytes32"}],
+        "outputs": [],
+    },
+    {
+        "name": "finalizeRefund",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [{"name": "intentId", "type": "bytes32"}],
+        "outputs": [],
+    },
+    {
+        "name": "getSettlementSummary",
+        "type": "function",
+        "stateMutability": "view",
+        "inputs": [{"name": "intentId", "type": "bytes32"}],
+        "outputs": [
+            {"name": "intent", "type": "tuple", "components": CONFIDENTIAL_INTENT_TUPLE_COMPONENTS},
+            {"name": "stage", "type": "uint8"},
+            {"name": "encryptedMinOutHandle", "type": "uint256"},
+            {"name": "encryptedVerdictHandle", "type": "uint256"},
+            {"name": "grossAmountOut", "type": "uint256"},
+            {"name": "feeAmount", "type": "uint256"},
+            {"name": "netAmountOut", "type": "uint256"},
+            {"name": "inputReleased", "type": "bool"},
+            {"name": "deliverNative", "type": "bool"},
+            {"name": "executionTarget", "type": "address"},
+        ],
+    },
+    {
+        "name": "getVerdictStatus",
+        "type": "function",
+        "stateMutability": "view",
+        "inputs": [{"name": "intentId", "type": "bytes32"}],
+        "outputs": [
+            {"name": "verdict", "type": "bool"},
+            {"name": "decrypted", "type": "bool"},
+        ],
+    },
+]
 ENV_FILES = (
     ROOT_DIR / "packages" / "contracts" / ".env",
     ROOT_DIR / ".env.credentials",
@@ -263,8 +406,11 @@ def _normalize_private_key(value: str) -> str:
 def _load_escrow_abi() -> list[Dict[str, Any]]:
     global _ABI_CACHE
     if _ABI_CACHE is None:
-        artifact = json.loads(ABI_PATH.read_text())
-        _ABI_CACHE = artifact["abi"]
+        if ABI_PATH.exists():
+            artifact = json.loads(ABI_PATH.read_text())
+            _ABI_CACHE = artifact["abi"]
+        else:
+            _ABI_CACHE = FALLBACK_ESCROW_ABI
     return _ABI_CACHE
 
 
