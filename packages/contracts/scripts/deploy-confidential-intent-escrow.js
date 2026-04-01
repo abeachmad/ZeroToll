@@ -14,6 +14,18 @@ async function main() {
   const { key, chain } = getChainConfig(sharedConfig, networkName);
 
   const [deployer] = await hre.ethers.getSigners();
+  const extraOperators = new Set([deployer.address]);
+  const envTrustedOperators = [
+    process.env.RELAYER_ADDRESS,
+    process.env.CONFIDENTIAL_TRUSTED_OPERATOR,
+    process.env.CONFIDENTIAL_TRUSTED_OPERATORS,
+  ]
+    .flatMap((value) => (value ? value.split(',') : []))
+    .map((value) => value.trim())
+    .filter(Boolean);
+  for (const operator of envTrustedOperators) {
+    extraOperators.add(operator);
+  }
   const feeRecipient =
     chain.contracts.feeSink ||
     chain.contracts.treasury ||
@@ -42,9 +54,11 @@ async function main() {
   const address = await escrow.getAddress();
   console.log(`✅ ConfidentialIntentEscrow: ${address}`);
 
-  const trustedOperatorTx = await escrow.setTrustedOperator(deployer.address, true);
-  await trustedOperatorTx.wait();
-  console.log(`✅ Trusted operator enabled for deployer: ${deployer.address}`);
+  for (const operator of extraOperators) {
+    const trustedOperatorTx = await escrow.setTrustedOperator(operator, true);
+    await trustedOperatorTx.wait();
+    console.log(`✅ Trusted operator enabled: ${operator}`);
+  }
 
   const deployment = {
     network: networkName,
@@ -56,7 +70,7 @@ async function main() {
     wrappedNativeToken,
     permit2,
     confidentialIntentEscrow: address,
-    trustedOperator: deployer.address,
+    trustedOperators: Array.from(extraOperators),
   };
 
   const deploymentsDir = path.join(__dirname, '..', 'deployments');
