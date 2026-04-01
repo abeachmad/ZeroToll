@@ -1,6 +1,6 @@
 # ZeroToll Fhenix Direct Integration
 
-Updated: 2026-03-30
+Updated: 2026-04-02
 
 ## Executive Summary
 
@@ -401,3 +401,365 @@ It is this:
 - **confidential threshold enforcement pushes ZeroToll toward staged settlement**
 
 That is why the correct design is a **new confidential execution path**, not a cosmetic patch to the existing public router.
+
+## Detailed Product Plan: Same-Address True Gasless UX
+
+The next major design question is not only how to support confidentiality, but how to preserve the UX that mainstream users actually expect:
+
+- keep using the same wallet address they already know
+- avoid asking them to hold native gas first
+- avoid forcing them into a separate smart-account address
+- let ZeroToll sponsor execution and recover cost from token flow
+
+This section describes the concrete plan for that model.
+
+## Core Principle
+
+ZeroToll should separate three concerns that are often mixed together:
+
+- **authorization standard**
+- **execution engine**
+- **fee recovery model**
+
+Those are not the same thing.
+
+### 1. Authorization standard
+
+This determines how the protocol gets permission to move user tokens.
+
+Examples:
+
+- `ERC-2612 permit`
+- `EIP-3009 receiveWithAuthorization`
+- `Permit2`
+- plain ERC-20 `approve`
+
+### 2. Execution engine
+
+This determines how the transaction is submitted and who pays gas up front.
+
+Examples:
+
+- direct relayer transaction
+- `ERC-4337` smart-account execution
+- `EIP-7702` delegated smart-EOA execution
+
+### 3. Fee recovery model
+
+This determines how ZeroToll gets paid back after sponsoring execution.
+
+The intended ZeroToll model is:
+
+- ZeroToll sponsors the actual native gas cost
+- ZeroToll then recovers:
+  - `actual sponsored gas cost`
+  - plus `5% service fee on the sponsored gas cost`
+- the deduction is taken from the user token flow, ideally from output before final delivery
+
+That means the economic formula should converge toward:
+
+```text
+totalFee = actualSponsoredGasCostInSettlementToken * 1.05
+netUserOutput = grossOutput - totalFee
+```
+
+This is the cleanest expression of the protocol's business model.
+
+## Why Approval Is Not Caused by ERC-4337
+
+It is important to be explicit here:
+
+- `ERC-4337` does **not** create the approval problem
+- the approval problem comes from standard ERC-20 allowance mechanics
+
+If a token only supports:
+
+- `approve(spender, amount)`
+- followed by `transferFrom(...)`
+
+then some allowance-granting action must exist somewhere in the flow.
+
+What `ERC-4337` changes is:
+
+- who pays gas
+- whether multiple actions can be batched atomically
+- whether the user has to manually send a standalone approval transaction
+
+So the right framing is:
+
+- approval exists because of the token authorization model
+- `ERC-4337` and `EIP-7702` are tools to make that approval invisible or sponsored
+
+## Role of EIP-712
+
+`EIP-712` is not a gasless mechanism by itself.
+
+It is the structured-signature format used by multiple gasless-friendly systems:
+
+- `ERC-2612`
+- `EIP-3009`
+- `Permit2`
+- ZeroToll intents
+
+So in ZeroToll's architecture:
+
+- `EIP-712` is the signing language
+- `ERC-2612` / `EIP-3009` / `Permit2` define what the signature authorizes
+- `ERC-4337` / `EIP-7702` define how sponsored execution happens
+
+## Token-Lane Decision Matrix
+
+ZeroToll should not force every token through the same flow. The correct product architecture is lane-based.
+
+### Lane A: Signature-native zTokens
+
+Tokens:
+
+- `zUSDC`
+- `zETH`
+- `zPOL`
+- `zLINK`
+
+Authorization:
+
+- `ERC-2612`
+
+User address model:
+
+- same EOA address
+
+Execution:
+
+- ZeroToll-sponsored relayer flow today
+- can also be sponsored through `ERC-4337` or `EIP-7702` later if useful
+
+Gasless quality:
+
+- **true gasless from step zero**
+
+Why this lane matters:
+
+- it already matches the best possible UX story
+- it proves ZeroToll's gasless economics without any approval caveat
+
+Recommendation:
+
+- keep these tokens as the flagship true-gasless lane
+
+### Lane B: USDC lane
+
+Token:
+
+- `USDC`
+
+Current state:
+
+- currently routed through `Permit2`
+
+Problem:
+
+- `Permit2` still needs a one-time on-chain approval to the Permit2 contract
+- that means the first use is not truly gasless
+
+Target design:
+
+- prefer `EIP-3009 receiveWithAuthorization` if the deployed token implementation supports it
+
+User address model:
+
+- same EOA address
+
+Execution:
+
+- ZeroToll relayer submits the authorized transfer and sponsors gas
+
+Gasless quality:
+
+- **true gasless from step zero**, if `EIP-3009` is supported on the actual deployed token
+
+Fallback:
+
+- if `EIP-3009` is unavailable on the target deployment, use the generic-token lane below
+
+Recommendation:
+
+- make `USDC` a dedicated lane instead of treating it as just another Permit2 token
+
+### Lane C: Generic ERC-20 lane
+
+Tokens:
+
+- `WETH`
+- `LINK`
+- `PYUSD`
+- any token without `ERC-2612` or `EIP-3009`
+
+Authorization:
+
+- standard ERC-20 approval semantics
+
+Constraint:
+
+- an ordinary EOA cannot magically create allowance by signature if the token itself does not support that pattern
+
+Correct solution:
+
+- use `EIP-7702` delegated smart-EOA execution
+
+Why `EIP-7702` is especially important:
+
+- the user keeps the **same address**
+- assets do not move into a separate smart-account address
+- ZeroToll can batch:
+  - `approve`
+  - `swap / submit / execute`
+  - optional cleanup or allowance reset
+- ZeroToll can sponsor the entire transaction
+
+Gasless quality:
+
+- **true gasless from the user's perspective**
+- even though approval still happens on-chain inside the sponsored batch
+
+This is exactly the right answer for the "user wants to keep the same EOA" requirement.
+
+Recommendation:
+
+- this should become the default lane for ordinary ERC-20 tokens that lack signature-native authorization
+
+### Lane D: Permit2 compatibility lane
+
+Tokens:
+
+- tokens currently tagged as `permit2`
+
+Use case:
+
+- short-term compatibility layer
+- fallback for wallets / routes not yet using the preferred lane
+
+Problem:
+
+- first use still costs the user gas because of the Permit2 approval transaction
+
+Recommendation:
+
+- keep Permit2 only as a compatibility fallback
+- do **not** present it as the final true-gasless architecture
+
+## Execution Matrix
+
+### Best available execution per lane
+
+#### zToken lane
+
+- sign `ERC-2612 permit`
+- sign ZeroToll intent
+- ZeroToll sponsors execution
+- recover fee from token flow
+
+#### USDC lane
+
+- sign `EIP-3009` authorization if supported
+- sign ZeroToll intent
+- ZeroToll sponsors execution
+- recover fee from output or other selected settlement token
+
+#### Generic token lane
+
+- user enables smart-account behavior on the same EOA through `EIP-7702`
+- ZeroToll batches `approve + execute`
+- ZeroToll sponsors the batch
+- recover fee from token flow
+
+## Product-Level Recommendation
+
+ZeroToll should present the lanes honestly to users:
+
+### Best UX lane
+
+- `zUSDC`, `zETH`, `zPOL`, `zLINK`
+- no setup gas
+- signature-first
+- true gasless from first use
+
+### Mainstream stablecoin lane
+
+- `USDC`
+- move from Permit2-first toward `EIP-3009` if available
+- otherwise upgrade to same-address smart-EOA path
+
+### Generic token lane
+
+- use `EIP-7702`
+- same address
+- sponsored batch execution
+
+### Compatibility lane
+
+- Permit2 remains available, but only as a fallback
+
+## Fee Recovery Model
+
+The user requirement is clear:
+
+- ZeroToll should sponsor all gas-bearing steps
+- the user should not need native gas
+- ZeroToll should recover cost from received token flow
+
+The recommended accounting model is:
+
+### 1. Estimate sponsorship ex ante
+
+At quote time:
+
+- estimate gas cost conservatively
+- convert to fee token or output token equivalent
+- display a maximum expected sponsored cost
+
+### 2. Measure sponsorship ex post
+
+At settlement time:
+
+- use actual gas consumed and actual gas price paid by ZeroToll
+- convert that actual sponsored cost into the settlement token
+
+### 3. Apply service fee
+
+Protocol fee:
+
+- `5% of actual sponsored gas cost`
+
+### 4. Final deduction
+
+Deduct from output where possible:
+
+- `actual sponsored gas cost`
+- plus `5% service fee`
+
+This keeps the user promise simple:
+
+- ZeroToll fronts gas
+- user repays sponsored cost from token flow
+- ZeroToll earns a clear service margin on top
+
+## Recommended Near-Term Build Order
+
+1. Keep `ERC-2612` zToken lane as the flagship true-gasless path.
+2. Investigate whether the deployed `USDC` token on target networks supports `EIP-3009`.
+3. If yes, implement a dedicated `USDC` authorization lane using `receiveWithAuthorization`.
+4. Upgrade the generic-token path toward same-address `EIP-7702` sponsored batching.
+5. Demote Permit2 from primary product story to fallback compatibility layer.
+6. Keep fee recovery in token flow and move toward actual-cost-based post-settlement accounting.
+
+## Final Recommendation
+
+For ZeroToll's long-term UX, the right answer is **not** "everything through Permit2" and **not** "force everyone into a new smart-account address."
+
+The right answer is:
+
+- use **signature-native authorization** when the token supports it
+- use **same-address `EIP-7702` smart-EOA execution** for generic tokens
+- recover sponsored gas plus a small explicit protocol fee from token flow
+
+That combination is the strongest path toward a product that feels familiar to mainstream EOA users while still being honestly and technically gasless.

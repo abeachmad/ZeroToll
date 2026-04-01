@@ -60,9 +60,9 @@ const Home = () => {
               <span className="text-zt-aqua">Smarter cross-chain.</span>
             </h1>
             <p className="text-lg sm:text-xl text-zt-paper/70 mb-12 max-w-2xl mx-auto">
-              Execute swaps and bridges across Polygon without holding native gas. 
-              Pay fees in any token you're swapping (input/output), stablecoins, or native—your choice. 
-              Powered by ERC-4337 and optimistic settlement.
+              Execute gasless swaps across Ethereum Sepolia and Polygon Amoy without holding native gas.
+              ZeroToll sponsors execution, recovers costs from token flow, and now includes a confidential
+              intent path on Sepolia for staged private settlement experiments.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
@@ -94,10 +94,11 @@ const Home = () => {
               <div className="w-14 h-14 rounded-xl bg-zt-violet/20 flex items-center justify-center mb-6">
                 <Zap className="w-7 h-7 text-zt-violet" />
               </div>
-              <h3 className="text-2xl font-bold mb-4 text-zt-paper">Any-Token Fee Payment</h3>
+              <h3 className="text-2xl font-bold mb-4 text-zt-paper">Sponsored Gasless Execution</h3>
               <p className="text-zt-paper/70 leading-relaxed">
-                No need to hold native POL or ETH. Pay fees in any token you're swapping—input, output, 
-                stablecoins, or native. ERC-4337 paymaster fronts gas with transparent caps and auto-refunds.
+                No need to hold native ETH or POL up front. ZeroToll fronts execution on supported flows,
+                then recovers sponsored cost and protocol fees from token flow instead of forcing users
+                to pre-fund native gas.
               </p>
             </div>
 
@@ -105,11 +106,11 @@ const Home = () => {
               <div className="w-14 h-14 rounded-xl bg-zt-aqua/20 flex items-center justify-center mb-6">
                 <Globe className="w-7 h-7 text-zt-aqua" />
               </div>
-              <h3 className="text-2xl font-bold mb-4 text-zt-paper">Cross-Chain Routing</h3>
+              <h3 className="text-2xl font-bold mb-4 text-zt-paper">Multichain Testnet Runtime</h3>
               <p className="text-zt-paper/70 leading-relaxed">
-                Seamlessly bridge between Polygon Amoy ↔ Ethereum Sepolia. 
-                Output-fee skimming on destination + Input-fee locking on source (Permit2). 
-                Optimistic settlement ensures relayers get reimbursed securely.
+                ZeroToll runs today on Ethereum Sepolia and Polygon Amoy, with native ETH delivery
+                on Sepolia and confidential staged execution on Sepolia. Additional testnet expansion
+                remains part of the roadmap, but the current live runtime is already multichain.
               </p>
             </div>
 
@@ -119,8 +120,9 @@ const Home = () => {
               </div>
               <h3 className="text-2xl font-bold mb-4 text-zt-paper">Secure & Transparent</h3>
               <p className="text-zt-paper/70 leading-relaxed">
-                Permissionless LP vault, RFQ auctions for best rates, and AI-ready 
-                scoring for optimal route selection. All on-chain and auditable.
+                ERC-4337 sponsorship, staged confidential settlement, explorer-verifiable execution,
+                and explicit public-vs-demo boundaries keep the system auditable while ZeroToll
+                evolves toward stronger multichain and privacy-native routing.
               </p>
             </div>
           </div>
@@ -139,10 +141,11 @@ const Home = () => {
                 1
               </div>
               <div>
-                <h3 className="text-2xl font-bold mb-3 text-zt-paper">Sign Your Intent</h3>
+                <h3 className="text-2xl font-bold mb-3 text-zt-paper">Sign Authorization + Intent</h3>
                 <p className="text-zt-paper/70 leading-relaxed">
-                  Choose your source/destination chains and tokens. Select fee mode: Native, Use Input Token (Permit2), 
-                  Use Output Token (skim on dest), or Stable. Sign EIP-712 intent with fee cap. No native gas required.
+                  Choose chain, tokens, and execution mode. Depending on token support, ZeroToll can use
+                  signature-native authorization such as ERC-2612 today, and is designed to grow toward
+                  same-address smart-EOA execution for generic ERC-20s.
                 </p>
               </div>
             </div>
@@ -152,10 +155,11 @@ const Home = () => {
                 2
               </div>
               <div>
-                <h3 className="text-2xl font-bold mb-3 text-zt-paper">Relayers Compete</h3>
+                <h3 className="text-2xl font-bold mb-3 text-zt-paper">ZeroToll Sponsors Execution</h3>
                 <p className="text-zt-paper/70 leading-relaxed">
-                  RFQ auction selects the best relayer quote. Relayer submits your UserOp 
-                  to the 4337 bundler and fronts the native gas.
+                  The relayer and paymaster front the native gas cost. Public gasless swaps run through
+                  ERC-4337 sponsorship, while the confidential path on Sepolia uses a staged
+                  submit / execute / decrypt / finalize lifecycle.
                 </p>
               </div>
             </div>
@@ -165,11 +169,11 @@ const Home = () => {
                 3
               </div>
               <div>
-                <h3 className="text-2xl font-bold mb-3 text-zt-paper">Pay in Any Token</h3>
+                <h3 className="text-2xl font-bold mb-3 text-zt-paper">Repay From Token Flow</h3>
                 <p className="text-zt-paper/70 leading-relaxed">
-                  Paymaster charges you in your chosen fee token (input/output/stable/native), capped at your limit. 
-                  Surplus auto-refunded in fee token. Output mode skims fee before crediting net tokens. 
-                  Relayer gets reimbursed from LP vault after settlement.
+                  Instead of asking users to pre-fund ETH or POL, ZeroToll recovers sponsored cost and
+                  protocol fees from swap token flow. On Sepolia, internal wrapped output can also be
+                  finalized as native ETH before delivery.
                 </p>
               </div>
             </div>
@@ -191,7 +195,7 @@ const Home = () => {
             Ready to go gasless?
           </h2>
           <p className="text-lg text-zt-paper/70 mb-8">
-            Start swapping cross-chain without worrying about native gas tokens.
+            Start swapping on supported testnets without worrying about native gas balances.
           </p>
           <button
             onClick={() => navigate('/swap')}
@@ -208,20 +212,21 @@ const Home = () => {
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-3 gap-8 mb-8">
             <div>
-              <h4 className="text-zt-paper font-semibold mb-3">Contracts (Testnet)</h4>
+              <h4 className="text-zt-paper font-semibold mb-3">Live Sepolia Components</h4>
               <div className="space-y-2 text-sm text-zt-paper/60 font-mono">
-                <p>Paymaster: 0x742d...bEb0</p>
-                <p>RouterHub: 0x8f3C...9A2d</p>
-                <p>VaultStableFloat: 0x1a2B...4C5D</p>
-                <p>SettlementHub: 0x9e8F...7B6A</p>
+                <p>Paymaster: 0xAf7e...0054</p>
+                <p>RouterHub: 0x8Bf6...4e84</p>
+                <p>ConfidentialEscrow: 0xF85F...FFbe1</p>
+                <p>Treasury: 0x2c73...C130</p>
               </div>
             </div>
             <div>
               <h4 className="text-zt-paper font-semibold mb-3">Resources</h4>
               <div className="space-y-2 text-sm">
                 <a href="https://github.com/abeachmad/ZeroToll" target="_blank" rel="noopener noreferrer" className="block text-zt-paper/60 hover:text-zt-aqua transition-colors">GitHub</a>
-                <a href="https://docs.polygon.technology" target="_blank" rel="noopener noreferrer" className="block text-zt-paper/60 hover:text-zt-aqua transition-colors">Polygon Docs</a>
                 <a href="https://eips.ethereum.org/EIPS/eip-4337" target="_blank" rel="noopener noreferrer" className="block text-zt-paper/60 hover:text-zt-aqua transition-colors">ERC-4337 Spec</a>
+                <a href="https://eips.ethereum.org/EIPS/eip-7702" target="_blank" rel="noopener noreferrer" className="block text-zt-paper/60 hover:text-zt-aqua transition-colors">EIP-7702 Spec</a>
+                <a href="https://eips.ethereum.org/EIPS/eip-2612" target="_blank" rel="noopener noreferrer" className="block text-zt-paper/60 hover:text-zt-aqua transition-colors">ERC-2612 Spec</a>
               </div>
             </div>
             <div>
@@ -234,9 +239,9 @@ const Home = () => {
             </div>
           </div>
           <div className="border-t border-white/10 pt-6 text-center text-zt-paper/50 text-sm">
-            <p>© 2025 ZeroToll. MIT License. Powered by Polygon & ERC-4337.</p>
-            <p className="mt-2">Testnet: Polygon Amoy (80002) · Ethereum Sepolia (11155111)</p>
-            <p className="mt-2 text-xs">⚠️ Testnet demo. Permissionless LP vault. Non-custodial.</p>
+            <p>© 2025 ZeroToll. MIT License. Powered by multichain testnets, ERC-4337, and confidential intent R&D.</p>
+            <p className="mt-2">Live today: Ethereum Sepolia (11155111) · Polygon Amoy (80002)</p>
+            <p className="mt-2 text-xs">⚠️ Testnet demo. Confidential runtime currently focuses on Sepolia. Non-custodial.</p>
           </div>
         </div>
       </footer>
