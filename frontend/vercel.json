@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/backend/:path*",
-      "destination": "https://e4c59705-5b3b-458d-b4ff-11c559aec6a8-00-2blo5t4sg8nr8.sisko.replit.dev/:path*"
+      "destination": "/api/replit-proxy?path=:path*"
     }
   ]
 }
