@@ -364,12 +364,12 @@ const Home = () => {
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-300/85">Private execution</p>
             <h2 className="mt-4 text-4xl font-bold text-zt-paper sm:text-5xl">
-              The private mode should be a headline feature, not hidden in the swap form
+              Confidential execution for threshold-sensitive swaps
             </h2>
             <p className="mt-6 max-w-2xl text-lg leading-relaxed text-zt-paper/70">
               ZeroToll already has a Sepolia confidential path where the browser encrypts a private threshold,
-              the protocol stages execution on-chain, and settlement finalizes after decryption. That is not the same
-              thing as a normal public swap, and the homepage should say so clearly.
+              the protocol stages execution on-chain, and settlement finalizes after decryption. It is a different
+              control plane from the normal public swap path, designed for cases where execution boundaries matter.
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -437,11 +437,11 @@ const Home = () => {
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.28em] text-amber-300/85">Pool rewards</p>
               <h2 className="mt-4 text-4xl font-bold text-zt-paper sm:text-5xl">
-                Pool providers need a clearer upside story
+                Why back the ZeroToll gas pool
               </h2>
               <p className="mt-6 text-lg leading-relaxed text-zt-paper/70">
                 ZeroToll is not only about trader UX. The long-term economics also depend on a community gas pool
-                that keeps sponsored execution sustainable. The homepage should explain why someone would help fund that layer.
+                that keeps sponsored execution sustainable. In return, providers participate in the fee loop that powers the protocol.
               </p>
 
               <div className="mt-8 rounded-[1.75rem] border border-amber-400/20 bg-amber-500/10 p-6">
@@ -489,7 +489,7 @@ const Home = () => {
           <div className="mx-auto max-w-3xl text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-violet-300/85">How it works</p>
             <h2 className="mt-4 text-4xl font-bold text-zt-paper sm:text-5xl">
-              A cleaner homepage should make the execution model feel obvious
+              From signature to sponsored settlement
             </h2>
           </div>
 
@@ -513,7 +513,7 @@ const Home = () => {
           <div className="mb-8 text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-emerald-300/80">Protocol proof</p>
             <h2 className="mt-4 text-4xl font-bold text-zt-paper sm:text-5xl">
-              Real metrics belong on the front page too
+              Live usage and sponsorship metrics
             </h2>
           </div>
           <LiveMetrics />
