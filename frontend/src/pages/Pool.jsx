@@ -1,8 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, TrendingUp, Wallet, DollarSign, Users, Zap,
-  ArrowRight, Shield, Clock, Sparkles, Target, BarChart3
+  ArrowLeft, TrendingUp, Wallet, DollarSign, Zap,
+  ArrowRight, Shield, Clock, Coins, Target, BarChart3
 } from 'lucide-react';
 import ConnectButton from '../components/ConnectButton';
 
@@ -10,17 +10,17 @@ export default function Pool() {
   const navigate = useNavigate();
 
   const features = [
-    { icon: TrendingUp, title: 'High Yield', description: 'Earn up to 3000% APY by providing liquidity to the community paymaster pool', color: 'emerald' },
-    { icon: Shield, title: 'Fully Decentralized', description: 'No single point of failure. Community-owned gas fund powered by swap fees', color: 'cyan' },
-    { icon: Clock, title: 'No Lock Period', description: 'Withdraw your USDC + earned yield anytime. Complete flexibility', color: 'violet' },
-    { icon: Sparkles, title: '$ZEROTOLL Rewards', description: 'Earn bonus governance tokens for long-term liquidity provision', color: 'orange' }
+    { icon: TrendingUp, title: 'Illustrative Yield Model', description: 'Current docs model roughly 173% annualized yield at a $10K pool and $60/day protocol fees. This is a scenario, not a guaranteed live APR.', color: 'emerald' },
+    { icon: Shield, title: 'Community-Owned Gas Tank', description: 'The long-term goal is a community-backed paymaster vault that keeps ZeroToll gasless execution funded without relying on a single operator.', color: 'cyan' },
+    { icon: Clock, title: 'Flexible Pool Design', description: 'The planned community pool is designed around accessible participation and treasury-fed rewards instead of opaque lock-heavy tokenomics.', color: 'violet' },
+    { icon: Coins, title: 'Fee Flow to Providers', description: 'The target split is 80% LP rewards, 15% operations, and 5% reserve, so protocol usage directly benefits pool backers.', color: 'orange' }
   ];
 
   const stats = [
-    { label: 'Current APY', value: '3,000%', color: 'text-emerald-400' },
-    { label: 'Total Liquidity', value: '$1,000', color: 'text-cyan-400' },
-    { label: 'Active Depositors', value: '42', color: 'text-violet-400' },
-    { label: 'Fees Distributed', value: '$30K', color: 'text-orange-400' }
+    { label: 'Illustrative APR', value: '~173%', color: 'text-emerald-400' },
+    { label: 'Example Pool', value: '$10K', color: 'text-cyan-400' },
+    { label: 'Reward Split', value: '80 / 15 / 5', color: 'text-violet-400' },
+    { label: 'LP Share', value: '80%', color: 'text-orange-400' }
   ];
 
   return (
@@ -49,7 +49,7 @@ export default function Pool() {
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/30 mb-6">
             <Wallet className="w-4 h-4 text-cyan-400" />
-            <span className="text-sm text-cyan-400 font-medium">Liquidity Pools</span>
+            <span className="text-sm text-cyan-400 font-medium">Community Gas Pool · Planned</span>
           </div>
           
           <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
@@ -57,8 +57,9 @@ export default function Pool() {
           </h1>
           
           <p className="text-xl text-gray-400 max-w-3xl mx-auto mb-8 leading-relaxed">
-            Deposit USDC to the community paymaster pool and earn a share of all swap fees. 
-            Help make DeFi gasless while earning high yields from protocol revenue.
+            ZeroToll&apos;s long-term economic loop is a community-backed gas pool that helps fund sponsored execution
+            and shares protocol fee flow with providers. The numbers below describe the planned reward model and
+            current illustrative economics, not a live guaranteed program.
           </p>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
@@ -70,6 +71,11 @@ export default function Pool() {
             ))}
           </div>
 
+          <p className="text-sm text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
+            Example model from the current docs: if protocol fees reach about $60 per day and the community pool is about
+            $10K, then LP rewards at an 80% share would be around $1,440 per month. This is a planning benchmark, not a promise.
+          </p>
+
           <button onClick={() => navigate('/pool/dashboard')} className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-violet-500 text-white font-semibold text-lg hover:shadow-2xl hover:shadow-cyan-500/25 hover:scale-105 transition-all duration-300">
             <BarChart3 className="w-5 h-5" />View Pool Dashboard<ArrowRight className="w-5 h-5" />
           </button>
@@ -80,9 +86,9 @@ export default function Pool() {
           <h2 className="text-3xl font-bold text-white text-center mb-12">How Liquidity Pools Work</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
-              { step: '01', title: 'Deposit USDC', description: 'Add your USDC to the community paymaster pool. No minimum amount required.', icon: Wallet },
-              { step: '02', title: 'Earn from Fees', description: 'Receive 20% of all swap fees generated by the protocol. Fees are distributed automatically.', icon: DollarSign },
-              { step: '03', title: 'Withdraw Anytime', description: 'No lock period. Withdraw your principal + earned yield whenever you want.', icon: Target }
+              { step: '01', title: 'Back the Gas Tank', description: 'The community pool is designed to help keep ZeroToll’s paymaster and sponsorship runway healthy as usage grows.', icon: Wallet },
+              { step: '02', title: 'Earn from Fee Flow', description: 'The target community split routes 80% of protocol fee flow to providers, with 15% to operations and 5% to reserve.', icon: DollarSign },
+              { step: '03', title: 'Grow With Usage', description: 'Pool upside scales with sponsored swap activity because user execution and provider rewards are tied to the same fee engine.', icon: Target }
             ].map((item, i) => (
               <div key={i} className="relative">
                 <div className="p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm hover:bg-white/10 transition-all duration-300">
@@ -128,8 +134,8 @@ export default function Pool() {
 
         {/* CTA Section */}
         <div className="text-center p-12 rounded-3xl bg-gradient-to-r from-cyan-500/10 via-violet-500/10 to-orange-500/10 border border-white/10 backdrop-blur-sm">
-          <h2 className="text-3xl font-bold text-white mb-4">Ready to Start Earning?</h2>
-          <p className="text-gray-400 mb-8 max-w-2xl mx-auto">Join the community of liquidity providers earning high yields while making DeFi more accessible for everyone.</p>
+          <h2 className="text-3xl font-bold text-white mb-4">Ready to Explore the Pool Thesis?</h2>
+          <p className="text-gray-400 mb-8 max-w-2xl mx-auto">ZeroToll’s pool story is strongest when it is framed honestly: a planned community gas pool, a clear fee split, and upside that grows with sponsored execution.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button onClick={() => navigate('/pool/dashboard')} className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-white font-semibold hover:shadow-lg hover:shadow-cyan-500/25 transition-all">
               <BarChart3 className="w-5 h-5" />View Dashboard
