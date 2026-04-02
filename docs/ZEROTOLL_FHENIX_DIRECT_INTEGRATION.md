@@ -1,6 +1,6 @@
 # ZeroToll Fhenix Direct Integration
 
-Updated: 2026-04-02
+Updated: 2026-04-03
 
 ## Executive Summary
 
@@ -763,3 +763,192 @@ The right answer is:
 - recover sponsored gas plus a small explicit protocol fee from token flow
 
 That combination is the strongest path toward a product that feels familiar to mainstream EOA users while still being honestly and technically gasless.
+
+## Confidential Architecture Decision Memo
+
+This section answers the practical question:
+
+- which architecture has the lowest risk
+- which architecture is strongest in front of Fhenix judges
+- which architecture is most likely to cause ZeroToll to fail
+
+## Short Answer
+
+The best choice for ZeroToll is:
+
+- keep the **public gasless lane** fully ZeroToll-native
+- rebuild the **confidential lane** directly on top of Fhenix / CoFHE
+- do **not** use Reineira as the core architecture for the main demo path
+
+This is the lowest-risk path that still gives the strongest Fhenix-native story.
+
+## Option A: Full Custom CoFHE Confidential Lane
+
+### Description
+
+ZeroToll keeps its own:
+
+- product UX
+- relayer
+- fee recovery logic
+- token economics
+- routing logic
+
+And rebuilds only the confidential lane using:
+
+- `@cofhe/sdk`
+- Fhenix encrypted input types
+- Fhenix permits
+- `decryptForView`
+- encrypted settlement state in ZeroToll-owned contracts
+
+### Why this is strong
+
+- it shows real use of the official Fhenix stack
+- the confidential feature remains clearly a **ZeroToll feature**
+- the demo narrative is clean:
+  - ZeroToll already solves gasless execution
+  - Fhenix adds confidential execution
+
+### Main risks
+
+- engineering complexity is higher than a plug-in integration
+- privacy mistakes are easy if the contract still emits plaintext metadata
+- recipient privacy is hard if funds are ultimately delivered to the same public EOA
+
+### Judge fit
+
+This option is the strongest for Fhenix judges because the privacy layer is visibly built on Fhenix primitives rather than outsourced to a separate settlement framework.
+
+## Option B: Reineira-Powered Confidential Lane
+
+### Description
+
+ZeroToll uses `@reineira-os/sdk` and ReineiraOS as the confidential settlement substrate, while ZeroToll keeps its public swap lane and gasless execution lane.
+
+### Why this is attractive
+
+- lower implementation complexity for confidential settlement
+- stronger default confidentiality model
+- more complete operator / gate / escrow abstraction out of the box
+
+### Main risks
+
+- the product story becomes less clearly "ZeroToll built on Fhenix"
+- judges may see the confidential architecture as primarily a Reineira integration
+- ZeroToll loses some control over settlement semantics, fee flow, and roadmap timing
+
+### Judge fit
+
+This can still be impressive, but it is weaker than direct CoFHE integration if the judges are specifically evaluating how well ZeroToll itself used Fhenix.
+
+## Option C: Recommended Hybrid
+
+### Description
+
+This is the recommended target architecture for the demo:
+
+- public lane: ZeroToll-native
+- confidential lane: direct Fhenix / CoFHE
+- Reineira: optional reference architecture, not the core demo dependency
+
+### Why this is the best balance
+
+- lower risk than rewriting the whole product
+- stronger judge story than delegating privacy to a third-party settlement SDK
+- preserves the parts ZeroToll already does well:
+  - ERC-4337 sponsorship
+  - any-token fee recovery
+  - multichain routing
+  - native-output delivery
+
+### Product story
+
+The cleanest message is:
+
+- **ZeroToll is the gasless execution engine**
+- **Fhenix is the confidentiality engine**
+
+That framing is easy to defend and easy for judges to remember.
+
+## Which Architecture Is Most Likely To Fail
+
+The highest-risk architecture is the current half-migrated hybrid:
+
+- client-side encryption exists
+- but plaintext testing helpers still drive live submission
+- user addresses remain public
+- output is still delivered directly to the main EOA
+
+This is the worst of both worlds:
+
+- too complex to claim "simple public flow"
+- not private enough to claim "real confidential settlement"
+
+If left in place, it creates three failure modes:
+
+### 1. Privacy failure
+
+Judges or users inspect explorers and discover:
+
+- user address is still public
+- events still expose counterparties
+- state diffs still reveal the receiving wallet
+
+### 2. Credibility failure
+
+The product appears to use Fhenix, but only partially:
+
+- encryption is performed
+- but plaintext fallback still determines execution
+
+That weakens the technical story significantly.
+
+### 3. Product failure
+
+The team spends time carrying both:
+
+- a custom public execution engine
+- and a fragile scaffold confidential engine
+
+without getting a fully convincing privacy outcome.
+
+## Recommended Demo Scope For Fhenix Judges
+
+For a judge-facing demo, the must-have scope should be:
+
+### Must-have
+
+- a working public ZeroToll gasless lane
+- a separate working confidential lane powered directly by Fhenix / CoFHE
+- honest privacy boundaries
+- no plaintext testing fallback in the confidential submission path
+
+### Nice-to-have
+
+- private recipient design
+- stealth or claim-based withdrawal
+- encrypted counterparty identities
+- richer permit-based client decryption UX
+
+### Avoid for the demo
+
+- full protocol rewrite
+- replacing all ZeroToll settlement with Reineira
+- claiming "fully private" if recipient identity still lands on a public EOA
+
+## Final Decision
+
+If the goal is:
+
+- lowest delivery risk
+- strongest positioning with Fhenix judges
+- highest chance of a convincing ZeroToll demo
+
+then the decision should be:
+
+- **keep ZeroToll's public lane**
+- **rebuild the confidential lane directly with Fhenix / CoFHE**
+- **treat Reineira as inspiration or an optional future integration, not the main architecture for the judging demo**
+
+That is the most defensible strategy both technically and narratively.
