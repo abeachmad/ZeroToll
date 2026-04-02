@@ -952,3 +952,225 @@ then the decision should be:
 - **treat Reineira as inspiration or an optional future integration, not the main architecture for the judging demo**
 
 That is the most defensible strategy both technically and narratively.
+
+## Implementation Checklist
+
+This section turns the architecture decision into an execution plan.
+
+The goal is to keep the confidential lane small enough to finish, while still making it credible in front of judges.
+
+## Before Judging: Must Fix
+
+These items should be treated as blocking work for a Fhenix-facing demo.
+
+### 1. Remove plaintext testing fallback from the live confidential submission path
+
+Current risk:
+
+- the frontend encrypts `minOut`
+- but the live backend path still sends `plaintextMinOutForTesting`
+- live submission still goes through testing helper functions
+
+Required outcome:
+
+- confidential submission must use encrypted inputs as the source of truth
+- the live path should no longer depend on plaintext fallback values
+
+Concrete work:
+
+- remove `plaintextMinOutForTesting` from the production confidential flow
+- stop routing live submissions through testing helper contract methods
+- make encrypted payload handling the only accepted production path
+
+### 2. Tighten the privacy claim on the product surface
+
+Current risk:
+
+- the app can currently be interpreted as promising stronger privacy than it really provides
+
+Required outcome:
+
+- all user-facing copy should clearly say what is private and what is not
+
+Concrete work:
+
+- describe the lane as protecting confidential execution parameters
+- avoid claiming full recipient anonymity
+- explain that the first production milestone is private threshold and private settlement logic
+
+### 3. Separate demo-safe confidentiality from aspirational full privacy
+
+Current risk:
+
+- judges may inspect explorers and find user addresses
+- this can look like a contradiction if the narrative is too broad
+
+Required outcome:
+
+- the demo should explicitly distinguish:
+  - private execution constraints
+  - private counterparties and private recipient delivery
+
+Concrete work:
+
+- script the demo around confidentiality of execution terms
+- present hidden recipient identity as a next-phase milestone
+
+### 4. Stop exposing unnecessary plaintext metadata in the confidential path
+
+Current risk:
+
+- `user` is currently stored in plaintext
+- events expose the user
+- settlement summary returns the full intent publicly
+
+Required outcome:
+
+- reduce plaintext leakage wherever possible without destabilizing the demo
+
+Concrete work:
+
+- remove or minimize publicly exposed user fields from events if the demo can tolerate it
+- avoid public getters that return the full intent unless strictly required
+- review backend persistence and logs for unnecessary user-address storage
+
+### 5. Keep the public lane stable while confidential work is landing
+
+Current risk:
+
+- over-rotating into confidential work can break the already-working public demo path
+
+Required outcome:
+
+- public gasless swaps remain a reliable fallback and credibility anchor
+
+Concrete work:
+
+- freeze working 4337 public flow behavior unless a bug is critical
+- treat the public lane as a stable baseline for the judge demo
+
+## After Judging: High-Value Next Steps
+
+These items matter a lot, but they should not block the initial Fhenix demo if time is tight.
+
+### 1. Private recipient design
+
+This is the largest privacy gap in the current model.
+
+Target outcome:
+
+- do not deliver confidential output directly to the same public EOA
+
+Potential approaches:
+
+- stealth address delivery
+- claim-note redemption
+- one-time destination address
+- encrypted recipient commitment
+
+### 2. Replace plaintext user identity in the intent model
+
+Target outcome:
+
+- avoid using `address user` as a public first-class field in the confidential intent
+
+Potential approaches:
+
+- encrypted address
+- recipient commitment
+- operator-known but publicly hidden withdrawal handle
+
+### 3. Shift decryption UX to permit-based local reveal
+
+Target outcome:
+
+- use `decryptForView` and permit-based viewing wherever the output only needs to be shown to the user
+
+Why it matters:
+
+- it keeps more sensitive information off-chain
+- it aligns better with the Fhenix model
+
+### 4. Explore whether Reineira can accelerate the private recipient phase
+
+This should be evaluated as an optional follow-up, not as the main demo dependency.
+
+Target outcome:
+
+- learn from Reineira's escrow and gate patterns without replacing ZeroToll's core public architecture
+
+## Workstream Breakdown
+
+The safest way to execute this plan is to split it into three workstreams.
+
+### Workstream A: Frontend
+
+Scope:
+
+- remove production reliance on plaintext confidential fallback fields
+- make confidential UI messaging precise
+- improve status messaging around encrypted submission and decryption flow
+
+Success criteria:
+
+- the user signs encrypted confidential intent inputs
+- the UI can explain exactly what is protected
+
+### Workstream B: Backend / Relayer
+
+Scope:
+
+- stop accepting confidential production submissions that depend on testing-only pathways
+- normalize encrypted payload validation
+- reduce plaintext logging of confidential submissions
+
+Success criteria:
+
+- production confidential requests are clearly separated from scaffold or testing requests
+- backend responses reflect real confidential state, not placeholder status language
+
+### Workstream C: Contracts
+
+Scope:
+
+- move confidential production calls away from testing helper methods
+- reduce public metadata exposure in events and getters where practical
+- prepare a cleaner recipient abstraction for phase two
+
+Success criteria:
+
+- the contract path used in the demo is genuinely the intended confidential production path
+- the contract no longer relies on plaintext-only shortcuts for its core confidential logic
+
+## Suggested Delivery Order
+
+The safest order is:
+
+1. Lock the public lane and do not destabilize it.
+2. Remove plaintext fallback from the confidential path.
+3. Update product messaging so privacy claims are exact.
+4. Reduce obvious plaintext leakage from confidential events and getters where feasible.
+5. Prepare a post-demo plan for private recipient delivery.
+
+## Demo Readiness Definition
+
+ZeroToll should consider the Fhenix demo "ready" when all of the following are true:
+
+- public gasless swaps work reliably
+- confidential submission uses encrypted inputs without plaintext production fallback
+- the demo story is honest about what is private
+- the team can explain why recipient privacy is not yet complete and how phase two solves it
+- judges can clearly see that Fhenix is a real execution component, not just branding on top of a scaffold
+
+## Final Delivery Principle
+
+The correct strategy is not to overclaim.
+
+The strongest judge outcome will come from showing:
+
+- a working product
+- a real Fhenix-powered confidential lane
+- a precise explanation of current privacy guarantees
+- a believable roadmap toward deeper privacy
+
+That is more persuasive than promising full privacy while still leaking counterparties and payout destinations on-chain.
