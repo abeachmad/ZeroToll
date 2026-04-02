@@ -325,6 +325,8 @@ export function useConfidentialIntentGasless() {
     let encryptedPayload;
     let clientEncryptionMode;
     let permitPayload = {};
+    const contractRuntime = quote?.contract || null;
+    const testingHelperSubmitEnabled = Boolean(contractRuntime?.testHelperSubmitEnabled);
 
     if (SUPPORTED_CHAINS.has(srcChainId)) {
       const encrypted = await encryptUint128WithCofhe({
@@ -340,7 +342,9 @@ export function useConfidentialIntentGasless() {
         kind: 'cofhe_sdk_v0_4',
         sdkVersion: '0.4.0',
         encryptedInput: encrypted.input,
-        note: 'Real CoFHE browser encryption for confidential minOut.',
+        walletAccount: address,
+        suggestedSubmitter: contractRuntime?.submitter || null,
+        note: 'Real CoFHE browser encryption for confidential minOut. The backend submitter address is carried as metadata for the future direct encrypted relayed-submit path.',
       };
       clientEncryptionMode = encrypted.mode;
     } else {
@@ -407,7 +411,9 @@ export function useConfidentialIntentGasless() {
         encryptedPayload,
         clientEncryptionMode,
         clientGuardrailBps: 9500,
-        plaintextMinOutForTesting: String(minAmountOutUnits),
+        ...(testingHelperSubmitEnabled
+          ? { testingHelperMinOutUnits: String(minAmountOutUnits) }
+          : {}),
         ...permitPayload,
       }),
     });
@@ -421,7 +427,7 @@ export function useConfidentialIntentGasless() {
     setStatus(data.stage);
     setStatusMessage(data.statusMessage || '');
     return data;
-  }, [address, publicClient, signErc2612Permit, signPermit2, walletClient]);
+  }, [address, publicClient, quote, signErc2612Permit, signPermit2, walletClient]);
 
   const executeIntent = useCallback(async (currentIntentId) => {
     const response = await fetch(`${API}/execute`, {

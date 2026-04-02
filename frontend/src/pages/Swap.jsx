@@ -1926,6 +1926,24 @@ const Swap = () => {
                         ConfidentialIntentEscrow: {quote.contract.confidentialIntentEscrow || 'not deployed in shared config'}
                         <br />
                         Runtime path: {quote.contract.liveSubmitMode || (quote.contract.ready ? 'contract address configured' : 'backend staged scaffold still active')}
+                        {quote.contract.submitter && (
+                          <>
+                            <br />
+                            Confidential submitter: {quote.contract.submitter}
+                          </>
+                        )}
+                        {quote.contract.testHelperSubmitEnabled && (
+                          <>
+                            <br />
+                            Current caveat: live confidential submit is still using the explicit plaintext testing-helper path before execution/finalization. This is not the final production encrypted submit architecture.
+                          </>
+                        )}
+                        {!quote.contract.testHelperSubmitEnabled && quote.contract.contractClientReady && (
+                          <>
+                            <br />
+                            Encrypted relayed submit is not wired yet in this runtime, so confidential mode falls back to the staged backend lifecycle.
+                          </>
+                        )}
                         <br />
                         Funding mode: {confidentialFundingMode === 'erc2612'
                           ? 'ERC-2612 signed permit'

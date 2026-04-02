@@ -986,7 +986,7 @@ def execute_adapter_backed_execution(
     execution_min_amount_out: int,
     deadline: int,
     estimated_fee_amount: int,
-    plaintext_min_out: int,
+    testing_helper_min_out: int,
     expected_output_hint: int = 0,
 ) -> Dict[str, Any]:
     client = get_confidential_contract_client(chain_id)
@@ -1009,10 +1009,10 @@ def execute_adapter_backed_execution(
     if expected_output <= 0:
         raise RuntimeError("Adapter preflight returned zero output.")
 
-    if expected_output > 0 and int(plaintext_min_out) > expected_output:
+    if expected_output > 0 and int(testing_helper_min_out) > expected_output:
         raise RuntimeError(
-            "Live adapter quote cannot satisfy the confidential minimum output. "
-            "No funds were moved; get a fresh quote or lower the confidential threshold."
+            "Live adapter quote cannot satisfy the current confidential testing-helper minimum output guard. "
+            "No funds were moved; get a fresh quote or lower the threshold."
         )
 
     w3: Web3 = client["web3"]

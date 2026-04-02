@@ -1,17 +1,23 @@
 """
 Confidential gasless intent routes.
 
-This module provides a staged settlement scaffold for the Fhenix-backed
-confidential flow. It is intentionally honest about the current runtime:
-the active app stores a client commitment and tracks the lifecycle, while
-the real on-chain FHE enforcement lives in the contracts package and will
-be wired in later.
+This module powers ZeroToll's staged confidential flow and is intentionally
+explicit about the runtime mode in use:
+
+1. backend-only staged scaffold
+2. on-chain plaintext testing-helper submit path
+3. future direct encrypted submit path
+
+Today, the browser already performs real CoFHE encryption for `minOut`, but
+the relayed on-chain confidential submit path is still split between
+demo/testing-helper wiring and the future production encrypted flow.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 import json
@@ -20,7 +26,7 @@ import re
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 
 from confidential_contract import (
     execute_adapter_backed_execution,
@@ -63,6 +69,20 @@ SUPPORTED_CHAINS = {
     if config.get("features", {}).get("gasless")
 }
 COFHE_BROWSER_CHAINS = {11155111}
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _confidential_test_helpers_enabled() -> bool:
+    # Default to enabled for backwards-compatible demos until the production
+    # encrypted relayed submit path is fully wired.
+    return _env_flag("CONFIDENTIAL_ALLOW_TEST_HELPERS", default=True)
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -531,15 +551,28 @@ def _get_contract_state(chain_id: int, intent_id: Optional[str] = None) -> Dict[
         except Exception as exc:
             logger.warning("Failed to load settlement summary for %s on chain %s: %s", intent_id, chain_id, exc)
 
+    contract_client_ready = client is not None
+    test_helper_submit_enabled = contract_client_ready and _confidential_test_helpers_enabled()
+    production_encrypted_submit_ready = False
+
+    if test_helper_submit_enabled:
+        live_submit_mode = "plaintext_testing_helper"
+    elif contract_client_ready:
+        live_submit_mode = "encrypted_submit_pending"
+    else:
+        live_submit_mode = "staged_backend_only"
+
     return {
         "confidentialIntentEscrow": contract_address,
         "wrappedToken": wrapped_token,
         "ready": bool(contract_address),
-        "submissionReady": client is not None,
-        "nativeDeliveryReady": bool(contract_address and wrapped_token and client is not None),
-        "liveSubmitMode": (
-            "plaintext_testing_helper" if contract_address and client is not None else "staged_backend_only"
-        ),
+        "submissionReady": contract_client_ready,
+        "contractClientReady": contract_client_ready,
+        "nativeDeliveryReady": bool(contract_address and wrapped_token and contract_client_ready),
+        "liveSubmitMode": live_submit_mode,
+        "testHelperSubmitEnabled": test_helper_submit_enabled,
+        "productionEncryptedSubmitReady": production_encrypted_submit_ready,
+        "submitter": client.get("signer") if client is not None else None,
         "settlement": settlement,
         "verdictStatus": verdict_status,
     }
@@ -707,9 +740,11 @@ def _build_quote(
         "success": True,
         "mode": "CONFIDENTIAL_GASLESS_INTENT",
         "method": (
-            "Fhenix-hybrid-live-submit"
-            if contract_state.get("submissionReady")
-            else "Fhenix-scaffold"
+            "Fhenix-testing-helper-live-submit"
+            if contract_state.get("testHelperSubmitEnabled")
+            else "Fhenix-encrypted-submit-pending"
+            if contract_state.get("contractClientReady")
+            else "Fhenix-staged-backend"
         ),
         "tokenInSymbol": token_in_symbol,
         "tokenOutSymbol": requested_token_out_symbol,
@@ -729,10 +764,18 @@ def _build_quote(
             "clientEncryptionExpected": (
                 "cofhe_sdk_web" if chain_id in COFHE_BROWSER_CHAINS else "commitment_only_scaffold"
             ),
-            "contractEnforcement": "contracts-package-only",
+            "contractEnforcement": (
+                "testing_helper_submit"
+                if contract_state.get("testHelperSubmitEnabled")
+                else "encrypted_submit_pending"
+                if contract_state.get("contractClientReady")
+                else "backend_scaffold_only"
+            ),
             "runtimeStatus": (
-                "hybrid-live-escrow-with-adapter-execution"
-                if contract_state.get("submissionReady")
+                "hybrid-live-escrow-with-testing-helper-submit"
+                if contract_state.get("testHelperSubmitEnabled")
+                else "encrypted-submit-pending"
+                if contract_state.get("contractClientReady")
                 else "staged-backend-lifecycle"
             ),
         },
@@ -798,6 +841,7 @@ class ConfidentialSubmitRequest(BaseModel):
     encryptedPayload: Optional[Dict[str, Any]] = None
     clientEncryptionMode: str = "commitment_only_scaffold"
     clientGuardrailBps: int = 9500
+    testingHelperMinOutUnits: Optional[str] = None
     plaintextMinOutForTesting: Optional[str] = None
     permitType: Optional[str] = None
     permitSingle: Optional[Dict[str, Any]] = None
@@ -845,13 +889,13 @@ class ConfidentialSubmitRequest(BaseModel):
             raise ValueError("estimatedFeeToken must be non-negative")
         return value
 
-    @field_validator("plaintextMinOutForTesting")
+    @field_validator("testingHelperMinOutUnits", "plaintextMinOutForTesting")
     @classmethod
     def validate_optional_numeric_string(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return value
         if _coerce_float(value) <= 0:
-            raise ValueError("plaintextMinOutForTesting must be positive")
+            raise ValueError("Testing-helper minOut must be positive")
         return value
 
     @field_validator("permitType")
@@ -961,6 +1005,7 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
     contract_state = _get_contract_state(payload.srcChainId)
     onchain_submit = None
     enforcement_mode = "backend_scaffold_until_contract_wiring"
+    testing_helper_min_out_units = payload.testingHelperMinOutUnits or payload.plaintextMinOutForTesting
     amount_in_units = payload.amountInUnits or str(
         _decimal_to_units(payload.amountIn, _token_decimals(payload.srcChainId, resolved_token_in or payload.tokenIn))
     )
@@ -975,7 +1020,15 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
     )
     funding_mode = "approval"
 
-    if contract_state["submissionReady"] and payload.plaintextMinOutForTesting:
+    if contract_state["submissionReady"] and contract_state.get("testHelperSubmitEnabled"):
+        if not testing_helper_min_out_units:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Confidential live submit is currently running through the explicit testing-helper path, "
+                    "but the frontend did not provide the helper minOut guard. Refresh the quote and retry."
+                ),
+            )
         intent_payload = {
             "user": payload.user,
             "tokenIn": resolved_token_in or payload.tokenIn,
@@ -991,7 +1044,7 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
                 onchain_submit = submit_intent_with_permit2_min_out(
                     payload.srcChainId,
                     intent_payload,
-                    int(payload.plaintextMinOutForTesting),
+                    int(testing_helper_min_out_units),
                     payload.permitSingle,
                     payload.permit2Signature,
                     requested_native_output,
@@ -1002,7 +1055,7 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
                 onchain_submit = submit_intent_with_permit_min_out(
                     payload.srcChainId,
                     intent_payload,
-                    int(payload.plaintextMinOutForTesting),
+                    int(testing_helper_min_out_units),
                     payload.permit,
                     requested_native_output,
                 )
@@ -1012,7 +1065,7 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
                 onchain_submit = submit_intent_with_plaintext_min_out(
                     payload.srcChainId,
                     intent_payload,
-                    int(payload.plaintextMinOutForTesting),
+                    int(testing_helper_min_out_units),
                     requested_native_output,
                 )
                 enforcement_mode = "onchain_submit_plaintext_testing_helper"
@@ -1063,7 +1116,11 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
         "statusMessage": (
             "Intent committed on ConfidentialIntentEscrow. Waiting for sponsored execution orchestration."
             if onchain_submit
-            else "Intent committed. Waiting for sponsored execution."
+            else (
+                "Intent committed. Encrypted relayed submit is not wired yet for this runtime, so the staged backend lifecycle will continue off-chain."
+                if contract_state.get("contractClientReady") and not contract_state.get("testHelperSubmitEnabled")
+                else "Intent committed. Waiting for sponsored execution."
+            )
         ),
         "user": payload.user,
         "tokenIn": resolved_token_in or payload.tokenIn,
@@ -1090,7 +1147,7 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
         "encryptedPayload": payload.encryptedPayload or {},
         "clientEncryptionMode": payload.clientEncryptionMode,
         "clientGuardrailBps": payload.clientGuardrailBps,
-        "plaintextMinOutForTesting": payload.plaintextMinOutForTesting,
+        "testingHelperMinOutUnits": testing_helper_min_out_units if contract_state.get("testHelperSubmitEnabled") else None,
         "fundingMode": funding_mode,
         "enforcementMode": enforcement_mode,
         "createdAt": now,
@@ -1119,6 +1176,7 @@ async def submit_confidential_intent(payload: ConfidentialSubmitRequest, request
         "privacy": {
             "clientEncryptionMode": record["clientEncryptionMode"],
             "enforcementMode": record["enforcementMode"],
+            "testHelperSubmitEnabled": contract_state.get("testHelperSubmitEnabled", False),
         },
         "delivery": {
             "mode": record["deliveryMode"],
@@ -1187,7 +1245,7 @@ async def execute_confidential_intent(payload: ConfidentialExecuteRequest, reque
                     execution_min_amount_out=1,
                     deadline=int(record["deadline"]),
                     estimated_fee_amount=fee_units,
-                    plaintext_min_out=int(record.get("plaintextMinOutForTesting") or 0),
+                    testing_helper_min_out=int(record.get("testingHelperMinOutUnits") or 0),
                     expected_output_hint=gross_amount_out_units,
                 )
                 live_mode = direct_adapter["mode"]
