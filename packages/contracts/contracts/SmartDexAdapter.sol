@@ -145,7 +145,11 @@ contract SmartDexAdapter is Ownable {
         uint256 minAmountOut,
         address recipient
     ) internal returns (uint256 amountOut) {
-        // Calculate output based on price oracle or 1:1 if same decimals
+        // Calculate output based on configured internal price.
+        // Custom test tokens like zUSDC need an explicit mapping into the
+        // wrapped/native liquidity token; falling back to a blind 1:1 rate
+        // across mismatched decimals produces unusable output and hides
+        // misconfiguration behind slippage failures.
         uint256 price = prices[tokenIn][tokenOut];
         
         if (price > 0) {
@@ -153,8 +157,7 @@ contract SmartDexAdapter is Ownable {
         } else if (tokenIn == tokenOut) {
             amountOut = amountIn;
         } else {
-            // Default 1:1 for test tokens
-            amountOut = amountIn;
+            revert("No internal price configured");
         }
         
         // Apply fee
