@@ -432,14 +432,30 @@ export function useConfidentialIntentGasless() {
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.detail || 'Failed to execute confidential intent.');
+      const detail = data.detail || 'Failed to execute confidential intent.';
+      const shouldRefreshStage =
+        detail.includes('Invalid stage') ||
+        detail.includes('Intent cannot be executed from stage');
+
+      if (shouldRefreshStage) {
+        try {
+          const latest = await fetchStatus(currentIntentId);
+          if (latest) {
+            return latest;
+          }
+        } catch {
+          // Fall through to the original error below.
+        }
+      }
+
+      throw new Error(detail);
     }
 
     setStatus(data.stage);
     setStatusMessage(data.statusMessage || '');
     setLastStatus(data);
     return data;
-  }, []);
+  }, [fetchStatus]);
 
   const finalizeIntent = useCallback(async (currentIntentId) => {
     const response = await fetch(`${API}/finalize`, {

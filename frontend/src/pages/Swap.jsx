@@ -1073,7 +1073,8 @@ const Swap = () => {
       }
 
       const decimalsOut = tokenOut.decimals || 18;
-      const minOut = getQuotedMinOutUnits(quoteData, decimalsOut, 9500n);
+      const slippageBps = permitType === 'erc2612' ? 6000n : 9500n;
+      const minOut = getQuotedMinOutUnits(quoteData, decimalsOut, slippageBps);
       const gaslessTokenOutAddress = tokenOut.isNative ? NATIVE_EIP7702_ADDRESS : tokenOut.address;
       let result;
 
@@ -1081,6 +1082,7 @@ const Swap = () => {
         // ERC-2612 permit - fully gasless
         setGaslessStatus('Sign Permit + Swap Intent in MetaMask (NO GAS!)...');
         toast.info('⚡ Sign 2 messages in MetaMask - you pay ZERO gas!');
+        toast.info('🛡️ zToken testnet swaps now use a wider minOut guardrail to reduce stale-quote slippage reverts.');
         if (tokenOut.isNative) {
           toast.info(`💰 ZeroToll will route through ${wrappedOutputSymbol} internally, then unwrap to native ${tokenOut.symbol} before delivery.`);
         }
