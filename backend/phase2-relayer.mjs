@@ -238,13 +238,41 @@ function getFallbackPrice(symbol) {
   return fallbackPrices[symbol.toUpperCase()] || 1.0;
 }
 
-// Calculate gasless fee (2x gas cost)
-async function calculateGaslessFee(chainId, tokenIn) {
-  const chainConfig = CHAIN_CONFIG[chainId];
-  
+async function getRpcUserOpGasPrice(chainId, priorErrorMessage = null) {
+  const { publicClient } = await getChainClients(chainId);
+
   try {
-    // 1. Get gas price from Pimlico
-    const gasPriceResponse = await fetch(chainConfig.pimlicoUrl, {
+    const gasPrice = await publicClient.getGasPrice();
+    if (!gasPrice || gasPrice <= 0n) {
+      throw new Error('RPC returned an empty gas price');
+    }
+
+    if (priorErrorMessage) {
+      console.warn(`⚠️ Falling back to RPC gas price on chain ${chainId}: ${priorErrorMessage}`);
+    }
+
+    return {
+      maxFeePerGas: gasPrice,
+      maxPriorityFeePerGas: gasPrice,
+      source: 'rpc'
+    };
+  } catch (rpcError) {
+    const details = priorErrorMessage
+      ? `${priorErrorMessage}; RPC fallback failed: ${rpcError.message}`
+      : rpcError.message;
+    throw new Error(`Unable to resolve user operation gas price on chain ${chainId}: ${details}`);
+  }
+}
+
+async function getUserOpGasPrice(chainId) {
+  const chainConfig = CHAIN_CONFIG[chainId];
+
+  if (!chainConfig?.pimlicoUrl) {
+    return getRpcUserOpGasPrice(chainId, 'Pimlico RPC is not configured');
+  }
+
+  try {
+    const response = await fetch(chainConfig.pimlicoUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -254,8 +282,47 @@ async function calculateGaslessFee(chainId, tokenIn) {
         params: []
       })
     });
-    const gasPriceResult = await gasPriceResponse.json();
-    const maxFeePerGas = BigInt(gasPriceResult.result?.fast?.maxFeePerGas || '50000000000');
+
+    const rawBody = await response.text();
+    let result;
+
+    try {
+      result = JSON.parse(rawBody);
+    } catch {
+      throw new Error(`Unexpected non-JSON Pimlico response (HTTP ${response.status}): ${rawBody.slice(0, 160)}`);
+    }
+
+    if (!response.ok) {
+      const remoteMessage = result?.error?.message || result?.message || rawBody.slice(0, 160);
+      throw new Error(`HTTP ${response.status}: ${remoteMessage}`);
+    }
+
+    if (result?.error) {
+      throw new Error(result.error.message || 'Pimlico returned an error');
+    }
+
+    const fast = result?.result?.fast || result?.result?.standard || result?.result?.slow;
+    if (!fast?.maxFeePerGas || !fast?.maxPriorityFeePerGas) {
+      throw new Error('Pimlico response is missing gas price fields');
+    }
+
+    return {
+      maxFeePerGas: BigInt(fast.maxFeePerGas),
+      maxPriorityFeePerGas: BigInt(fast.maxPriorityFeePerGas),
+      source: 'pimlico'
+    };
+  } catch (error) {
+    return getRpcUserOpGasPrice(chainId, error.message);
+  }
+}
+
+// Calculate gasless fee (2x gas cost)
+async function calculateGaslessFee(chainId, tokenIn) {
+  const chainConfig = CHAIN_CONFIG[chainId];
+  
+  try {
+    // 1. Get user operation gas price from Pimlico, with RPC fallback for display
+    const { maxFeePerGas, source } = await getUserOpGasPrice(chainId);
     
     // 2. Estimate gas used (~300,000 for swap with permit + fee)
     const estimatedGas = 300000n;
@@ -276,7 +343,7 @@ async function calculateGaslessFee(chainId, tokenIn) {
     const tokenDecimals = getTokenDecimals(chainId, tokenIn);
     const feeInToken = BigInt(Math.ceil(feeUSD / tokenPrice * (10 ** tokenDecimals)));
     
-    console.log(`💰 Fee calculation: gas=$${gasCostUSD.toFixed(6)}, fee=$${feeUSD.toFixed(6)}, ${feeInToken} ${tokenSymbol}`);
+    console.log(`💰 Fee calculation [${source}]: gas=$${gasCostUSD.toFixed(6)}, fee=$${feeUSD.toFixed(6)}, ${feeInToken} ${tokenSymbol}`);
     
     return {
       feeUSD,
@@ -407,20 +474,12 @@ async function buildAndSendUserOp(chainId, callData) {
     initCode = concat([SIMPLE_ACCOUNT_FACTORY, factoryData]);
   }
 
-  // Get gas prices from Pimlico
-  const gasPriceResponse = await fetch(chainConfig.pimlicoUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'pimlico_getUserOperationGasPrice',
-      params: []
-    })
-  });
-  const gasPriceResult = await gasPriceResponse.json();
-  const maxFeePerGas = BigInt(gasPriceResult.result?.fast?.maxFeePerGas || '50000000000');
-  const maxPriorityFeePerGas = BigInt(gasPriceResult.result?.fast?.maxPriorityFeePerGas || '2000000000');
+  const {
+    maxFeePerGas,
+    maxPriorityFeePerGas,
+    source: gasPriceSource
+  } = await getUserOpGasPrice(chainId);
+  console.log(`⛽ UserOp gas price source: ${gasPriceSource}`);
 
   // Pack gas limits
   const verificationGasLimit = 500000n;
@@ -534,9 +593,25 @@ async function buildAndSendUserOp(chainId, callData) {
     })
   });
 
-  const result = await response.json();
+  const rawBody = await response.text();
+  let result;
+  try {
+    result = JSON.parse(rawBody);
+  } catch {
+    throw new Error(`Pimlico sendUserOperation returned non-JSON (HTTP ${response.status}): ${rawBody.slice(0, 160)}`);
+  }
+
+  if (!response.ok) {
+    const remoteMessage = result?.error?.message || result?.message || rawBody.slice(0, 160);
+    throw new Error(`Pimlico sendUserOperation failed (HTTP ${response.status}): ${remoteMessage}`);
+  }
+
   if (result.error) {
     throw new Error(`Pimlico error: ${result.error.message}`);
+  }
+
+  if (!result.result) {
+    throw new Error('Pimlico did not return a userOpHash');
   }
 
   return {
@@ -563,8 +638,21 @@ async function waitForReceipt(userOpHash, chainId, timeout = 60000) {
         })
       });
 
-      const result = await response.json();
-      if (result.result) {
+      const rawBody = await response.text();
+      let result;
+
+      try {
+        result = JSON.parse(rawBody);
+      } catch {
+        result = null;
+      }
+
+      if (!response.ok || result?.error) {
+        const remoteMessage = result?.error?.message || rawBody.slice(0, 160) || `HTTP ${response.status}`;
+        console.warn(`⚠️ Receipt polling issue for ${userOpHash}: ${remoteMessage}`);
+      }
+
+      if (result?.result) {
         return result.result;
       }
     } catch (e) {
