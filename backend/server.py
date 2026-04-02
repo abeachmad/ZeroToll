@@ -2,6 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Request
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse, Response
 from motor.motor_asyncio import AsyncIOMotorClient
 from contextlib import asynccontextmanager
 import os
@@ -102,6 +103,7 @@ async def preflight_handler(rest_of_path: str):
 # )
 
 api_router = APIRouter(prefix="/api")
+RELAYER_TIMEOUT = httpx.Timeout(20.0, connect=5.0)
 
 # Models
 class Intent(BaseModel):
@@ -184,6 +186,39 @@ class SwapHistory(BaseModel):
     txHash: Optional[str] = None
     explorerUrl: Optional[str] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+def get_relayer_origin() -> str:
+    return os.getenv('RELAYER_URL', 'http://127.0.0.1:3002').rstrip('/')
+
+
+async def proxy_to_relayer(method: str, path: str, json_body: Optional[dict] = None):
+    relayer_url = f"{get_relayer_origin()}{path}"
+
+    try:
+        async with httpx.AsyncClient(timeout=RELAYER_TIMEOUT) as client:
+            response = await client.request(method, relayer_url, json=json_body)
+    except httpx.RequestError as exc:
+        logger.error(f"Relayer proxy request failed for {path}: {exc}")
+        raise HTTPException(status_code=502, detail=f"Relayer unavailable: {exc}") from exc
+
+    content_type = response.headers.get("content-type", "application/json")
+
+    if "application/json" in content_type:
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = {
+                "success": False,
+                "detail": response.text or f"Relayer returned HTTP {response.status_code}"
+            }
+        return JSONResponse(status_code=response.status_code, content=payload)
+
+    return Response(
+        content=response.content,
+        status_code=response.status_code,
+        media_type=content_type,
+    )
 
 @api_router.get("/")
 async def root():
@@ -281,7 +316,7 @@ async def get_quote(request: QuoteRequest, req: Request):
         confidence = 0.15 if oracle_source == "Pyth" else None
         
         async with httpx.AsyncClient() as client:
-            relayer_url = os.getenv('RELAYER_URL', 'http://localhost:3002')
+            relayer_url = get_relayer_origin()
             try:
                 response = await client.post(
                     f"{relayer_url}/api/quote",
@@ -322,6 +357,33 @@ async def get_quote(request: QuoteRequest, req: Request):
     except Exception as e:
         logging.error(f"Quote request failed: {e}")
         return QuoteResponse(success=False, reason=str(e))
+
+
+@api_router.get("/fee-estimate/{chain_id}/{token_in}")
+async def relay_fee_estimate(chain_id: int, token_in: str):
+    return await proxy_to_relayer("GET", f"/api/fee-estimate/{chain_id}/{token_in}")
+
+
+@api_router.get("/nonce/{chain_id}/{address}")
+async def relay_nonce(chain_id: int, address: str):
+    return await proxy_to_relayer("GET", f"/api/nonce/{chain_id}/{address}")
+
+
+@api_router.post("/intents/swap-with-permit")
+async def relay_swap_with_permit(request: Request):
+    payload = await request.json()
+    return await proxy_to_relayer("POST", "/api/intents/swap-with-permit", json_body=payload)
+
+
+@api_router.post("/intents/swap-with-permit2")
+async def relay_swap_with_permit2(request: Request):
+    payload = await request.json()
+    return await proxy_to_relayer("POST", "/api/intents/swap-with-permit2", json_body=payload)
+
+
+@api_router.get("/intents/{request_id}/status")
+async def relay_intent_status(request_id: str):
+    return await proxy_to_relayer("GET", f"/api/intents/{request_id}/status")
 
 @api_router.post("/execute")
 async def execute_intent(request: ExecuteRequest, req: Request):

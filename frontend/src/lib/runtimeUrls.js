@@ -15,6 +15,10 @@ export const getBackendUrl = () => {
 };
 
 export const getRelayerUrl = () => {
+  if (isVercelHost()) {
+    return getBackendUrl();
+  }
+
   const candidates = [
     process.env.REACT_APP_RELAYER_URL,
     process.env.REACT_APP_GASLESS_API_URL,
