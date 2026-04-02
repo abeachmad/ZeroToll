@@ -1174,3 +1174,254 @@ The strongest judge outcome will come from showing:
 - a believable roadmap toward deeper privacy
 
 That is more persuasive than promising full privacy while still leaking counterparties and payout destinations on-chain.
+
+## Technical TODO By Module
+
+This section translates the workstreams into concrete engineering targets.
+
+The intention is to make implementation sequencing obvious and to minimize accidental regression in the already-working public lane.
+
+## Frontend Modules
+
+### `frontend/src/lib/cofhe.js`
+
+Role:
+
+- CoFHE client bootstrap
+- input encryption helper
+
+Current problem:
+
+- the module currently encrypts only `uint128 minOut`
+- it does not yet drive a full encrypted submission pipeline
+
+Must-do:
+
+- keep this file as the canonical place for Fhenix client setup
+- extend it to support any additional encrypted payload types needed by the confidential lane
+- add helper methods for production-safe encrypted input serialization
+
+Nice-to-have later:
+
+- permit-aware view decryption helpers
+- support for encrypted recipient or encrypted withdrawal handle formats if phase two adopts them
+
+### `frontend/src/hooks/useConfidentialIntentGasless.js`
+
+Role:
+
+- quote
+- encrypt
+- sign funding
+- submit confidential intent
+- execute/finalize status orchestration
+
+Current problem:
+
+- it still sends `plaintextMinOutForTesting`
+- it still packages confidential submission as a hybrid scaffold
+
+Must-do:
+
+- remove `plaintextMinOutForTesting` from production requests
+- separate production confidential mode from any local test mode
+- ensure only encrypted production payloads are used when the confidential lane is enabled
+- update status text so the user sees exact privacy guarantees
+
+Nice-to-have later:
+
+- support local `decryptForView` UX for verdicts or private view data
+- support claim-based payout UX if a private recipient model is introduced
+
+### `frontend/src/pages/Swap.jsx`
+
+Role:
+
+- top-level UX for public vs confidential execution
+
+Current problem:
+
+- users can infer stronger privacy guarantees than the current implementation actually provides
+
+Must-do:
+
+- revise confidential copy so it describes protected execution terms rather than full anonymity
+- make lane differences explicit:
+  - public gasless
+  - confidential execution
+
+Nice-to-have later:
+
+- richer educational UI explaining what is hidden and what still remains public on-chain
+
+## Backend Modules
+
+### `backend/routes/confidential.py`
+
+Role:
+
+- confidential quote
+- confidential submit
+- confidential execute/finalize orchestration
+- backend status persistence
+
+Current problem:
+
+- the route still accepts and stores plaintext-heavy fields
+- it still bridges production flow into testing-helper contract methods
+
+Must-do:
+
+- split testing-only behavior from production behavior
+- reject production confidential submissions that still rely on plaintext fallback
+- reduce persistent storage of plaintext confidential metadata wherever possible
+- make response labels honest and production-oriented rather than scaffold-oriented
+
+Nice-to-have later:
+
+- define a stricter confidential request schema for production mode
+- reduce or hash any user-identifying backend persistence that is not strictly required
+
+### `backend/confidential_contract.py`
+
+Role:
+
+- ABI binding
+- contract submission helpers
+- execution/finalization helpers
+
+Current problem:
+
+- the active helper set is centered on:
+  - `submitIntentWithPlaintextMinOutForTesting`
+  - `submitIntentWithPermit2ForTesting`
+  - `submitIntentWithPermitForTesting`
+
+Must-do:
+
+- add production-grade contract call helpers for true encrypted-input submission
+- demote testing helper methods so they cannot be confused with live confidential settlement
+- align ABI usage with the actual production confidential path
+
+Nice-to-have later:
+
+- support cleaner confidential claim / redemption flows once the contract supports them
+
+### `backend/server.py`
+
+Role:
+
+- general API surface
+- public relayer proxy
+
+Current problem:
+
+- not a core privacy blocker, but it must stay stable while confidential work lands
+
+Must-do:
+
+- leave public-gasless behavior stable unless a bug is critical
+- keep confidential routing and public routing clearly separated
+
+## Contract Modules
+
+### `packages/contracts/contracts/fhenix/ConfidentialIntentLib.sol`
+
+Role:
+
+- confidential intent model and hashing
+
+Current problem:
+
+- the struct still uses `address user`
+- the hash still commits plaintext user identity directly
+
+Must-do:
+
+- decide whether the pre-judging version still keeps public user identity or moves to a more privacy-preserving commitment model
+- if public identity remains for demo scope, document that decision clearly
+
+Nice-to-have later:
+
+- replace plaintext `user` with encrypted or commitment-based identity representation
+
+### `packages/contracts/contracts/fhenix/ConfidentialIntentEscrow.sol`
+
+Role:
+
+- confidential settlement state machine
+- encrypted threshold check
+- release / execute / finalize lifecycle
+
+Current problem:
+
+- it exposes plaintext metadata in events
+- it sends funds directly to the public user EOA
+- it includes production-looking methods that are actually testing helpers
+
+Must-do:
+
+- define a clean production submission method that accepts the intended encrypted input path
+- reduce or remove public metadata exposure where feasible for the demo scope
+- make testing helper methods clearly non-production, or isolate them away from demo flow
+
+Nice-to-have later:
+
+- redesign final delivery so confidential outputs are not sent directly to the main public EOA
+- add a private claim or stealth-destination pattern
+
+### `packages/contracts/scripts/*confidential*`
+
+Role:
+
+- deploy and configure confidential infrastructure
+
+Current problem:
+
+- deploy/config scripts currently support the scaffold architecture, but they do not yet enforce production-safe confidentiality guarantees
+
+Must-do:
+
+- add deployment and configuration scripts for the production confidential path once contract changes land
+- keep trusted operator setup explicit and reproducible
+
+## Non-Blocking Supporting Work
+
+These tasks matter, but they should not be allowed to derail the Fhenix demo:
+
+- homepage copy refinements around confidentiality wording
+- optional Reineira exploration
+- full private recipient research
+- post-demo architecture cleanup for persistence and observability
+
+## Engineering Priority Map
+
+### Priority 0
+
+- do not break public 4337 swaps
+
+### Priority 1
+
+- remove plaintext fallback from confidential production flow
+- stop demoing testing-helper contract calls as if they were the final architecture
+
+### Priority 2
+
+- tighten privacy messaging in the UI and documentation
+- reduce obvious plaintext leakage in events, getters, and backend persistence where feasible
+
+### Priority 3
+
+- design phase-two recipient privacy
+- evaluate whether any Reineira patterns should be adopted after the demo
+
+## Recommended Immediate Next Coding Sprint
+
+The next sprint should focus only on these concrete deliverables:
+
+1. Frontend confidential submit path no longer includes `plaintextMinOutForTesting` in production mode.
+2. Backend confidential route refuses production requests that rely on testing-only fallback fields.
+3. Contract/helper layer exposes a clearly named production submission path distinct from testing helpers.
+4. Confidential UI copy and demo script are updated to reflect exact privacy guarantees.
+
+If those four items land cleanly, ZeroToll will have a much more defensible Fhenix demo even before phase-two private recipient work begins.
