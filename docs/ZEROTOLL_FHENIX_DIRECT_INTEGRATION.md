@@ -1425,3 +1425,343 @@ The next sprint should focus only on these concrete deliverables:
 4. Confidential UI copy and demo script are updated to reflect exact privacy guarantees.
 
 If those four items land cleanly, ZeroToll will have a much more defensible Fhenix demo even before phase-two private recipient work begins.
+
+## Post-Hackathon Feedback and Next Thesis
+
+Judge feedback:
+
+- "the gasless tx is a cool competitive edge"
+- "strong integration so far"
+- "would recommend exploring fherc20 for future developments"
+
+This is encouraging feedback, not a rejection of the core ZeroToll thesis.
+
+The judges did not say the gasless architecture was weak.
+They explicitly highlighted gasless execution as a competitive edge.
+
+The likely gap was different:
+
+- ZeroToll already looked like a strong gasless execution product
+- the Fhenix integration looked real, but not yet central enough to the product identity
+- the privacy story was stronger at the intent / threshold layer than at the asset layer
+
+In other words:
+
+- ZeroToll looked like a good gasless protocol with confidential features
+- it did not yet look like the best possible showcase of Fhenix-native private assets
+
+That is exactly why the FHERC20 recommendation matters.
+
+## What FHERC20 Changes
+
+Official FHERC20 documentation:
+
+- https://cofhe-docs.fhenix.zone/docs/devdocs/fherc/fherc20
+- https://docs.redact.money/architecture/fherc20.sol
+- https://docs.redact.money/architecture/confidentialerc20.sol
+
+The official FHERC20 model introduces several ideas that are directly relevant for ZeroToll:
+
+- balances are stored as encrypted values (`euint128`)
+- standard ERC20 allowance flows are intentionally removed
+- delegated token movement uses EIP-712 permit-style authorization instead of traditional allowances
+- public wallet and explorer compatibility is preserved using "indicated balances" rather than true plaintext balances
+- wrapped confidential assets can be created from existing ERC20s through ConfidentialERC20-style wrappers
+
+This is important for ZeroToll because it aligns naturally with the product's strongest existing advantage:
+
+- ZeroToll already sponsors gas
+- ZeroToll already orchestrates delegated execution
+- ZeroToll already supports signed authorization lanes
+
+FHERC20 therefore does not fight the ZeroToll architecture.
+It reinforces it.
+
+## Why The Judge Comment Makes Sense
+
+The current confidential lane in ZeroToll focused on:
+
+- encrypted `minOut`
+- encrypted threshold / verdict logic
+- escrow-based settlement orchestration
+
+That is meaningful, but it is still privacy around execution conditions.
+
+FHERC20 pushes the privacy story one layer deeper:
+
+- the asset itself becomes private
+- balances become private
+- transfer values become private
+- allowance leakage is replaced by single-use signed permissions
+
+For a Fhenix judge, this makes the product feel much more natively aligned with the ecosystem thesis.
+
+The message becomes:
+
+- not just "we used FHE somewhere in settlement"
+- but "ZeroToll is the gasless execution layer for private Fhenix-native assets"
+
+That is a much stronger identity.
+
+## Lowest-Risk Architecture For ZeroToll
+
+The lowest-risk path is not a full rewrite.
+
+The lowest-risk path is:
+
+- keep the public ZeroToll lane stable
+- keep the gasless 4337 / fee-sponsorship engine as the core product edge
+- add a dedicated FHERC20 lane as the next confidential product surface
+
+This means:
+
+### Keep unchanged
+
+- public gasless swaps
+- Permit2 flow for legacy ERC20s
+- ERC-2612 flow for normal tokens where useful
+- treasury and fee skim logic
+- multichain routing roadmap
+
+### Add next
+
+- Sepolia-only FHERC20 / ConfidentialERC20 lane
+- gasless sponsor flow for private-asset swaps
+- fee payment from private or semi-private output path
+- clearer privacy scope in UI and docs
+
+This is lower risk than rebuilding all of ZeroToll around a new framework.
+
+It is also stronger than outsourcing the privacy story to a third-party settlement abstraction.
+
+## Recommended Product Positioning
+
+The next-version pitch should shift from:
+
+- "ZeroToll is a gasless multichain swap with confidential intent"
+
+to:
+
+- "ZeroToll is a gasless execution layer for FHERC20 and confidential asset flows"
+
+That framing keeps the strongest existing differentiator:
+
+- gasless execution
+
+while making the Fhenix-specific value unmistakable:
+
+- private assets
+- encrypted transfers
+- permit-style delegated movement
+- private balance-aware UX
+
+## Recommended FHERC20 Roadmap
+
+### Phase 0: Preserve the Winning Core
+
+Do not destabilize the strongest working components:
+
+- public 4337 gasless path
+- fee sponsorship
+- relayer + paymaster logic
+- exact-amount fee skim accounting
+
+This remains the foundation of ZeroToll's competitive edge.
+
+### Phase 1: Single-Chain FHERC20 MVP
+
+Goal:
+
+- build a Sepolia-only private asset lane that clearly showcases Fhenix-native value
+
+Recommended scope:
+
+- support one wrapped private stable asset, such as confidential USDC-style flow
+- support one private-to-public swap path:
+  - `eUSDC -> ETH`
+  - or `eUSDC -> WETH`
+- sponsor the entire execution path with ZeroToll
+- deduct sponsored gas cost plus service fee from output value
+
+Why this is a good MVP:
+
+- small enough to finish
+- directly aligned with judge feedback
+- easier to demo than full multichain private routing
+- preserves ZeroToll's strongest gasless story
+
+### Phase 2: Private-to-Private Execution
+
+Goal:
+
+- move from "gasless swap involving one private asset" to "gasless swap across private assets"
+
+Example:
+
+- `eUSDC -> eWETH`
+- `eLINK -> eUSDC`
+
+Important implementation implication:
+
+- routing logic must become aware that transfer success and amounts may be represented through encrypted results rather than ordinary ERC20 assumptions
+- settlement logic must handle the FHERC20 transfer semantics carefully
+
+### Phase 3: Confidential Pool and Liquidity Story
+
+Goal:
+
+- connect ZeroToll's pool / sponsorship economics with private asset execution
+
+Potential narrative:
+
+- pool providers fund native gas inventory and execution capacity
+- ZeroToll earns service fees from private-asset flows
+- private flow demand creates a stronger reason to deposit into the native gas pool
+
+This is where ZeroToll becomes more than a swap demo.
+It becomes private execution infrastructure with an economic flywheel.
+
+## Concrete Technical Direction
+
+### 1. Add an FHERC20 asset lane instead of replacing the whole token stack
+
+Do not try to convert every existing path immediately.
+
+Instead:
+
+- add one explicit confidential asset lane
+- isolate it in routing, quoting, and UI
+- keep public and private lanes easy to distinguish
+
+This keeps blast radius low.
+
+### 2. Prefer wrapped confidential assets for the first usable demo
+
+The Redact/ConfidentialERC20 model suggests a practical route:
+
+- wrap existing ERC20s into confidential assets
+- operate on the confidential wrapper
+- decrypt or claim out only when the product really needs a public output
+
+This is likely more realistic for ZeroToll than inventing a completely custom private token primitive from scratch.
+
+### 3. Keep gasless sponsorship as the product anchor
+
+The important message is not:
+
+- "we also support FHERC20"
+
+The important message is:
+
+- "private assets are actually usable because ZeroToll sponsors execution"
+
+That is where ZeroToll can stand out.
+
+FHERC20 by itself is not the differentiation.
+Gasless FHERC20 execution is.
+
+### 4. Avoid claiming full recipient privacy until the payout model changes
+
+Even with FHERC20, ZeroToll should still be careful about privacy claims.
+
+If the final output lands in a standard public EOA, then:
+
+- explorer-visible state changes can still reveal the recipient
+- privacy is better than today, but not absolute
+
+The safer framing is:
+
+- private balances
+- private transfer amounts
+- gasless confidential execution
+
+and later:
+
+- private recipient / stealth claim / private redemption
+
+## Architectures That Could Still Make ZeroToll Fail
+
+### Failure Mode A: Full Rewrite Around Privacy
+
+This is risky because:
+
+- it threatens the strongest working gasless components
+- it expands scope too quickly
+- it delays a credible second demo cycle
+
+### Failure Mode B: Keep Hybrid Confidential Logic But Ignore FHERC20
+
+This is risky because:
+
+- ZeroToll will continue to look only partially aligned with Fhenix
+- privacy will still feel like a sidecar rather than a core asset model
+- judges may continue to see stronger ecosystem fit elsewhere
+
+### Failure Mode C: Use FHERC20 Only As Marketing Copy
+
+This is perhaps the most dangerous path.
+
+If ZeroToll says it is building for FHERC20 but does not actually redesign:
+
+- routing assumptions
+- fee collection semantics
+- permit flow
+- output privacy model
+
+then the result will feel superficial.
+
+## Recommended Immediate Build Order
+
+### Sprint 1
+
+- document ZeroToll's next product thesis as "gasless execution for private assets"
+- choose the first confidential asset pair
+- isolate a single-chain Sepolia FHERC20 MVP path
+- define exactly how fees are recovered from output
+
+### Sprint 2
+
+- integrate one FHERC20 or ConfidentialERC20 asset path
+- make the swap route sponsorable end-to-end
+- add honest UI language around what is private and what is not
+
+### Sprint 3
+
+- tighten explorer-facing privacy leakage
+- improve result handling for encrypted transfer outcomes
+- build a cleaner claim / redemption story if public output is required
+
+### Sprint 4
+
+- connect the private flow to ZeroToll pool economics
+- make the liquidity-provider reward story specific to confidential execution demand
+
+## The Next Judge-Facing Story
+
+The strongest next story is:
+
+- ZeroToll already proved it can make swaps gasless
+- the next evolution is making private assets actually usable
+- FHERC20 is the right asset standard for that direction
+- ZeroToll's role is to remove the gas and UX friction from confidential execution
+
+That is a sharper, more ecosystem-native thesis than the current version.
+
+## Final Recommendation
+
+If the goal is to maximize the chance of stronger judge reception in the next cycle:
+
+- do not abandon the gasless core
+- do not over-rotate into a full rewrite
+- do not keep confidential logic at the threshold-only layer
+
+Instead:
+
+- make ZeroToll the best gasless execution layer for FHERC20-style private assets
+
+That path is:
+
+- lower risk than a full architecture reset
+- more aligned with the actual Fhenix product stack
+- more memorable for judges
+- and more faithful to ZeroToll's genuine strength
