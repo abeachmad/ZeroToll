@@ -1765,3 +1765,334 @@ That path is:
 - more aligned with the actual Fhenix product stack
 - more memorable for judges
 - and more faithful to ZeroToll's genuine strength
+
+## FHERC20 Implementation Checklist By Module
+
+The goal of this checklist is not to redesign ZeroToll all at once.
+
+The goal is to add one focused FHERC20 lane that:
+
+- preserves the current public gasless architecture
+- proves private assets can be used in ZeroToll
+- strengthens the Fhenix-native story without exploding scope
+
+## Product Scope For The First FHERC20 MVP
+
+Recommended initial scope:
+
+- single chain: Sepolia
+- one private stable asset lane:
+  - `eUSDC` or equivalent ConfidentialERC20-style wrapper
+- one destination asset:
+  - `WETH` first
+  - optional `ETH` unwrap as a second step
+- gas sponsorship remains handled by ZeroToll
+- fee is deducted from output
+
+The first milestone should not attempt:
+
+- multichain private routing
+- full private recipient model
+- private LP economics
+- many private token pairs
+
+## Frontend Modules
+
+### `frontend/src/pages/Swap.jsx`
+
+Role for the FHERC20 MVP:
+
+- expose a dedicated private-asset lane
+- clearly distinguish:
+  - public gasless
+  - confidential intent
+  - FHERC20/private-asset execution
+
+Must-do:
+
+- add an explicit private asset mode selector
+- label wrapped confidential assets clearly
+- show honest privacy copy:
+  - private balances
+  - private transfer amounts
+  - recipient privacy still limited if output settles to a public EOA
+- display fee deduction policy for sponsored private execution
+
+Nice-to-have later:
+
+- side-by-side comparison of public vs private execution
+- live explanation of what data stays encrypted
+
+### `frontend/src/hooks/useConfidentialIntentGasless.js`
+
+Role for the FHERC20 MVP:
+
+- evolve from threshold-only confidential flow toward private-asset execution orchestration
+
+Must-do:
+
+- split FHERC20/private-asset logic from the current hybrid confidential helper flow
+- stop treating all confidential flows as the same product surface
+- add runtime capability checks:
+  - FHERC20 supported
+  - encrypted submit supported
+  - private-output claim supported or not
+
+Nice-to-have later:
+
+- separate hook for FHERC20 execution so the current intent hook stays simpler
+
+### `frontend/src/lib/cofhe.js`
+
+Role for the FHERC20 MVP:
+
+- remain the browser encryption gateway
+
+Must-do:
+
+- support any additional encrypted inputs needed by FHERC20 lane
+- keep payload serialization stable and explicit
+- document which actor the payload is encrypted for:
+  - user
+  - relayer
+  - settlement contract
+
+Nice-to-have later:
+
+- shared utilities for encrypted amount, encrypted recipient commitment, and decrypt-for-view helpers
+
+## Backend Modules
+
+### `backend/routes/confidential.py`
+
+Role for the FHERC20 MVP:
+
+- stop being only an intent-lifecycle route
+- become the API surface for private-asset execution capability checks
+
+Must-do:
+
+- define a separate runtime mode for FHERC20/private-asset execution
+- avoid mixing:
+  - plaintext testing helper
+  - encrypted intent path
+  - FHERC20 asset path
+- return honest capability flags to frontend:
+  - `privateAssetLaneReady`
+  - `encryptedSubmitReady`
+  - `publicRecipientOnly`
+  - `privateClaimReady`
+
+Nice-to-have later:
+
+- provide richer explorer-safe status summaries without exposing raw debugging details to the UI
+
+### `backend/confidential_contract.py`
+
+Role for the FHERC20 MVP:
+
+- bind backend execution to Fhenix-native private token contracts
+
+Must-do:
+
+- add ABI bindings for the chosen FHERC20 or ConfidentialERC20 contract
+- add helper methods for:
+  - encrypt/wrap flow if backend coordination is needed
+  - private transfer or claim path
+  - sponsored settlement path
+- keep testing helpers isolated so they cannot be confused with private-asset production paths
+
+Nice-to-have later:
+
+- support multiple private assets once the first path is stable
+
+### `backend/server.py`
+
+Role for the FHERC20 MVP:
+
+- remain stable while new private lanes are added
+
+Must-do:
+
+- keep public gasless routing untouched unless required
+- ensure private-lane routes are versioned or clearly separated
+- avoid conflating public metrics with private-lane metrics
+
+## Contract Modules
+
+### `packages/contracts/contracts/fhenix/ConfidentialIntentEscrow.sol`
+
+Role for the FHERC20 MVP:
+
+- continue as confidential settlement state machine if the first private-asset lane still uses escrow orchestration
+
+Must-do:
+
+- define whether FHERC20 execution reuses this escrow or needs a cleaner dedicated contract
+- remove ambiguity between:
+  - helper testing methods
+  - production encrypted methods
+- avoid overloading the contract with too many product concepts at once
+
+Recommendation:
+
+- if possible, keep this contract focused on confidential settlement
+- add a separate contract for FHERC20-specific flow if the semantics diverge too much
+
+### `packages/contracts/contracts/fhenix/ConfidentialIntentLib.sol`
+
+Role for the FHERC20 MVP:
+
+- likely remains useful for confidential intent hashing, but it may not be sufficient for private-asset execution semantics
+
+Must-do:
+
+- decide whether a private-asset execution intent should have a distinct struct and hash
+- avoid forcing FHERC20 execution into a model that assumes public ERC20 behavior
+
+### New FHERC20 / ConfidentialERC20 Integration Contracts
+
+Likely need:
+
+- wrapper integration contract
+- private-asset swap adapter
+- optional claim/redemption helper
+
+Must-do:
+
+- define the minimal contract surface for the first pair
+- document exactly where balances are private and where they become public again
+- keep interfaces narrow enough to audit and test quickly
+
+## Test Modules
+
+### `packages/contracts/test/ConfidentialIntentEscrow.test.js`
+
+Role for the FHERC20 MVP:
+
+- remain the regression suite for current confidential escrow behavior
+
+Must-do:
+
+- keep existing coverage intact
+- avoid turning this file into a catch-all for unrelated FHERC20 behavior
+
+Recommendation:
+
+- add a separate FHERC20-focused test file once the first private asset contract is introduced
+
+### New FHERC20 Test Files
+
+Must-do:
+
+- test wrap/encrypt path
+- test sponsored swap path
+- test fee deduction from output
+- test failure behavior when output is insufficient after sponsorship
+- test privacy-facing event surface so claims in the UI remain honest
+
+## Configuration and Deployment
+
+### `packages/contracts/scripts/*`
+
+Must-do:
+
+- add deployment scripts for the selected private asset lane
+- add configuration scripts for:
+  - wrapper address
+  - private asset adapter
+  - trusted operator / submitter
+  - output fee recipient
+
+Nice-to-have later:
+
+- one-click environment bootstrap for Sepolia demo deployments
+
+### Shared Config Files
+
+Must-do:
+
+- extend chain config with explicit private-asset capability flags
+- do not infer FHERC20 readiness from ordinary confidential readiness
+- keep asset registry explicit:
+  - public symbol
+  - private wrapper symbol
+  - underlying asset
+  - output capabilities
+
+## First FHERC20 Sprint Plan
+
+### Sprint A: Design Lock
+
+Deliverables:
+
+- choose one private asset pair
+- choose one execution pattern
+- define fee recovery formula
+- define honest privacy scope
+
+Output:
+
+- short design spec
+- sequence diagram
+- UI copy draft
+
+### Sprint B: Contract MVP
+
+Deliverables:
+
+- deploy one confidential wrapper or integrate an existing one
+- implement one swap execution contract or adapter path
+- add tests for sponsored execution and output fee deduction
+
+Output:
+
+- one stable Sepolia private-asset route
+
+### Sprint C: Frontend and Demo
+
+Deliverables:
+
+- add private-asset lane to swap UI
+- display capability flags and caveats honestly
+- produce one end-to-end demo path
+
+Output:
+
+- judge-facing or investor-facing demo flow that is sharper than the previous confidential demo
+
+## Judge-Facing Pitch Rewrite
+
+The next pitch should be simpler and more Fhenix-native.
+
+### One-line product statement
+
+ZeroToll is a gasless execution layer for FHERC20 and confidential asset flows.
+
+### Short version
+
+ZeroToll removes the gas friction from private execution.
+Users can move and swap confidential assets without needing native gas upfront, while ZeroToll sponsors execution and recovers fees from settlement.
+
+### Slightly longer version
+
+Most private assets are still hard to use because every action carries execution friction.
+ZeroToll solves that by combining sponsored execution with Fhenix-native private assets.
+The result is a product where confidential balances and transfers become usable in practice, not just technically possible.
+
+### What to emphasize in the next demo
+
+- gasless remains the competitive edge
+- FHERC20 makes the privacy story asset-native
+- ZeroToll is not just hiding thresholds
+- ZeroToll is making private assets usable
+
+### What to avoid saying
+
+- "fully private everything"
+- "private recipients" unless the payout model is actually redesigned
+- "production-ready" unless helper paths are gone and explorer leakage is honestly bounded
+
+### Strong closing line
+
+ZeroToll is building the missing execution layer for private assets: sponsored, usable, and designed for real FHERC20 flows.
